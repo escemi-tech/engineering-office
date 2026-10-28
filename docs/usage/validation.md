@@ -41,7 +41,7 @@ those files into the supplied guest `REPORTS_DIR`. The parser consumes the
 `report-files` output when present, otherwise the command-status `report`.
 Collected report contents must be suitable for these public workflows.
 For input options and cleanup recovery, see the shared
-[VM validation guide](https://github.com/hoverkraft-tech/ci-github-iac/blob/4bd20d5cd4ab7358358a2cb0b6fca603b02dadfe/docs/usage/vm-e2e.md).
+[VM validation guide](https://github.com/hoverkraft-tech/ci-github-iac/blob/f89e2051ad88cf8956740fb09598f1c18a3f351a/docs/usage/vm-e2e.md).
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail with an
 explicit message until their implementations are delivered. These commands never
