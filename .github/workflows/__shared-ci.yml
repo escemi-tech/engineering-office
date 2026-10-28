@@ -32,16 +32,16 @@ jobs:
           persist-credentials: false
       - name: Create VM
         id: vm
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@ef60450f4e7f49921893db9904ac4853a833d822
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@4c1afb5d043797f997a4c6da33f2edc8d1c999ca
       - name: Execute guest assertions
         id: test
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@ef60450f4e7f49921893db9904ac4853a833d822
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@4c1afb5d043797f997a4c6da33f2edc8d1c999ca
         with:
           vm: ${{ steps.vm.outputs.vm }}
           test-script: tests/e2e.sh
       - name: Destroy VM
         if: ${{ always() && steps.vm.outputs.vm != '' }}
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@ef60450f4e7f49921893db9904ac4853a833d822
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@4c1afb5d043797f997a4c6da33f2edc8d1c999ca
         with:
           vm: ${{ steps.vm.outputs.vm }}
       - name: Upload assertion report
@@ -50,7 +50,6 @@ jobs:
         with:
           name: vm-${{ github.job }}-${{ steps.vm.outputs.id }}
           path: ${{ steps.test.outputs.report }}
-          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
   checks:
