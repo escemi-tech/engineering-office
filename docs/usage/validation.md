@@ -28,9 +28,11 @@ the creation step and the same `--vm-config` argument locally when adding a doma
 configuration.
 
 Each invocation uses its own short private Lima runtime under `/tmp`, removed
-with its keys after verified teardown. Sanitized reports are written to `.reports/`.
+with its keys after verified teardown. Each test keeps its own sanitized report.
+CI uses the report path returned by the action from runner temp; local runs print
+their report path under `.reports/`.
 For input options and cleanup recovery, see the shared
-[VM validation guide](https://github.com/hoverkraft-tech/ci-github-iac/blob/ef60450f4e7f49921893db9904ac4853a833d822/docs/usage/vm-e2e.md).
+[VM validation guide](https://github.com/hoverkraft-tech/ci-github-iac/blob/4c1afb5d043797f997a4c6da33f2edc8d1c999ca/docs/usage/vm-e2e.md).
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail with an
 explicit message until their implementations are delivered. These commands never
