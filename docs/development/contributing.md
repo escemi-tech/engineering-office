@@ -17,12 +17,12 @@ Run `make e2e` separately on a KVM-capable host; see the
 pushes and manual runs; PR CI also supports merge queues. Both cancel superseded
 runs for the same workflow and ref. Start workflows with `permissions: {}` and
 grant only the permissions required by each job. Keep step names descriptive,
-Actions pinned and reusable orchestration in Hoverkraft. The aggregate `checks`
+Actions pinned; compose shared VM operations in the job. The aggregate `checks`
 job requires every prerequisite to succeed and is required by branch protection.
 
 Use Conventional Commits and reviewed pull requests. Keep the local action
-revision derived from the pinned action reference in `__shared-ci.yml`.
-Change that reference when adopting a shared CI update, then run the complete
+revision derived from `vm/create` and pin all three VM actions together in `__shared-ci.yml`.
+Update those references together when adopting a shared CI change, then run the complete
 VM lifecycle before merging.
 
 ## Repository automation
