@@ -19,6 +19,6 @@ money. Main-branch protection requires passing checks and a pull-request review.
 A PR author cannot approve their own PR; another eligible reviewer is required.
 
 Dependencies are pinned to immutable Action commits and a Docker digest. Dependabot
-proposes updates. The Makefile derives its action revision from the shared workflow
+proposes updates. The Makefile derives its action revision from the shared action
 reference, so local and CI lifecycle code cannot drift to different revisions. Review
 shared CI updates with a complete VM lifecycle before merging.

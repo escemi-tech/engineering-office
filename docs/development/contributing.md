@@ -21,7 +21,7 @@ Actions pinned and reusable orchestration in Hoverkraft. The aggregate `checks`
 job requires every prerequisite to succeed and is required by branch protection.
 
 Use Conventional Commits and reviewed pull requests. Keep the local action
-revision derived from the pinned workflow reference in `__shared-ci.yml`.
+revision derived from the pinned action reference in `__shared-ci.yml`.
 Change that reference when adopting a shared CI update, then run the complete
 VM lifecycle before merging.
 

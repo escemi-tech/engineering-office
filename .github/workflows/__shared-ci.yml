@@ -21,11 +21,19 @@ jobs:
       security-events: write
       statuses: write
   vm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
-    uses: hoverkraft-tech/ci-github-iac/.github/workflows/vm-e2e.yml@0167859255277cc4b4010a42e5a9abc483be55da
-    with:
-      test-script: tests/e2e.sh
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate in disposable VM
+        uses: hoverkraft-tech/ci-github-iac/actions/vm-e2e@f8ab7bf7a91ed562e9de5cdfc3b0c0d9b05c4b21
+        with:
+          test-script: tests/e2e.sh
   checks:
     if: ${{ always() }}
     needs: [linter, vm]

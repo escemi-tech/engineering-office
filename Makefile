@@ -4,7 +4,7 @@ SHELL := /bin/bash
 HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
 CI_IAC_DIRECTORY := $(CURDIR)/.cache/ci-github-iac
-CI_IAC_REVISION := $(shell sed -nE 's|.*uses: hoverkraft-tech/ci-github-iac/\.github/workflows/vm-e2e.yml@([0-9a-f]{40}).*|\1|p' .github/workflows/__shared-ci.yml)
+CI_IAC_REVISION := $(shell sed -nE 's|.*uses: hoverkraft-tech/ci-github-iac/actions/vm-e2e@([0-9a-f]{40}).*|\1|p' .github/workflows/__shared-ci.yml)
 
 .PHONY: help lint-fix ci setup lint e2e plan provision configure deploy verify backup
 help: ## Display help
