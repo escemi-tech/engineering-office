@@ -11,5 +11,5 @@
   Use synthetic data. Never execute a host-changing test on the developer workstation.
 - Keep deployment commands unavailable until an actual implementation and point-of-use
   preflight exist. Production changes require environment approval.
-- Keep root README for end users, detailed guides in docs/ and decisions in ADRs.
+- Keep root readme for end users, detailed guides in docs/ and decisions in ADRs.
   Use Conventional Commits and reviewed pull requests.
