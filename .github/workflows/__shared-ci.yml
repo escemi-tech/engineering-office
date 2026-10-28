@@ -32,16 +32,16 @@ jobs:
           persist-credentials: false
       - name: Create VM
         id: vm
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@acda463791a5dc7403929f0aba39f993fa89c4de
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@efe2b370eb7916999d28d84645da7d52fc3b9461
       - name: Execute guest assertions
         id: test
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@acda463791a5dc7403929f0aba39f993fa89c4de
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@efe2b370eb7916999d28d84645da7d52fc3b9461
         with:
           vm: ${{ steps.vm.outputs.vm }}
           test-script: tests/e2e.sh
       - name: Destroy VM
         if: ${{ always() && steps.vm.outputs.vm != '' }}
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@acda463791a5dc7403929f0aba39f993fa89c4de
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@efe2b370eb7916999d28d84645da7d52fc3b9461
         with:
           vm: ${{ steps.vm.outputs.vm }}
       - name: Upload assertion report
@@ -61,8 +61,8 @@ jobs:
       - name: Require all checks
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: |
-          python3 - <<'PYTHON'
-          import json, os
-          assert all(job['result'] == 'success' for job in json.loads(os.environ['RESULTS']).values())
-          PYTHON
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const results = Object.values(JSON.parse(process.env.RESULTS));
+            if (!results.every(job => job.result === 'success')) core.setFailed('A required check did not succeed');

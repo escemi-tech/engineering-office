@@ -9,6 +9,7 @@
   narrowly scoped credentials from a protected environment when implemented.
 - Compose pinned Hoverkraft VM creation, test and destruction actions in CI jobs.
   Keep scenario assertions here; reuse shared VM implementation and always schedule cleanup.
+- Use `actions/github-script` for workflow scripting, matching the shared actions.
 - Run `make lint` after edits and the relevant disposable tests for behavior changes.
   Use synthetic data. Never execute a host-changing test on the developer workstation.
 - Keep deployment commands unavailable until an actual implementation and point-of-use
