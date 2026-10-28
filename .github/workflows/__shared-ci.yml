@@ -1,13 +1,11 @@
-name: Continuous integration
+---
+name: Shared - Continuous Integration
+
 on:
-  pull_request:
-  push:
-    branches: [main]
-permissions:
-  contents: read
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  workflow_call:
+
+permissions: {}
+
 jobs:
   linter:
     uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@44f6108cef0e9884ea7735f3d62932c2310745d4 # 0.39.1
@@ -23,7 +21,9 @@ jobs:
       security-events: write
       statuses: write
   vm:
-    uses: hoverkraft-tech/ci-github-iac/.github/workflows/vm-e2e.yml@bf8d933632dfa4be2eb5f55e4cfe461ff8fda808
+    permissions:
+      contents: read
+    uses: hoverkraft-tech/ci-github-iac/.github/workflows/vm-e2e.yml@ac90761a35ae5e9a4ff29e3205f38a5bbd0c5152
   checks:
     if: ${{ always() }}
     needs: [linter, vm]

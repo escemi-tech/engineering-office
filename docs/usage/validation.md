@@ -13,7 +13,7 @@ make setup
 make e2e
 ```
 
-`make setup` fetches the exact ci-github-iac commit pinned in the CI workflow.
+`make setup` fetches the exact ci-github-iac commit pinned in `.github/workflows/__shared-ci.yml`.
 `make e2e` attempts collection and teardown even after a failed startup or assertion.
 CI invokes the same `e2e-up`, `e2e-test`, `e2e-collect` and `e2e-down` targets.
 The fixture validates a cold Ubuntu boot and synthetic guest read/write behavior.
