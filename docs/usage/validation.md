@@ -19,7 +19,9 @@ CI invokes the same `e2e-up`, `e2e-test`, `e2e-collect` and `e2e-down` targets.
 The fixture validates a cold Ubuntu boot and synthetic guest read/write behavior.
 It does not validate a production service or nested Proxmox.
 
-The fixture owns only `.cache/e2e/`, with sanitized reports under `.reports/`.
+The fixture records its private temporary Lima runtime path in
+`.cache/e2e/lima-home`, with sanitized reports under `.reports/`. The runtime
+uses a short path scoped to this checkout to fit Unix socket limits.
 To inspect individual lifecycle steps, invoke the four targets in order and always
 finish with `make e2e-down`. A pre-existing fixture is rejected for cold-start tests.
 

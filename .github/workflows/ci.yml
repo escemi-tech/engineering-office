@@ -23,7 +23,7 @@ jobs:
       security-events: write
       statuses: write
   vm:
-    uses: hoverkraft-tech/ci-github-iac/.github/workflows/vm-e2e.yml@9a15e10115f629e1783c165e1fa6b2a5d6b503ff
+    uses: hoverkraft-tech/ci-github-iac/.github/workflows/vm-e2e.yml@bca459a1502cb1c87a14d8267b45e98d135d8a4f
   checks:
     if: ${{ always() }}
     needs: [linter, vm]
