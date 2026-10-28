@@ -32,24 +32,33 @@ jobs:
           persist-credentials: false
       - name: Create VM
         id: vm
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@4c1afb5d043797f997a4c6da33f2edc8d1c999ca
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@d9cd0bf3dcd578197580a43b11edf06738b02a14
       - name: Execute guest assertions
         id: test
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@4c1afb5d043797f997a4c6da33f2edc8d1c999ca
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@d9cd0bf3dcd578197580a43b11edf06738b02a14
         with:
           vm: ${{ steps.vm.outputs.vm }}
           test-script: tests/e2e.sh
       - name: Destroy VM
         if: ${{ always() && steps.vm.outputs.vm != '' }}
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@4c1afb5d043797f997a4c6da33f2edc8d1c999ca
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@d9cd0bf3dcd578197580a43b11edf06738b02a14
         with:
           vm: ${{ steps.vm.outputs.vm }}
+      - name: Summarize assertion report
+        if: ${{ always() && (steps.test.outputs.report != '' || steps.test.outputs.report-files != '') }}
+        uses: hoverkraft-tech/ci-github-common/actions/parse-ci-reports@44f6108cef0e9884ea7735f3d62932c2310745d4 # 0.39.1
+        with:
+          report-name: VM assertions
+          report-paths: ${{ steps.test.outputs.report-files || steps.test.outputs.report }}
+          output-format: summary,annotations
       - name: Upload assertion report
-        if: ${{ always() && steps.test.outputs.report != '' }}
+        if: ${{ always() && (steps.test.outputs.report != '' || steps.test.outputs.report-files != '') }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vm-${{ github.job }}-${{ steps.vm.outputs.id }}
-          path: ${{ steps.test.outputs.report }}
+          path: |
+            ${{ steps.test.outputs.report }}
+            ${{ steps.test.outputs.report-files }}
           if-no-files-found: error
           retention-days: 7
   checks:
