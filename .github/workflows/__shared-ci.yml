@@ -30,10 +30,29 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Validate in disposable VM
-        uses: hoverkraft-tech/ci-github-iac/actions/vm-e2e@f8ab7bf7a91ed562e9de5cdfc3b0c0d9b05c4b21
+      - name: Create VM
+        id: vm
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@acda463791a5dc7403929f0aba39f993fa89c4de
+      - name: Execute guest assertions
+        id: test
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@acda463791a5dc7403929f0aba39f993fa89c4de
         with:
+          vm: ${{ steps.vm.outputs.vm }}
           test-script: tests/e2e.sh
+      - name: Destroy VM
+        if: ${{ always() && steps.vm.outputs.vm != '' }}
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@acda463791a5dc7403929f0aba39f993fa89c4de
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+      - name: Upload assertion report
+        if: ${{ always() && steps.test.outputs.report != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vm-${{ github.job }}-${{ steps.vm.outputs.id }}
+          path: ${{ steps.test.outputs.report }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
   checks:
     if: ${{ always() }}
     needs: [linter, vm]
