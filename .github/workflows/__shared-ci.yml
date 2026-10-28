@@ -32,16 +32,16 @@ jobs:
           persist-credentials: false
       - name: Create VM
         id: vm
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@efe2b370eb7916999d28d84645da7d52fc3b9461
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@ef60450f4e7f49921893db9904ac4853a833d822
       - name: Execute guest assertions
         id: test
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@efe2b370eb7916999d28d84645da7d52fc3b9461
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@ef60450f4e7f49921893db9904ac4853a833d822
         with:
           vm: ${{ steps.vm.outputs.vm }}
           test-script: tests/e2e.sh
       - name: Destroy VM
         if: ${{ always() && steps.vm.outputs.vm != '' }}
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@efe2b370eb7916999d28d84645da7d52fc3b9461
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@ef60450f4e7f49921893db9904ac4853a833d822
         with:
           vm: ${{ steps.vm.outputs.vm }}
       - name: Upload assertion report

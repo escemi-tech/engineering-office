@@ -30,7 +30,7 @@ configuration.
 Each invocation uses its own short private Lima runtime under `/tmp`, removed
 with its keys after verified teardown. Sanitized reports are written to `.reports/`.
 For input options and cleanup recovery, see the shared
-[VM validation guide](https://github.com/hoverkraft-tech/ci-github-iac/blob/efe2b370eb7916999d28d84645da7d52fc3b9461/docs/usage/vm-e2e.md).
+[VM validation guide](https://github.com/hoverkraft-tech/ci-github-iac/blob/ef60450f4e7f49921893db9904ac4853a833d822/docs/usage/vm-e2e.md).
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail with an
 explicit message until their implementations are delivered. These commands never
