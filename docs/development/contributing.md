@@ -24,3 +24,24 @@ Use Conventional Commits and reviewed pull requests. Keep the local fixture
 revision derived from the pinned workflow reference in `__shared-ci.yml`.
 Change that reference when adopting a shared CI update, then run the complete
 VM lifecycle before merging.
+
+## Repository automation
+
+Keep the five Hoverkraft maintenance workflows alongside the CI entrypoints:
+
+- `__greetings.yml` welcomes first-time contributors on new issues and PRs.
+- `__need-fix-to-issue.yml` turns fix markers into issues after main pushes, or
+  for a manually selected commit range.
+- `__semantic-pull-request.yml` validates Conventional Commit PR titles.
+- `__renovate.yml` runs dependency updates weekly and on manual dispatch.
+- `__stale.yml` manages inactive issues and PRs daily using shared defaults.
+
+The four collaboration workflows reuse pinned ci-github-common workflows.
+Renovate uses the organization's `CI_BOT_APP_CLIENT_ID` Actions variable and
+`CI_BOT_APP_PRIVATE_KEY` Actions secret. Its GitHub App must be installed on this
+repository with the permissions requested by the token-generation step.
+Keep the token scoped to this repository and the repository configuration in
+`.github/renovate.json`. Dependabot owns Actions and Docker updates; Renovate
+handles Ansible and Terraform dependencies when their manifests are present.
+The bootstrap has no such manifests yet. Schedules become active after these
+workflows reach the default branch.
