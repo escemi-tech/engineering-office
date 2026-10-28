@@ -39,7 +39,7 @@ ci: ## Execute local CI tasks
 	$(MAKE) lint-fix
 
 e2e: setup ## Run guest assertions with automatic VM setup and cleanup
-	node "$(CI_IAC_DIRECTORY)/actions/vm/cli.cjs" run --test-script tests/e2e.sh
+	node "$(CI_IAC_DIRECTORY)/actions/vm/cli.cjs" run --vm-config tests/lima.yml --test-script tests/e2e.sh
 
 plan provision configure deploy verify backup:
 	@printf '%s\n' '$@ is unavailable: infrastructure implementation and deployment preflight are required.' >&2

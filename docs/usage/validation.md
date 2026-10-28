@@ -24,10 +24,10 @@ own dependencies; VM actions need no Python or npm setup. The workflow schedules
 destruction with `always()` before report parsing and artifact upload.
 
 The assertions validate a cold Ubuntu boot and synthetic guest read/write behavior.
-They do not validate a production service or nested Proxmox. The creation action
-supplies the default Ubuntu image and Lima configuration. Supply `vm-config` on
-the creation step and the same `--vm-config` argument locally when adding a domain VM
-configuration.
+They do not validate a production service or nested Proxmox. The repository owns
+[the Lima configuration](../../tests/lima.yml), including the pinned Ubuntu image
+and guest resources. CI passes it through the required `vm-config` input;
+`make e2e` passes the same file through the required `--vm-config` argument.
 
 Each invocation uses its own short private Lima runtime under `/tmp`, removed
 with its keys after verified teardown. Each test keeps its own sanitized report.

@@ -33,6 +33,8 @@ jobs:
       - name: Create VM
         id: vm
         uses: hoverkraft-tech/ci-github-iac/actions/vm/create@d9cd0bf3dcd578197580a43b11edf06738b02a14
+        with:
+          vm-config: tests/lima.yml
       - name: Execute guest assertions
         id: test
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@d9cd0bf3dcd578197580a43b11edf06738b02a14
