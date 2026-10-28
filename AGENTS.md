@@ -7,7 +7,7 @@
   Use domain-specific credentials; never share professional and personal identities.
 - Keep secrets in Bitwarden for human custody. Deployment automation receives only
   narrowly scoped credentials from a protected environment when implemented.
-- Reuse the pinned Hoverkraft CI workflow and its Make lifecycle contract. Keep
+- Reuse the pinned Hoverkraft CI workflow and its shared VM action. Keep
   scenario assertions here when adding domain behavior; do not duplicate orchestration.
 - Run `make lint` after edits and the relevant disposable tests for behavior changes.
   Use synthetic data. Never execute a host-changing test on the developer workstation.
