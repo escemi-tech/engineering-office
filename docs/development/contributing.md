@@ -10,8 +10,8 @@ stops the command before linting.
 `make lint-fix` applies supported automatic fixes. `make lint docs/` limits
 linting to matching paths. Positional filters apply only to lint commands;
 unknown standalone targets fail. `make ci` runs local linting with fixes.
-Run `make e2e` separately on a KVM-capable host; see the
-[validation guide](../usage/validation.md) for prerequisites and cleanup.
+VM integration tests run in CI; see the
+[validation guide](../usage/validation.md) for scenarios and reporting.
 
 `main-ci.yml` and `pull-request-ci.yml` call `__shared-ci.yml`. Main supports
 pushes and manual runs; PR CI also supports merge queues. Both cancel superseded
@@ -20,10 +20,10 @@ grant only the permissions required by each job. Keep step names descriptive,
 Actions pinned; compose shared VM operations in the job. The aggregate `checks`
 job requires every prerequisite to succeed and is required by branch protection.
 
-Use Conventional Commits and reviewed pull requests. Keep the local action
-revision derived from `vm/create` and pin all three VM actions together in `__shared-ci.yml`.
-Update those references together when adopting a shared CI change, then run the complete
-VM lifecycle before merging.
+Use Conventional Commits and reviewed pull requests. Pin all three VM actions
+to the same immutable revision in `__shared-ci.yml`. Update those references
+together when adopting a shared CI change, then require the hosted VM job to pass
+before merging.
 
 ## Repository automation
 
