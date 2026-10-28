@@ -1,0 +1,15 @@
+.cache/
+.reports/
+__pycache__/
+*.pyc
+node_modules/
+.env
+*.tfstate*
+*.tfplan
+.terraform/
+*.tfvars
+!*.example.tfvars
+*.auto.tfvars.json
+*.pem
+*.key
+inventory.local.*
