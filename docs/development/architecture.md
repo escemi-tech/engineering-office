@@ -21,5 +21,5 @@ A PR author cannot approve their own PR; another eligible reviewer is required.
 Dependencies are pinned to immutable Action commits and a Docker digest. Dependabot
 proposes updates. Pin all VM actions to the same shared revision; the Makefile
 derives its local revision from `vm/create`. Workflows compose shared operations
-and own cleanup conditions and report publication. Review
+and own cleanup conditions. The test action owns report parsing and publication. Review
 shared CI updates with a complete VM lifecycle before merging.

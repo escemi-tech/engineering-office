@@ -17,11 +17,14 @@ make e2e
 `.github/workflows/__shared-ci.yml`. Keep `vm/test` and `vm/destroy` on that same
 revision. `make e2e` uses the shared local command to create the guest, execute
 [our assertions](../../tests/e2e.sh) and destroy the VM, including after failure.
-CI composes those three focused actions using their GitHub Script runtime and
-renders the JUnit result with Hoverkraft's `parse-ci-reports` action, showing a job
-summary and failure annotations, then uploads the report. The parser manages its
-own dependencies; VM actions need no Python or npm setup. The workflow schedules
-destruction with `always()` before report parsing and artifact upload.
+CI composes those three focused actions using their GitHub Script runtime.
+`vm/test` parses results, renders summaries and annotations, updates a PR comment
+and uploads completed reports. Its stable `report-name` keeps comments distinct;
+fork and Dependabot PRs skip comments. The parser manages its own dependencies;
+VM actions need no Python or npm setup. The workflow grants `pull-requests: write`
+and schedules destruction with `always()`, including after reporting failure.
+Use `command` instead of `test-script` for inline guest commands. Optional
+`coverage: codecov` requires explicit report selection and `id-token: write`.
 
 The assertions validate a cold Ubuntu boot and synthetic guest read/write behavior.
 They do not validate a production service or nested Proxmox. The repository owns
@@ -38,7 +41,7 @@ those files into the supplied guest `REPORTS_DIR`. The parser consumes the
 `report-files` output when present, otherwise the command-status `report`.
 Collected report contents must be suitable for these public workflows.
 For input options and cleanup recovery, see the shared
-[VM validation guide](https://github.com/hoverkraft-tech/ci-github-iac/blob/19658c3dffdcf3d6ea8b04895e46bb8e64e9208a/docs/usage/vm-e2e.md).
+[VM validation guide](https://github.com/hoverkraft-tech/ci-github-iac/blob/4bd20d5cd4ab7358358a2cb0b6fca603b02dadfe/docs/usage/vm-e2e.md).
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail with an
 explicit message until their implementations are delivered. These commands never
