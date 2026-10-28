@@ -1,0 +1,39 @@
+name: Continuous integration
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  linter:
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@44f6108cef0e9884ea7735f3d62932c2310745d4 # 0.39.1
+    with:
+      linter-env: |
+        FILTER_REGEX_EXCLUDE=/(\.cache|\.reports)/
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      packages: read
+      pull-requests: write
+      security-events: write
+      statuses: write
+  vm:
+    uses: hoverkraft-tech/ci-github-iac/.github/workflows/vm-e2e.yml@9a15e10115f629e1783c165e1fa6b2a5d6b503ff
+  checks:
+    if: ${{ always() }}
+    needs: [linter, vm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all checks
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          assert all(job['result'] == 'success' for job in json.loads(os.environ['RESULTS']).values())
+          PYTHON
