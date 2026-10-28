@@ -1,0 +1,10 @@
+vmType: qemu
+arch: x86_64
+cpus: 2
+memory: 2GiB
+disk: 10GiB
+plain: true
+images:
+  - location: https://cloud-images.ubuntu.com/releases/resolute/release-20261016/ubuntu-26.04-server-cloudimg-amd64.img
+    arch: x86_64
+    digest: sha256:5645d0318ad21f643ebb1ac4567514620e9893380b07b0201fda163baa5b7eb5
