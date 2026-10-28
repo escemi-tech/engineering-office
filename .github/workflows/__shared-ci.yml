@@ -32,18 +32,18 @@ jobs:
           persist-credentials: false
       - name: Create VM
         id: vm
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@d9cd0bf3dcd578197580a43b11edf06738b02a14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@19658c3dffdcf3d6ea8b04895e46bb8e64e9208a
         with:
           vm-config: tests/lima.yml
       - name: Execute guest assertions
         id: test
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@d9cd0bf3dcd578197580a43b11edf06738b02a14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@19658c3dffdcf3d6ea8b04895e46bb8e64e9208a
         with:
           vm: ${{ steps.vm.outputs.vm }}
           test-script: tests/e2e.sh
       - name: Destroy VM
         if: ${{ always() && steps.vm.outputs.vm != '' }}
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@d9cd0bf3dcd578197580a43b11edf06738b02a14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@19658c3dffdcf3d6ea8b04895e46bb8e64e9208a
         with:
           vm: ${{ steps.vm.outputs.vm }}
       - name: Summarize assertion report
