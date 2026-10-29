@@ -5,15 +5,16 @@ and [workflow layout](https://github.com/neilime/workstation-manager/tree/main/.
 Use annotated targets for `make help` and a shared `run_linter` helper for
 `make lint` and `make lint-fix`. The linter runs on Linux amd64 with the caller's
 UID/GID and the checkout's absolute path as its workspace. A failed image build
-stops the command before linting.
+stops the command before linting. The shared image respects `.gitignore`; keep
+local caches and generated reports excluded there.
 
 `make lint-fix` applies supported automatic fixes. `make lint docs/` limits
 linting to matching paths. Positional filters apply only to lint commands;
 unknown standalone targets fail. `make ci` runs local linting with fixes.
 VM integration tests run in CI; see the
-[validation guide](../usage/validation.md) for scenarios and reporting.
+[validation guide](docs/usage/validation.md) for scenarios and reporting.
 
-`main-ci.yml` and `pull-request-ci.yml` call `__shared-ci.yml`. Main supports
+`main-ci.yml` and `pull-request-ci.yml` call `shared-ci.yml`. Main supports
 pushes and manual runs; PR CI also supports merge queues. Both cancel superseded
 runs for the same workflow and ref. Start workflows with `permissions: {}` and
 grant only the permissions required by each job. Keep step names descriptive,
@@ -21,7 +22,7 @@ Actions pinned; compose shared VM operations in the job. The aggregate `checks`
 job requires every prerequisite to succeed and is required by branch protection.
 
 Use Conventional Commits and reviewed pull requests. Pin all three VM actions
-to the same immutable revision in `__shared-ci.yml`. Update those references
+to the same immutable revision in `shared-ci.yml`. Update those references
 together when adopting a shared CI change, then require the hosted VM job to pass
 before merging.
 
@@ -29,12 +30,12 @@ before merging.
 
 Keep the five Hoverkraft maintenance workflows alongside the CI entrypoints:
 
-- `__greetings.yml` welcomes first-time contributors on new issues and PRs.
-- `__need-fix-to-issue.yml` turns fix markers into issues after main pushes, or
+- `greetings.yml` welcomes first-time contributors on new issues and PRs.
+- `need-fix-to-issue.yml` turns fix markers into issues after main pushes, or
   for a manually selected commit range.
-- `__semantic-pull-request.yml` validates Conventional Commit PR titles.
-- `__renovate.yml` runs dependency updates weekly and on manual dispatch.
-- `__stale.yml` manages inactive issues and PRs daily using shared defaults.
+- `semantic-pull-request.yml` validates Conventional Commit PR titles.
+- `renovate.yml` runs dependency updates weekly and on manual dispatch.
+- `stale.yml` manages inactive issues and PRs daily using shared defaults.
 
 The four collaboration workflows reuse pinned ci-github-common workflows.
 Renovate uses the organization's `CI_BOT_APP_CLIENT_ID` Actions variable and
