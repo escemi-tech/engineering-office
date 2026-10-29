@@ -17,20 +17,21 @@ jobs:
       pull-requests: write
       security-events: write
       statuses: write
-  ansible:
+  ansible-targets:
     name: Ansible validation readiness
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
       contents: read
-      pull-requests: write
+    outputs:
+      enabled: ${{ steps.targets.outputs.enabled }}
+      matrix: ${{ steps.targets.outputs.matrix }}
     steps:
       - name: Checkout consumer
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Select Ansible targets when content exists
-        id: ansible
+        id: targets
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -38,25 +39,40 @@ jobs:
             const files = tracked.stdout.trim().split('\n').filter(Boolean);
             core.setOutput('enabled', files.length > 0);
             if (!files.length) {
+              core.setOutput('matrix', { include: [{ name: 'not-configured' }] });
               await core.summary.addRaw('Ansible checks were not run: this repository has no Ansible content yet.').write();
               return;
             }
-            const playbooks = files.filter(file => /^ansible\/[^/]+\.ya?ml$/.test(file) && !/^ansible\/inventory[./]/.test(file));
+            const playbooks = files.filter(file => /^ansible\/[^/]+\.ya?ml$/.test(file) && !/^ansible\/(inventory[./]|requirements\.)/.test(file));
             const collections = files.filter(file => /^ansible\/collections\/ansible_collections\/[^/]+\/[^/]+\/galaxy\.yml$/.test(file));
-            core.setOutput('playbooks', playbooks.join('\n'));
-            core.setOutput('collections', collections.map(file => file.slice(0, -'/galaxy.yml'.length)).join('\n'));
-            if (!playbooks.length && !collections.length) core.setFailed('Ansible content exists but no playbook or collection was selected.');
-      - name: Build Ansible tooling
-        if: steps.ansible.outputs.enabled == 'true'
-        run: docker build --tag engineering-office-tooling:local --file docker/tooling/Dockerfile .
-      - name: Test Ansible
-        if: steps.ansible.outputs.enabled == 'true'
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@d2673efa2d13247d9a7ccf9fc2b6876fbf2d3435 # feat/ansible-test-action
+            const include = collections.map(file => ({ name: file.split('/').at(-2), collection: file.slice(0, -'/galaxy.yml'.length), playbooks: '' }));
+            if (playbooks.length) include.unshift({ name: 'syntax', playbooks: playbooks.join('\n'), collection: '' });
+            core.setOutput('matrix', { include });
+            if (!include.length) core.setFailed('Ansible content exists but no playbook or collection was selected.');
+  ansible:
+    name: Ansible - ${{ matrix.name }}
+    needs: [ansible-targets]
+    if: needs.ansible-targets.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.ansible-targets.outputs.matrix) }}
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          container-image: engineering-office-tooling:local
-          playbooks: ${{ steps.ansible.outputs.playbooks }}
-          collections: ${{ steps.ansible.outputs.collections }}
-          report-name: engineering-office - Ansible tests
+          persist-credentials: false
+      - name: Test Ansible
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@8c0133170818c92808c59e856dc4e6a17217d19e # feat/ansible-test-action
+        with:
+          ansible-requirements: ansible/requirements.txt
+          playbooks: ${{ matrix.playbooks }}
+          collection: ${{ matrix.collection }}
+          report-name: engineering-office - Ansible - ${{ matrix.name }}
   vm:
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -87,7 +103,7 @@ jobs:
           vm: ${{ steps.vm.outputs.vm }}
   checks:
     if: ${{ always() }}
-    needs: [linter, ansible, vm]
+    needs: [linter, ansible-targets, ansible, vm]
     runs-on: ubuntu-latest
     steps:
       - name: Require all checks
@@ -96,5 +112,9 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const results = Object.values(JSON.parse(process.env.RESULTS));
-            if (!results.every(job => job.result === 'success')) core.setFailed('A required check did not succeed');
+            const results = JSON.parse(process.env.RESULTS);
+            const passed = Object.entries(results).every(([name, job]) =>
+              job.result === 'success' ||
+              (name === 'ansible' && results['ansible-targets'].outputs.enabled === 'false' && job.result === 'skipped')
+            );
+            if (!passed) core.setFailed('A required check did not succeed');

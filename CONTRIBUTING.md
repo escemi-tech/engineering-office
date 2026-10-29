@@ -49,15 +49,17 @@ workflows reach the default branch.
 
 ## Ansible validation
 
-CI currently reports that no Ansible checks ran. Adding tracked content under
-`ansible/` activates the shared `ci-github-iac/actions/ansible/test` action.
-Add `docker/tooling/Dockerfile` with the project's pinned Ansible dependencies in
-the same change. Configure inventory and collection paths in that image or its
-Ansible configuration, using `/workspace` as the checkout mount.
+CI explicitly skips Ansible checks while no content is tracked under `ansible/`.
+Adding content activates a syntax/sanity matrix using the shared
+`ci-github-iac/actions/ansible/test` action. Add `ansible/requirements.txt` with an
+exact `ansible-core==X.Y.Z` pin in the same change. The upstream actions manage
+Python and test containers; no tooling image or consumer test command is needed.
+Configure inventory, Ansible configuration and Galaxy requirements as action
+inputs when those files are introduced.
 
 The workflow selects top-level `ansible/*.yml` and `*.yaml` playbooks, excluding
-`inventory.yml`, `inventory.yaml` and `inventory.*` files. Collection roots are
-selected by `ansible/collections/ansible_collections/*/*/galaxy.yml`. Content without
-any selected target fails validation; it is not silently skipped. The shared
-action owns syntax/sanity checks and report publication. Keep deployment and
-integration scenarios here.
+inventory and requirements files. Collection roots are selected by
+`ansible/collections/ansible_collections/*/*/galaxy.yml`. Each collection runs in
+its own job. Content without any selected target fails validation. The aggregate
+gate permits skipped Ansible jobs only when readiness confirms no content exists.
+Keep deployment and integration scenarios here.
