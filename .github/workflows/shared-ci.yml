@@ -67,7 +67,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Test Ansible
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@6020d664c7714af9bb76b3702d865d45ad5bcea1 # feat/ansible-test-action
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@8ed3c99f0b2dba75f9854c2646a7c2b3447c7472 # feat/ansible-test-action
         with:
           ansible-requirements: ansible/requirements.txt
           playbooks: ${{ matrix.playbooks }}
