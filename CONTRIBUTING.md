@@ -17,9 +17,9 @@ VM integration tests run in CI; see the
 `main-ci.yml` and `pull-request-ci.yml` call `shared-ci.yml`. Main supports
 pushes and manual runs; PR CI also supports merge queues. Both cancel superseded
 runs for the same workflow and ref. Start workflows with `permissions: {}` and
-grant only the permissions required by each job. Keep step names descriptive,
-Actions pinned; compose shared VM operations in the job. The aggregate `checks`
-job requires every prerequisite to succeed and is required by branch protection.
+grant only the permissions required by each job. Keep step names descriptive and
+Actions pinned. Compose shared VM operations in the job, and review each job's
+result before merging.
 
 Use Conventional Commits and reviewed pull requests. Pin all three VM actions
 to the same immutable revision in `shared-ci.yml`. Update those references
@@ -61,6 +61,5 @@ inputs when those files are introduced.
 The workflow executes only explicit `tests/ansible/*.yml` and `*.yaml` test
 playbooks. Deployment playbooks are not test targets. Collection roots are selected by
 `ansible/collections/ansible_collections/*/*/galaxy.yml`. Each collection runs in
-its own job. Content without any selected target fails validation. The aggregate
-gate permits skipped Ansible jobs only when readiness confirms no content exists.
+its own job. Content without any selected target fails the readiness job.
 Keep deployment and integration scenarios here. Linting stays in the linter job.

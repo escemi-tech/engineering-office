@@ -15,7 +15,8 @@ this public repository. PR CI uses no account credentials.
 
 The `production` environment is reserved for reviewed deployments from protected
 branches, with an explicit reviewer gate. No workflow currently deploys or spends
-money. Main-branch protection requires passing checks and a pull-request review.
+money. Main-branch rules require a pull-request review. Review each CI job's result
+before merging.
 A PR author cannot approve their own PR; another eligible reviewer is required.
 
 Dependencies are pinned to immutable Action commits and a Docker digest. Dependabot

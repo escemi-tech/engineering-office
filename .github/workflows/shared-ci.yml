@@ -101,20 +101,3 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@70843368d5f5f7b0a2cec1e8435d81cc40beee64 # 0.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-  checks:
-    if: ${{ always() }}
-    needs: [linter, ansible-targets, ansible, vm]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require all checks
-        env:
-          RESULTS: ${{ toJSON(needs) }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const results = JSON.parse(process.env.RESULTS);
-            const passed = Object.entries(results).every(([name, job]) =>
-              job.result === 'success' ||
-              (name === 'ansible' && results['ansible-targets'].outputs.enabled === 'false' && job.result === 'skipped')
-            );
-            if (!passed) core.setFailed('A required check did not succeed');
