@@ -46,3 +46,18 @@ Keep the token scoped to this repository and the repository configuration in
 handles Ansible and Terraform dependencies when their manifests are present.
 The bootstrap has no such manifests yet. Schedules become active after these
 workflows reach the default branch.
+
+## Ansible validation
+
+CI currently reports that no Ansible checks ran. Adding tracked content under
+`ansible/` activates the shared `ci-github-iac/actions/ansible/test` action.
+Add `docker/tooling/Dockerfile` with the project's pinned Ansible dependencies in
+the same change. Configure inventory and collection paths in that image or its
+Ansible configuration, using `/workspace` as the checkout mount.
+
+The workflow selects top-level `ansible/*.yml` and `*.yaml` playbooks, excluding
+`inventory.yml`, `inventory.yaml` and `inventory.*` files. Collection roots are
+selected by `ansible/collections/ansible_collections/*/*/galaxy.yml`. Content without
+any selected target fails validation; it is not silently skipped. The shared
+action owns syntax/sanity checks and report publication. Keep deployment and
+integration scenarios here.
