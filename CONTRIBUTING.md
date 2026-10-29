@@ -49,17 +49,18 @@ workflows reach the default branch.
 
 ## Ansible validation
 
-CI explicitly skips Ansible checks while no content is tracked under `ansible/`.
-Adding content activates a syntax/sanity matrix using the shared
+CI skips Ansible tests while no content is tracked under `ansible/` or
+`tests/ansible/`. Adding content activates a test-playbook/collection matrix using the shared
 `ci-github-iac/actions/ansible/test` action. Add `ansible/requirements.txt` with an
 exact `ansible-core==X.Y.Z` pin in the same change. The upstream actions manage
-Python and test containers; no tooling image or consumer test command is needed.
+collection runtimes and test execution. Playbook tests use the runner Python
+and must target disposable environments prepared by the consumer.
 Configure inventory, Ansible configuration and Galaxy requirements as action
 inputs when those files are introduced.
 
-The workflow selects top-level `ansible/*.yml` and `*.yaml` playbooks, excluding
-inventory and requirements files. Collection roots are selected by
+The workflow executes only explicit `tests/ansible/*.yml` and `*.yaml` test
+playbooks. Deployment playbooks are not test targets. Collection roots are selected by
 `ansible/collections/ansible_collections/*/*/galaxy.yml`. Each collection runs in
 its own job. Content without any selected target fails validation. The aggregate
 gate permits skipped Ansible jobs only when readiness confirms no content exists.
-Keep deployment and integration scenarios here.
+Keep deployment and integration scenarios here. Linting stays in the linter job.
