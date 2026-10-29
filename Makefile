@@ -49,7 +49,6 @@ define run_linter
 		-e DEFAULT_BRANCH="$$DEFAULT_BRANCH" \
 		-e USE_FIND_ALGORITHM=false \
 		-e FILTER_REGEX_INCLUDE="$(filter-out $@,$(MAKECMDGOALS))" \
-		-e 'FILTER_REGEX_EXCLUDE=/(\.cache|\.reports)/' \
 		$(1) \
 		"$$LINTER_IMAGE"
 endef

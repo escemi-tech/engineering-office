@@ -6,7 +6,7 @@ Infrastructure-specific format/validate checks will accompany the first real
 OpenTofu stack and Ansible playbook; no empty deployment stack is claimed valid.
 
 VM validation runs on GitHub-hosted Linux runners through
-[the shared CI job](../../.github/workflows/__shared-ci.yml). Pull requests and
+[the shared CI job](../../.github/workflows/shared-ci.yml). Pull requests and
 main pushes run it automatically; the main workflow also supports manual runs.
 The job composes the pinned `vm/create`, `vm/test` and `vm/destroy` actions,
 using [our assertions](../../tests/e2e.sh). Keep all three actions on the same
