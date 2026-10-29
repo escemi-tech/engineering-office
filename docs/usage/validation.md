@@ -33,9 +33,9 @@ those files into the supplied guest `REPORTS_DIR`. The parser consumes the
 `report-files` output when present, otherwise the command-status `report`.
 Collected report contents must be suitable for these public workflows.
 For input options and cleanup recovery, see the generated action documentation:
-[create](https://github.com/hoverkraft-tech/ci-github-iac/blob/82a76b76c04772b7d959948bcb6657c88df182f3/actions/vm/create/README.md),
-[test](https://github.com/hoverkraft-tech/ci-github-iac/blob/82a76b76c04772b7d959948bcb6657c88df182f3/actions/vm/test/README.md) and
-[destroy](https://github.com/hoverkraft-tech/ci-github-iac/blob/82a76b76c04772b7d959948bcb6657c88df182f3/actions/vm/destroy/README.md).
+[create](https://github.com/hoverkraft-tech/ci-github-iac/blob/0.2.0/actions/vm/create/README.md),
+[test](https://github.com/hoverkraft-tech/ci-github-iac/blob/0.2.0/actions/vm/test/README.md) and
+[destroy](https://github.com/hoverkraft-tech/ci-github-iac/blob/0.2.0/actions/vm/destroy/README.md).
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail with an
 explicit message until their implementations are delivered. These commands never
