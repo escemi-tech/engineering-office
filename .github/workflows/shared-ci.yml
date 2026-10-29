@@ -35,7 +35,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const tracked = await exec.getExecOutput('git', ['ls-files', 'ansible/']);
+            const tracked = await exec.getExecOutput('git', ['ls-files', 'ansible/', 'tests/ansible/']);
             const files = tracked.stdout.trim().split('\n').filter(Boolean);
             core.setOutput('enabled', files.length > 0);
             if (!files.length) {
@@ -43,12 +43,12 @@ jobs:
               await core.summary.addRaw('Ansible checks were not run: this repository has no Ansible content yet.').write();
               return;
             }
-            const playbooks = files.filter(file => /^ansible\/[^/]+\.ya?ml$/.test(file) && !/^ansible\/(inventory[./]|requirements\.)/.test(file));
+            const playbooks = files.filter(file => /^tests\/ansible\/[^/]+\.ya?ml$/.test(file));
             const collections = files.filter(file => /^ansible\/collections\/ansible_collections\/[^/]+\/[^/]+\/galaxy\.yml$/.test(file));
-            const include = collections.map(file => ({ name: file.split('/').at(-2), collection: file.slice(0, -'/galaxy.yml'.length), playbooks: '' }));
-            if (playbooks.length) include.unshift({ name: 'syntax', playbooks: playbooks.join('\n'), collection: '' });
+            const include = collections.map(file => ({ name: file.split('/').at(-2), collection: file.slice(0, -'/galaxy.yml'.length), playbook: '' }));
+            include.push(...playbooks.map(file => ({ name: file, playbook: file, collection: '' })));
             core.setOutput('matrix', { include });
-            if (!include.length) core.setFailed('Ansible content exists but no playbook or collection was selected.');
+            if (!include.length) core.setFailed('Ansible content exists but no test playbook or collection was selected.');
   ansible:
     name: Ansible - ${{ matrix.name }}
     needs: [ansible-targets]
@@ -67,10 +67,10 @@ jobs:
         with:
           persist-credentials: false
       - name: Test Ansible
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@8ed3c99f0b2dba75f9854c2646a7c2b3447c7472 # feat/ansible-test-action
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@00d7ffa3c60b79a58995625223580e4b25a0e3f8 # feat/ansible-test-action
         with:
           ansible-requirements: ansible/requirements.txt
-          playbooks: ${{ matrix.playbooks }}
+          test-playbook: ${{ matrix.playbook }}
           collection: ${{ matrix.collection }}
           report-name: engineering-office - Ansible - ${{ matrix.name }}
   vm:
