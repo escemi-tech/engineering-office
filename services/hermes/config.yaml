@@ -1,0 +1,26 @@
+model:
+  default: ${HERMES_MODEL}
+  provider: custom
+  base_url: ${HERMES_INFERENCE_URL}
+  api_key: ${HERMES_INFERENCE_API_KEY}
+  streaming: false
+platform_toolsets:
+  cli: []
+  api_server: []
+agent:
+  max_turns: 3
+  api_max_retries: 1
+max_concurrent_sessions: 1
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+skills:
+  creation_nudge_interval: 0
+mcp_servers: {}
+fallback_providers: []
+telemetry:
+  shared_metrics:
+    enabled: false
+    send: false
+updates:
+  check: false

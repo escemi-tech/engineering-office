@@ -1,0 +1,18 @@
+services:
+  hermes:
+    depends_on:
+      - inference
+  inference:
+    image: ${HERMES_TEST_IMAGE:?Use the image selected by the deployment compose file}
+    entrypoint: [node, /fixtures/inference.mjs]
+    user: "10000:10000"
+    read_only: true
+    volumes:
+      - ../../tests/hermes/fixtures/inference.mjs:/fixtures/inference.mjs:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+networks:
+  default:
+    internal: true

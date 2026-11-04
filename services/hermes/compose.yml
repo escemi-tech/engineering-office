@@ -1,0 +1,47 @@
+services:
+  hermes:
+    image: nousresearch/hermes-agent:v0.22.7@sha256:e6d81ae52ebf6a43efa529701405509f20054ba818f179ddd748bed4f8af584c
+    command: [gateway, run]
+    restart: unless-stopped
+    environment:
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_KEY: ${HERMES_GATEWAY_API_KEY:?Set a dedicated gateway key of at least 32 random characters}
+      HERMES_MODEL: ${HERMES_MODEL:?Select the approved model}
+      HERMES_INFERENCE_URL: ${HERMES_INFERENCE_URL:?Select the approved OpenAI-compatible endpoint}
+      HERMES_INFERENCE_API_KEY: ${HERMES_INFERENCE_API_KEY:?Set the scoped inference key}
+    ports:
+      - "127.0.0.1:8642:8642"
+    volumes:
+      - state:/opt/data
+      - ./config.yaml:/opt/data/config.yaml:ro
+      - ./config.yaml:/etc/hermes/config.yaml:ro
+    security_opt:
+      - no-new-privileges:true
+    cpus: 2
+    mem_limit: 4g
+    pids_limit: 512
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+        [
+          CMD,
+          curl,
+          --fail,
+          --silent,
+          --max-time,
+          "5",
+          http://127.0.0.1:8642/health,
+        ]
+      interval: 10s
+      timeout: 6s
+      start_period: 60s
+      retries: 12
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  state:

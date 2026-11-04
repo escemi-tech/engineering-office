@@ -20,7 +20,16 @@ before merging.
 A PR author cannot approve their own PR; another eligible reviewer is required.
 
 Dependencies are pinned to immutable Action commits and a Docker digest. Dependabot
-proposes updates. Pin all VM actions to the same shared revision; the Makefile
-derives its local revision from `vm/create`. Workflows compose shared operations
+proposes updates. Pin all VM actions to the same shared revision. Workflows compose shared operations
 and own cleanup conditions. The test action owns report parsing and publication. Review
 shared CI updates with a complete VM lifecycle before merging.
+
+The first assistant scope is professional internal. Its
+[authority and source policy](assistant-security.md) separates runtime, connector,
+review and deployment identities. The [placement ADR](adr/0002-assistant-runtime-boundary.md)
+defines the proposed cloud boundary and shared-host limitations.
+The [Hermes Compose deployment](../../services/hermes/compose.yml) runs the official
+image pinned by release tag and digest, with native state in its own Docker volume.
+Dependabot proposes image updates. The gateway binds to host loopback; its model
+endpoint and credentials must be supplied explicitly. No cloud host or private
+connector is configured. See the [runtime guide](../usage/hermes.md).

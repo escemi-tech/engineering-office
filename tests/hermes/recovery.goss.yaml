@@ -1,0 +1,16 @@
+command:
+  hermes-retains-session:
+    exec: |
+      # Arrange: the original conversation was created before restart or restore.
+      cd /opt/engineering-office
+      # Act: read history without submitting another inference request.
+      bash tests/hermes/helpers/compose.sh exec -T hermes sh -c '
+        curl --fail --silent --max-time 10 \
+          -H "Authorization: Bearer $API_SERVER_KEY" \
+          http://127.0.0.1:8642/api/sessions/engineering-office-smoke/messages
+      '
+      # Assert: both original messages must be present.
+    exit-status: 0
+    stdout:
+      - "Prepare a synthetic briefing."
+      - "Synthetic briefing: no connected sources."
