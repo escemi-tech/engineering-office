@@ -9,33 +9,23 @@ VM validation runs on GitHub-hosted Linux runners through
 [the shared CI job](../../.github/workflows/shared-ci.yml). Pull requests and
 main pushes run it automatically; the main workflow also supports manual runs.
 The job composes the pinned `vm/create`, `vm/test` and `vm/destroy` actions,
-using [our assertions](../../tests/e2e.sh). Keep all three actions on the same
-immutable revision. The creation action installs Lima and QEMU on the runner.
+using [our Goss suite](../../tests/goss.yaml) for Linux, Ubuntu, systemd and
+synthetic guest storage checks. Keep all actions on the same reviewed revision.
+The shared action installs the pinned verifier, runs the suite, publishes native
+JUnit summaries and PR comments, and uploads reports even after assertion failure.
+The workflow always schedules VM destruction, including after reporting failure.
 
-`vm/test` parses results, renders summaries and annotations, updates a PR comment
-and uploads completed reports. Its stable `report-name` keeps comments distinct;
-fork and Dependabot PRs skip comments. The parser manages its own dependencies.
-The workflow grants `pull-requests: write`
-and schedules destruction with `always()`, including after reporting failure.
-Use `command` instead of `test-script` for inline guest commands. Optional
-`coverage: codecov` requires explicit report selection and `id-token: write`.
+Add infrastructure assertions to the Goss suite. Use native resources first and
+command resources for specific checks that need a probe. Native reports preserve
+assertion details; never include credentials or private data. The workflow grants
+`pull-requests: write`; fork and Dependabot PRs still receive summaries and artifacts.
 
-The assertions validate a cold Ubuntu boot and synthetic guest read/write behavior.
-They do not validate a production service or nested Proxmox. The repository owns
-[the Lima configuration](../../tests/lima.yml), including the pinned Ubuntu image
-and guest resources. CI passes it through the required `vm-config` input.
-
-Each invocation uses its own short private Lima runtime under `/tmp`, removed
-with its keys after verified teardown. Each test keeps its own sanitized report.
-CI uses the report path returned by the action from runner temp.
-To collect reports from test tools, set `report-file` patterns on the test action and write
-those files into the supplied guest `REPORTS_DIR`. The parser consumes the
-`report-files` output when present, otherwise the command-status `report`.
-Collected report contents must be suitable for these public workflows.
-For input options and cleanup recovery, see the generated action documentation:
-[create](https://github.com/hoverkraft-tech/ci-github-iac/blob/0.2.0/actions/vm/create/README.md),
-[test](https://github.com/hoverkraft-tech/ci-github-iac/blob/0.2.0/actions/vm/test/README.md) and
-[destroy](https://github.com/hoverkraft-tech/ci-github-iac/blob/0.2.0/actions/vm/destroy/README.md).
+The assertions validate a cold Ubuntu boot and synthetic storage. They do not
+qualify a production service. The repository owns [the Lima configuration](../../tests/lima.yml),
+including the image and guest resources. CI passes it through required `vm-config`.
+Each VM has a private runtime, removed with its keys after verified teardown.
+The [pinned action references](../../.github/workflows/shared-ci.yml) identify the
+source revision and its generated documentation for inputs and cleanup recovery.
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail with an
 explicit message until their implementations are delivered. These commands never

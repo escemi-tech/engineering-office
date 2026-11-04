@@ -21,7 +21,7 @@ grant only the permissions required by each job. Keep step names descriptive and
 Actions pinned. Compose shared VM operations in the job, and review each job's
 result before merging.
 
-Use Conventional Commits and reviewed pull requests. Pin all three VM actions
+Use Conventional Commits and reviewed pull requests. Pin all infrastructure test actions
 to the same immutable revision in `shared-ci.yml`. Update those references
 together when adopting a shared CI change, then require the hosted VM job to pass
 before merging.
@@ -42,10 +42,9 @@ Renovate uses the organization's `CI_BOT_APP_CLIENT_ID` Actions variable and
 `CI_BOT_APP_PRIVATE_KEY` Actions secret. Its GitHub App must be installed on this
 repository with the permissions requested by the token-generation step.
 Keep the token scoped to this repository and the repository configuration in
-`.github/renovate.json`. Dependabot owns Actions and Docker updates; Renovate
-handles Ansible and Terraform dependencies when their manifests are present.
-The bootstrap has no such manifests yet. Schedules become active after these
-workflows reach the default branch.
+`.github/renovate.json`. Dependabot owns Actions and Docker updates, grouped per
+ecosystem; Renovate handles Ansible and Terraform dependencies when their manifests are present.
+The repository has no such manifests yet.
 
 ## Ansible validation
 
@@ -55,8 +54,9 @@ CI skips Ansible tests while no content is tracked under `ansible/` or
 exact `ansible-core==X.Y.Z` pin in the same change. The upstream actions manage
 collection runtimes and test execution. Playbook tests use the runner Python
 and must target disposable environments prepared by the consumer.
-Configure inventory, Ansible configuration and Galaxy requirements as action
-inputs when those files are introduced.
+Configure inventory and collection search paths in an Ansible configuration file
+and pass it through `ansible-config`. Use `galaxy-requirements` for third-party
+dependencies when those files are introduced.
 
 The workflow executes only explicit `tests/ansible/*.yml` and `*.yaml` test
 playbooks. Deployment playbooks are not test targets. Collection roots are selected by
