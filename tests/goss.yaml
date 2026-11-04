@@ -1,0 +1,22 @@
+file:
+  /etc/os-release:
+    exists: true
+    contents:
+      - /^ID=ubuntu$/
+  /run/systemd/system:
+    exists: true
+    filetype: directory
+command:
+  kernel:
+    exec: uname -s
+    exit-status: 0
+    stdout:
+      - /^Linux$/
+  synthetic-storage:
+    exec: |
+      set -eu
+      fixture=$(mktemp)
+      trap 'rm -f "$fixture"' EXIT
+      printf '%s' synthetic > "$fixture"
+      test "$(cat "$fixture")" = synthetic
+    exit-status: 0

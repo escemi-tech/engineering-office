@@ -2,12 +2,20 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - "*"
     cooldown:
       default-days: 7
     schedule:
       interval: weekly
   - package-ecosystem: docker
     directory: /
+    groups:
+      docker-dependencies:
+        patterns:
+          - "*"
     cooldown:
       default-days: 7
     schedule:
