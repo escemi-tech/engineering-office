@@ -22,7 +22,7 @@ Actions pinned. Compose shared VM operations in the job, and review each job's
 result before merging.
 
 Use Conventional Commits and reviewed pull requests. Pin all infrastructure test actions
-to the same immutable revision in `shared-ci.yml`. Update those references
+to the same immutable revision in the workflow that owns the scenario. Update those references
 together when adopting a shared CI change, then require the hosted VM job to pass
 before merging.
 
@@ -42,9 +42,11 @@ Renovate uses the organization's `CI_BOT_APP_CLIENT_ID` Actions variable and
 `CI_BOT_APP_PRIVATE_KEY` Actions secret. Its GitHub App must be installed on this
 repository with the permissions requested by the token-generation step.
 Keep the token scoped to this repository and the repository configuration in
-`.github/renovate.json`. Dependabot owns Actions and Docker updates, grouped per
-ecosystem; Renovate handles Ansible and Terraform dependencies when their manifests are present.
-The repository has no such manifests yet.
+`.github/renovate.json`. Dependabot owns Actions, Dockerfile and Docker Compose
+image updates, grouped per ecosystem with weekly checks and a seven-day cooldown.
+The Hermes Compose image is pinned by release tag and digest. Renovate handles
+Ansible and Terraform dependencies when their manifests are present; none are
+currently tracked.
 
 ## Ansible validation
 

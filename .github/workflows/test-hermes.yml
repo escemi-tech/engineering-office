@@ -1,0 +1,81 @@
+---
+name: Test - Hermes deployment
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  test-hermes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Arrange
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create disposable Docker host
+        id: vm
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm-config: tests/lima.yml
+      - name: Copy deployment and synthetic fixtures
+        env:
+          VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
+          VM_NAME: ${{ steps.vm.outputs.name }}
+        run: |
+          # Fresh sessions pick up the Docker group assigned during provisioning.
+          tar -czf - services/hermes tests/hermes | \
+            ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'tar -xzf - -C /opt/engineering-office'
+      # Act
+      - name: Start Hermes with isolated synthetic inference
+        env:
+          VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
+          VM_NAME: ${{ steps.vm.outputs.name }}
+        run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && bash tests/hermes/helpers/compose.sh up -d --wait --wait-timeout 180'
+      # Assert
+      - name: Verify startup, authentication and synthetic conversation
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: tests/hermes/goss.yaml
+          report-name: engineering-office - Hermes startup
+      # Act
+      - name: Restart Hermes
+        env:
+          VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
+          VM_NAME: ${{ steps.vm.outputs.name }}
+        run: |
+          ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office &&
+            bash tests/hermes/helpers/compose.sh restart hermes &&
+            bash tests/hermes/helpers/compose.sh up -d --wait --wait-timeout 180'
+      # Assert
+      - name: Verify session after restart
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: tests/hermes/recovery.goss.yaml
+          report-name: engineering-office - Hermes restart
+      # Act
+      - name: Restore a stopped backup into a new volume
+        env:
+          VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
+          VM_NAME: ${{ steps.vm.outputs.name }}
+        run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'bash /opt/engineering-office/tests/hermes/restore.sh'
+      # Assert
+      - name: Verify session after restore
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: tests/hermes/recovery.goss.yaml
+          report-name: engineering-office - Hermes restore
+      - name: Destroy disposable host and all test state
+        if: ${{ always() && steps.vm.outputs.vm != '' }}
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}

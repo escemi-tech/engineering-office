@@ -73,30 +73,8 @@ jobs:
           test-playbook: ${{ matrix.playbook }}
           collection: ${{ matrix.collection }}
           report-name: engineering-office - Ansible - ${{ matrix.name }}
-  vm:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+  test-hermes:
+    uses: $/.github/workflows/test-hermes.yml
     permissions:
       contents: read
       pull-requests: write
-    steps:
-      - name: Checkout consumer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Create VM
-        id: vm
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
-        with:
-          vm-config: tests/lima.yml
-      - name: Verify guest state with Goss
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
-        with:
-          vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/goss.yaml
-          report-name: engineering-office - Guest state
-      - name: Destroy VM
-        if: ${{ always() && steps.vm.outputs.vm != '' }}
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
-        with:
-          vm: ${{ steps.vm.outputs.vm }}

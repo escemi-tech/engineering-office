@@ -3,8 +3,9 @@ SHELL := /bin/bash
 
 HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
+HERMES_COMPOSE := docker compose --env-file .local/hermes.env --project-name engineering-office-hermes -f services/hermes/compose.yml
 
-.PHONY: help lint-fix ci lint plan provision configure deploy verify backup
+.PHONY: help lint-fix ci lint hermes-start hermes-stop hermes-logs plan provision configure deploy verify backup
 help: ## Display help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
@@ -25,6 +26,15 @@ lint-fix: ## Execute linting and fix
 
 ci: ## Execute local CI tasks
 	$(MAKE) lint-fix
+
+hermes-start: ## Start the configured local Hermes gateway and wait for health
+	$(HERMES_COMPOSE) up -d --wait --wait-timeout 180
+
+hermes-stop: ## Stop Hermes while preserving its state
+	$(HERMES_COMPOSE) stop
+
+hermes-logs: ## Show recent Hermes logs
+	$(HERMES_COMPOSE) logs --tail 100
 
 plan provision configure deploy verify backup:
 	@printf '%s\n' '$@ is unavailable: infrastructure implementation and deployment preflight are required.' >&2

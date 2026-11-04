@@ -1,10 +1,21 @@
 vmType: qemu
 arch: x86_64
 cpus: 2
-memory: 2GiB
-disk: 10GiB
+memory: 4GiB
+disk: 20GiB
 plain: true
 images:
   - location: https://cloud-images.ubuntu.com/releases/resolute/release-20261016/ubuntu-26.04-server-cloudimg-amd64.img
     arch: x86_64
     digest: sha256:5645d0318ad21f643ebb1ac4567514620e9893380b07b0201fda163baa5b7eb5
+provision:
+  - mode: system
+    script: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y --no-install-recommends docker.io docker-compose-v2
+      systemctl enable --now docker
+      usermod -aG docker "{{.User}}"
+      install -d -m 0755 -o "{{.User}}" /opt/engineering-office

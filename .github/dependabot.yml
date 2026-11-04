@@ -20,3 +20,13 @@ updates:
       default-days: 7
     schedule:
       interval: weekly
+  - package-ecosystem: docker-compose
+    directory: /services/hermes
+    groups:
+      docker-compose-dependencies:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
