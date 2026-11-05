@@ -13,9 +13,17 @@ a root supervisor and runs the gateway as UID 10000. The image pin lives in
 
 ## Try the synthetic demo
 
+Install the APM CLI release selected by the
+[Hermes test workflow](../../.github/workflows/test-hermes.yml), following the
+[upstream installation guide](https://microsoft.github.io/apm/getting-started/installation/).
+Compile the public writing policy before starting the fixture. Compilation uses
+a fresh temporary project and writes only `.reports/hermes-writing-policy/AGENTS.md`;
+it does not change this checkout's authored instructions or install skills.
+
 From the repository root:
 
 ```sh
+bash tests/hermes/helpers/prepare-policy.sh
 bash tests/hermes/helpers/compose.sh up -d --wait --wait-timeout 180
 ```
 
@@ -23,6 +31,11 @@ This starts the real Hermes runtime and a fake inference endpoint on an internal
 Docker network. It uses only public fixture credentials and cannot call a paid
 model API. The Compose project `engineering-office-hermes-test` is reserved for
 these disposable fixtures. Do not put real data in it.
+The fixture mounts the compiled policy read-only in Hermes' configured working
+directory. Its fake inference endpoint checks that the complete policy reaches
+system context; putting the same text in a user message cannot satisfy the check.
+Missing or stale compiled content fails the fixture. Rebuild after editing the
+canonical writing policy, then recreate the fixture containers.
 
 ```sh
 bash tests/hermes/helpers/compose.sh exec -T hermes sh -c '
@@ -35,7 +48,9 @@ JSON
 ```
 
 The response contains `Synthetic briefing: no connected sources.` This validates
-the request path; the fixture does not generate intelligent answers. Remove the
+the request path and instruction loading; the fixture does not evaluate writing
+quality or generate intelligent answers. The configured deployment below does
+not mount this test artifact. Remove the
 demo and its disposable conversations when finished:
 
 ```sh

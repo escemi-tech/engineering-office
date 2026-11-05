@@ -1,7 +1,23 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
 	"extends": ["config:recommended"],
-	"enabledManagers": ["ansible", "ansible-galaxy", "terraform", "nodenv"],
+	"enabledManagers": [
+		"ansible",
+		"ansible-galaxy",
+		"terraform",
+		"nodenv",
+		"custom.regex"
+	],
+	"customManagers": [
+		{
+			"customType": "regex",
+			"managerFilePatterns": ["/^\\.github/workflows/test-hermes\\.yml$/"],
+			"matchStrings": ["apm-version: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""],
+			"depNameTemplate": "microsoft/apm",
+			"datasourceTemplate": "github-releases",
+			"extractVersionTemplate": "^v(?<version>.*)$"
+		}
+	],
 	"semanticCommits": "enabled",
 	"minimumReleaseAge": "7 days"
 }

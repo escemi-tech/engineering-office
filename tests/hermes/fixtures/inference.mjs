@@ -1,4 +1,18 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
+
+// Verify the complete authored policy, not a marker that a stale build could retain.
+const source = readFileSync("/fixtures/writing.instructions.md", "utf8");
+const heading = "# Writing policy\n";
+const start = source.indexOf(heading);
+assert.ok(start >= 0, "Canonical writing policy heading is missing");
+const policy = source.slice(start).trim();
+const compiled = readFileSync("/fixtures/AGENTS.md", "utf8").trim();
+assert.ok(
+	compiled.includes(policy),
+	"Compiled instructions omit canonical policy",
+);
 
 // A synthetic OpenAI-compatible endpoint. Reject accidental tools or real models.
 createServer(async (request, response) => {
@@ -28,7 +42,13 @@ createServer(async (request, response) => {
 			body.model !== "synthetic" ||
 			body.tools?.length ||
 			body.stream ||
-			!body.messages?.some((message) => message.role === "user")
+			!body.messages?.some((message) => message.role === "user") ||
+			!body.messages.some(
+				(message) =>
+					message.role === "system" &&
+					typeof message.content === "string" &&
+					message.content.includes(compiled),
+			)
 		) {
 			throw new Error("Unexpected inference contract");
 		}

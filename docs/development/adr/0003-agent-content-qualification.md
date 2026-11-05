@@ -2,7 +2,8 @@
 
 Date: 2026-11-05
 
-Status: Accepted source package; runtime adoption deferred pending qualification.
+Status: Accepted source package and isolated Hermes fixture qualification;
+operational adoption and workstation migration remain gated.
 
 ## Context and decision
 
@@ -92,9 +93,10 @@ no actual client-loading test was run.
 
 ## Consequences and reopening criteria
 
-Retain existing workstation ownership. Keep this policy as source only, with
-explicit [coverage limits](../../usage/writing-policy.md). No generated guidance
-is mounted into the Hermes deployment, and its permissions remain unchanged.
+Retain existing workstation ownership and explicit
+[coverage limits](../../usage/writing-policy.md). Generated guidance is confined
+to the synthetic Hermes fixture described below. The operational Compose service
+does not mount it, and its permissions remain unchanged.
 
 Before migration, resolve and retest populated-project recovery without an
 unsafe overwrite or an extra custom recovery layer. Complete a real bot update,
@@ -114,3 +116,32 @@ claiming those declarations receive updates. Do not add competing updaters.
 Sources: [APM 0.35.0](https://github.com/microsoft/apm/releases/tag/v0.35.0),
 [install reference](https://microsoft.github.io/apm/reference/cli/install/),
 [Dependabot APM implementation](https://github.com/dependabot/dependabot-core/tree/main/apm).
+
+## Isolated Hermes instruction-loading qualification: 2026-11-05
+
+Upstream recovery issue #3391 remains open and 0.35.0 remains the latest released
+APM CLI at this review. Keep the workstation migration blocked. Independently
+qualify native compilation of our local instruction package and actual loading
+by the already selected Hermes runtime. This scope has no remote skill install,
+shared home, missing deployment receipt or user-owned output to recover.
+
+Use the upstream [APM Action v1.10.0](https://github.com/microsoft/apm-action/tree/d723bb64ed70c135bbaf87d126b721dd2dae0439)
+for CLI setup, with an explicit version and `setup-only`. Compile with
+`apm compile --target hermes --local-only` in a fresh temporary project. Preserve
+the source checkout and deploy only generated `AGENTS.md` into the synthetic
+runtime as a read-only mount. Dependabot owns the Action pin; Renovate owns the
+CLI-version input. No custom compiler or installer is introduced.
+
+The fixture sets Hermes' native `TERMINAL_CWD` to the mounted project directory.
+Its inference server compares compiled output with the complete canonical policy
+body, then requires the complete generated file in a system message from the real
+Hermes API path. A user message containing the policy is rejected. Fresh sessions
+after restart and restore exercise context loading again, separately from the
+existing history-only recovery assertions. Gateway checks require that both the
+policy file and directory are readable as appropriate and not writable.
+
+This proves instruction transport in the qualified fixture, not model adherence,
+tone quality, prompt-injection resistance or a publisher authorization boundary.
+It does not close Codex/Copilot loading, global profile isolation, real bot-update
+or populated-project recovery gates. Operational content delivery remains a
+separate reviewed change.
