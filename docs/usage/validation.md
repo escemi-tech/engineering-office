@@ -51,7 +51,8 @@ helper. Concurrent tests cannot change each other's source or generated files.
 [Preflight checks](../../tests/hermes/preflight.goss.yaml) run before Hermes starts
 and restore the deployment artifact after testing its absence.
 [Startup](../../tests/hermes/goss.yaml) and [recovery](../../tests/hermes/recovery.goss.yaml)
-scenarios check the running gateway. Each invocation publishes its own named
+scenarios check the running gateway. [Revocation checks](../../tests/hermes/revocation.goss.yaml)
+then exercise independent shutdown and key rotation. Each invocation publishes its own named
 JUnit report through the same shared action; workflow steps only prepare assets,
 invoke scenarios and manage the service lifecycle.
 
@@ -77,6 +78,12 @@ The scenario checks:
   a new volume. Recovery checks only read history; they cannot recreate it.
 - Policy loading in a separate fresh conversation after restart and restore.
   These checks cannot recreate the original session used by the recovery assertions.
+- Shutdown of an unresponsive gateway using only the Makefile and Docker, with
+  no deployment configuration or credentials. Repeated stops preserve container
+  logs and the state volume, disable restart and leave other projects/services running.
+- A missing container is a no-op; an unavailable Docker daemon fails explicitly.
+- Recreation with a replacement gateway key rejects the old key, accepts the
+  new one, restores the configured restart policy and retains the original session.
 
 Inference runs on an internal Docker network with no external model access.
 The shared test action publishes Goss JUnit results, summaries and artifacts.
@@ -88,6 +95,8 @@ Compose deployment locally. The test project is reserved for synthetic data;
 its restore script deliberately destroys and replaces that project's volume.
 These checks do not qualify a paid model, writing quality, cloud host or private
 connector. They do not resolve APM's separate populated-workstation recovery gate.
+Revocation uses synthetic gateway keys; it does not test provider credential
+revocation or a host/daemon restart.
 
 ## Infrastructure provisioning
 

@@ -112,6 +112,12 @@ jobs:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/recovery.goss.yaml
           report-name: engineering-office - Hermes restore
+      - name: Verify independent shutdown and gateway key rotation
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: tests/hermes/revocation.goss.yaml
+          report-name: engineering-office - Hermes revocation
       - name: Destroy disposable host and all test state
         if: ${{ always() && steps.vm.outputs.vm != '' }}
         uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
