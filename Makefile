@@ -43,6 +43,7 @@ plan provision configure deploy verify backup:
 #############################
 # Helpers
 #############################
+# Keep the Dependabot exclusion aligned with shared-ci.yml until zizmor supports APM.
 define run_linter
 	@set -eu; \
 	DEFAULT_WORKSPACE="$(CURDIR)"; \
@@ -58,7 +59,9 @@ define run_linter
 		-e DEFAULT_WORKSPACE="$$DEFAULT_WORKSPACE" \
 		-e DEFAULT_BRANCH="$$DEFAULT_BRANCH" \
 		-e USE_FIND_ALGORITHM=false \
+		-e STRIP_DEFAULT_WORKSPACE_FOR_REGEX=true \
 		-e FILTER_REGEX_INCLUDE="$(filter-out $@,$(MAKECMDGOALS))" \
+		-e FILTER_REGEX_EXCLUDE='^\.github/dependabot\.yml$$' \
 		$(1) \
 		"$$LINTER_IMAGE"
 endef

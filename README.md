@@ -6,5 +6,8 @@ Run a pinned Hermes gateway with persistent conversations and a local authentica
 API. Start with the [synthetic demo and runtime guide](docs/usage/hermes.md).
 Cloud provisioning and private integrations remain pending.
 
+Use the [shared writing policy](docs/usage/writing-policy.md) to review English
+and French drafts. Automatic installation into assistants is not enabled.
+
 Run `make help` for available commands. See the [documentation](docs/README.md)
 for prerequisites, validation and deployment boundaries.

@@ -30,3 +30,13 @@ updates:
       default-days: 7
     schedule:
       interval: weekly
+  - package-ecosystem: apm
+    directory: /packages/writing-policy
+    groups:
+      apm-dependencies:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
