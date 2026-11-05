@@ -62,6 +62,7 @@ jobs:
           VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
           VM_NAME: ${{ steps.vm.outputs.name }}
         run: |
+          make hermes-policy
           ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && PATH="$PWD/.cache/apm:$PATH" make hermes-policy'
       # Assert
       - name: Verify deployment preflight
@@ -118,6 +119,36 @@ jobs:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/revocation.goss.yaml
           report-name: engineering-office - Hermes revocation
+      # Arrange: release the demo's port and disposable state before host deployment.
+      - name: Remove the completed synthetic demo
+        env:
+          VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
+          VM_NAME: ${{ steps.vm.outputs.name }}
+        run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && bash tests/hermes/helpers/compose.sh down --volumes'
+      # Act and Assert: native Ansible checks preflight and convergence.
+      - name: Set up the Ansible controller Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version-file: ansible/.python-version
+      - name: Test scoped host deployment
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        env:
+          VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
+          VM_NAME: ${{ steps.vm.outputs.name }}
+          DEPLOYER_CANARY: synthetic-controller-credential-never-for-hermes
+        with:
+          ansible-requirements: ansible/requirements.txt
+          galaxy-requirements: ansible/collections/requirements.yml
+          ansible-config: tests/ansible/ansible.cfg
+          test-playbook: tests/ansible/hermes.yml
+          report-name: engineering-office - Hermes Ansible deployment
+      # Assert: Goss checks the deployed service and filesystem boundaries.
+      - name: Verify the deployed runtime and credential separation
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: tests/hermes/deployment.goss.yaml
+          report-name: engineering-office - Hermes deployed boundary
       - name: Destroy disposable host and all test state
         if: ${{ always() && steps.vm.outputs.vm != '' }}
         uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0

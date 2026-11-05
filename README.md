@@ -6,6 +6,9 @@ Run a pinned Hermes gateway with persistent conversations and a local authentica
 API. Start with the [synthetic demo and runtime guide](docs/usage/hermes.md).
 Cloud provisioning and private integrations remain pending.
 
+Use the [Ansible deployment guide](docs/usage/hermes-deployment.md) to install
+Hermes on an approved Docker host with scoped credentials.
+
 Use the [shared writing policy](docs/usage/writing-policy.md) to review English
 and French drafts. Hermes startup builds and loads this policy automatically.
 

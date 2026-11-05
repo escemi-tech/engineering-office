@@ -23,62 +23,6 @@ jobs:
       pull-requests: write
       security-events: write
       statuses: write
-  ansible-targets:
-    name: Ansible validation readiness
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      enabled: ${{ steps.targets.outputs.enabled }}
-      matrix: ${{ steps.targets.outputs.matrix }}
-    steps:
-      - name: Checkout consumer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Select Ansible targets when content exists
-        id: targets
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const tracked = await exec.getExecOutput('git', ['ls-files', 'ansible/', 'tests/ansible/']);
-            const files = tracked.stdout.trim().split('\n').filter(Boolean);
-            core.setOutput('enabled', files.length > 0);
-            if (!files.length) {
-              core.setOutput('matrix', { include: [{ name: 'not-configured' }] });
-              await core.summary.addRaw('Ansible checks were not run: this repository has no Ansible content yet.').write();
-              return;
-            }
-            const playbooks = files.filter(file => /^tests\/ansible\/[^/]+\.ya?ml$/.test(file));
-            const collections = files.filter(file => /^ansible\/collections\/ansible_collections\/[^/]+\/[^/]+\/galaxy\.yml$/.test(file));
-            const include = collections.map(file => ({ name: file.split('/').at(-2), collection: file.slice(0, -'/galaxy.yml'.length), playbook: '' }));
-            include.push(...playbooks.map(file => ({ name: file, playbook: file, collection: '' })));
-            core.setOutput('matrix', { include });
-            if (!include.length) core.setFailed('Ansible content exists but no test playbook or collection was selected.');
-  ansible:
-    name: Ansible - ${{ matrix.name }}
-    needs: [ansible-targets]
-    if: needs.ansible-targets.outputs.enabled == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      pull-requests: write
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.ansible-targets.outputs.matrix) }}
-    steps:
-      - name: Checkout consumer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Test Ansible
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
-        with:
-          ansible-requirements: ansible/requirements.txt
-          test-playbook: ${{ matrix.playbook }}
-          collection: ${{ matrix.collection }}
-          report-name: engineering-office - Ansible - ${{ matrix.name }}
   test-hermes:
     uses: $/.github/workflows/test-hermes.yml
     permissions:

@@ -43,7 +43,7 @@ Renovate uses the organization's `CI_BOT_APP_CLIENT_ID` Actions variable and
 repository with the permissions requested by the token-generation step.
 Keep the token scoped to this repository and the repository configuration in
 `.github/renovate.json`. Dependabot owns Actions, Dockerfile, Docker Compose and
-APM and npm dependency updates, grouped per ecosystem with weekly checks and a seven-day
+APM, npm and pip dependency updates, grouped per ecosystem with weekly checks and a seven-day
 cooldown. The APM entry covers `packages/writing-policy/apm.yml`; this source
 package currently has no dependencies to update. When introducing another APM
 consumer, add its manifest directory and commit its native lockfile. Dependabot
@@ -95,18 +95,37 @@ and cleanup in `tests/hermes/helpers/`.
 
 ## Ansible validation
 
-CI skips Ansible tests while no content is tracked under `ansible/` or
-`tests/ansible/`. Adding content activates a test-playbook/collection matrix using the shared
-`ci-github-iac/actions/ansible/test` action. Add `ansible/requirements.txt` with an
-exact `ansible-core==X.Y.Z` pin in the same change. The upstream actions manage
-collection runtimes and test execution. Playbook tests use the runner Python
-and must target disposable environments prepared by the consumer.
-Configure inventory and collection search paths in an Ansible configuration file
-and pass it through `ansible-config`. Use `galaxy-requirements` for third-party
-dependencies when those files are introduced.
+The Hermes workflow uses the released `ci-github-iac/actions/ansible/test` action
+for its native deployment tests. It reuses the disposable Docker VM after the
+Compose lifecycle has finished and its synthetic state has been removed. The
+shared action installs the pinned controller runtime and Galaxy requirements,
+executes the test playbook and publishes native JUnit reports. Goss separately
+checks the deployed service and filesystem boundaries. Assertions stay in these
+test files; workflow steps only prepare and invoke the scenarios.
 
-The workflow executes only explicit `tests/ansible/*.yml` and `*.yaml` test
-playbooks. Deployment playbooks are not test targets. Collection roots are selected by
-`ansible/collections/ansible_collections/*/*/galaxy.yml`. Each collection runs in
-its own job. Content without any selected target fails the readiness job.
-Keep deployment and integration scenarios here. Linting stays in the linter job.
+Keep the production entrypoint in `ansible/hermes.yml` and the reusable deployment
+in `ansible/roles/hermes`. The test playbook exercises that entrypoint and repeats
+the role to verify convergence. Supply only synthetic inputs and the shared VM's
+SSH configuration; never connect this test to an operational inventory. No generic
+Ansible target-discovery job is needed for this concrete integration.
+
+Dependabot updates the exact Ansible Core pin in `ansible/requirements.txt` through
+its grouped pip configuration. Renovate's `ansible-galaxy` manager updates the exact
+collection pins in `ansible/collections/requirements.yml`, including the Docker
+collection's inventory-filtering dependency. Its `pyenv` manager updates
+`ansible/.python-version`, which the upstream Python setup Action reads in CI.
+Keep controller Python compatible with the pinned Core version. Linting and
+syntax checks stay separate from tests.
+
+For local syntax validation, install the pinned tools in an isolated environment
+as described in the [deployment guide](docs/usage/hermes-deployment.md), then run:
+
+```sh
+ansible-playbook --syntax-check ansible/hermes.yml
+ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes.yml
+```
+
+The actual deployment scenarios require the disposable VM and run in hosted CI.
+Secret-bearing template and Compose tasks use `no_log`; never add debug output
+that prints their inputs or full results. Use native Compose dotenv quoting in
+the template, and retain the literal-character test when changing serialization.

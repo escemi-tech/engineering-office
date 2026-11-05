@@ -33,3 +33,9 @@ image pinned by release tag and digest, with native state in its own Docker volu
 Dependabot proposes image updates. The gateway binds to host loopback; its model
 endpoint and credentials must be supplied explicitly. No cloud host or private
 connector is configured. See the [runtime guide](../usage/hermes.md).
+
+[Ansible delivery](../usage/hermes-deployment.md) converges this runtime on an
+explicit SSH inventory. Policy compilation stays on the controller. The host
+receives only reviewed runtime files, protected service credentials and the
+independent shutdown Makefile. The playbook uses `community.docker` for lifecycle
+management; cloud provisioning and production workflow activation remain separate.

@@ -15,7 +15,7 @@ provision:
       set -euo pipefail
       export DEBIAN_FRONTEND=noninteractive
       apt-get update
-      apt-get install -y --no-install-recommends make docker.io docker-compose-v2
+      apt-get install -y --no-install-recommends make docker.io docker-compose-v2 python3-requests
       systemctl enable --now docker
       usermod -aG docker "{{.User}}"
       install -d -m 0755 -o "{{.User}}" /opt/engineering-office

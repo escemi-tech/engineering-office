@@ -100,10 +100,22 @@ revocation or a host/daemon restart.
 
 ## Infrastructure provisioning
 
-Native Ansible validation activates only when test playbooks or collections are
-added; see [CONTRIBUTING](../../CONTRIBUTING.md#ansible-validation). It remains
-separate from the Hermes container lifecycle.
+After the Compose lifecycle, the same disposable VM receives the actual
+[Ansible deployment](../../ansible/hermes.yml). The released `ansible/test`
+action runs [native test playbooks](../../tests/ansible/hermes.yml) with pinned
+Ansible and Galaxy dependencies. Missing or excess credentials must fail before creating
+the deployment directory. A valid deployment starts Hermes, and repeating it
+must preserve the container identity with no asset or Compose changes.
+
+[Goss](../../tests/hermes/deployment.goss.yaml) then verifies root-only credential
+storage, policy permissions, absence of controller/operator credentials in the
+gateway, exact preservation of special characters in a synthetic key, and a real
+conversation. The fake inference service shares the deployed gateway's network
+namespace and is accessed through loopback; it holds no provider credentials. This scenario
+does not qualify production egress restrictions. Native Ansible reports and Goss
+reports remain separate; see [CONTRIBUTING](../../CONTRIBUTING.md#ansible-validation).
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail explicitly
 until cloud infrastructure and operational preflight are implemented. Use the
-`hermes-start`, `hermes-stop` and `hermes-logs` targets for the Compose runtime.
+`hermes-start`, `hermes-stop` and `hermes-logs` targets for the local Compose runtime,
+and `hermes-deploy` for an explicitly approved existing Docker host.
