@@ -1,5 +1,15 @@
 version: 2
 updates:
+  - package-ecosystem: npm
+    directory: /packages/writing-normalizer
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
   - package-ecosystem: github-actions
     directory: /
     groups:

@@ -84,3 +84,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+  test-writing-normalizer:
+    uses: $/.github/workflows/test-writing-normalizer.yml
+    permissions:
+      contents: read
+      pull-requests: write

@@ -4,6 +4,32 @@ Static validation requires Docker and GNU Make. `make lint` runs the pinned
 Hoverkraft linter, including YAML, workflow, IaC and secret checks. `make ci`
 applies the supported automatic lint fixes.
 
+## Writing normalizer
+
+The [dedicated workflow](../../.github/workflows/test-writing-normalizer.yml) uses
+Hoverkraft's Node.js test action to run the package's native test suite and publish
+JUnit/LCOV reports. Tests exercise the installed typography library against
+English/French emails, reviews and briefings in plain text, Markdown and HTML.
+The corpus covers locale spacing, idempotence, protected evidence and syntax,
+Unicode, meaningful whitespace, technical notation and unsupported coverage.
+All inputs are synthetic; the module has no external service or model dependency.
+
+Use the package's `.node-version` runtime, then run:
+
+```sh
+cd packages/writing-normalizer
+npm ci --ignore-scripts
+npm run test:ci
+```
+
+Dependency updates run the same suite; investigate output changes rather than
+automatically rewriting expected fixtures. To verify offline operation, install
+dependencies first and run the suite in a disposable container with `--network none`.
+
+Reports stay in the gitignored `.reports/` directory. No host provisioning or
+credentials are needed. These tests qualify the [local adapter](writing-normalizer.md),
+not a publisher or a client's instruction loading.
+
 ## Hermes lifecycle
 
 The [dedicated workflow](../../.github/workflows/test-hermes.yml) runs on pull

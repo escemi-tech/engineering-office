@@ -28,13 +28,14 @@ Review the policy and its version together. Consumers must select a reviewed Git
 revision; the package version alone does not pin content. There are no external
 package dependencies and no generated client files committed beside this source.
 
-| Surface                      | Current coverage                                        |
-| ---------------------------- | ------------------------------------------------------- |
-| Manual draft review          | Policy available for human review                       |
-| Hermes gateway               | No writing-policy mount or verified instruction loading |
-| Codex                        | No installation or verified client loading              |
-| Copilot                      | No installation or verified client loading              |
-| Managed outbound publication | No normalizer or publisher implemented                  |
+| Surface                      | Current coverage                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Manual draft review          | Policy available for human review                                                                     |
+| Hermes gateway               | No writing-policy mount or verified instruction loading                                               |
+| Codex                        | No installation or verified client loading                                                            |
+| Copilot                      | No installation or verified client loading                                                            |
+| Local draft module           | [Typography adapter](writing-normalizer.md) for text, Markdown and HTML; explicit provenance required |
+| Managed outbound publication | No publisher or automatic normalization integration                                                   |
 
 APM adoption requires the [qualification gate](../development/adr/0003-agent-content-qualification.md).
 Preserve authored client instructions during that qualification; do not use

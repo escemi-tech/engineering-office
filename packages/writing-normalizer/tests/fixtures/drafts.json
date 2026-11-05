@@ -1,0 +1,86 @@
+[
+	{
+		"name": "English email with uncertainty and straight double quotes",
+		"format": "text/plain",
+		"locale": "en-US",
+		"input": "Hello  team, we can't confirm the release... Please review \"draft A\".\nThanks.\n",
+		"expected": "Hello team, we can’t confirm the release… Please review \"draft A\".\nThanks.\n"
+	},
+	{
+		"name": "British English estimate with ranges and negative quantities",
+		"format": "text/plain",
+		"locale": "en-GB",
+		"input": "We don't know yet... The estimate is 10–12 days, -1.25% or −2 points.",
+		"expected": "We don’t know yet… The estimate is 10–12 days, -1.25% or −2 points."
+	},
+	{
+		"name": "French briefing with punctuation and currency spacing",
+		"format": "text/plain",
+		"locale": "fr",
+		"input": "Bonjour  Camille ! L'équipe attend... Budget : 1 234,56 € ; délai : 10–12 jours ?",
+		"expected": "Bonjour Camille\u202f! L’équipe attend… Budget\u00a0: 1 234,56\u00a0€\u202f; délai\u00a0: 10–12 jours\u202f?"
+	},
+	{
+		"name": "Canadian French punctuation profile",
+		"format": "text/plain",
+		"locale": "fr-CA",
+		"input": "Bonjour  Camille ! L'équipe attend... Budget : 1 234,56 $ ; délai : 10–12 jours ?",
+		"expected": "Bonjour Camille! L’équipe attend… Budget\u00a0: 1 234,56 $; délai\u00a0: 10–12 jours?"
+	},
+	{
+		"name": "accents, decomposed Unicode, emoji and format characters",
+		"format": "text/plain",
+		"locale": "fr",
+		"input": "Peut-être : café, cafe\u0301, l’été, «\u00a0été\u00a0». 👩‍💻 👨‍👩‍👧‍👦 ❤️ 👍🏽 🇫🇷 co\u00adoperate \u200c \u200e \u2060 \u200b \ufeff",
+		"expected": "Peut-être\u00a0: café, cafe\u0301, l’été, «\u00a0été\u00a0». 👩‍💻 👨‍👩‍👧‍👦 ❤️ 👍🏽 🇫🇷 co\u00adoperate \u200c \u200e \u2060 \u200b \ufeff"
+	},
+	{
+		"name": "technical notation and existing dashes",
+		"format": "text/plain",
+		"locale": "en-US",
+		"input": "Review... 10-12, 10–12, −2, x <= y, 2 * 3, (c), 1/2, v1.2.3. Ready—subject to review. Keep -- as written.",
+		"expected": "Review… 10-12, 10–12, −2, x <= y, 2 * 3, (c), 1/2, v1.2.3. Ready—subject to review. Keep -- as written."
+	},
+	{
+		"name": "Markdown review with CRLF, hard breaks, code and link destinations",
+		"format": "text/markdown",
+		"locale": "en-US",
+		"input": "# Review...\r\n\r\nWe  can't confirm.  \r\nCheck `a  ...` and [the  guide...](https://example.test/a--b?q=one... \"Raw  ...\").\r\n\r\n```js\r\nconst x = \"a  ...\";\r\n```\r\n",
+		"expected": "# Review…\r\n\r\nWe can’t confirm.  \r\nCheck `a  ...` and [the guide…](https://example.test/a--b?q=one... \"Raw  ...\").\r\n\r\n```js\r\nconst x = \"a  ...\";\r\n```\r\n"
+	},
+	{
+		"name": "French Markdown table, frontmatter, indented code and task list",
+		"format": "text/markdown",
+		"locale": "fr",
+		"input": "---\ntitle: \"Raw  ...\"\n---\n\n# Revue...\n\n| Statut | Délai |\n| --- | --- |\n| Prêt ! | 10–12 jours |\n\n    echo \"Raw  ...\"\n\n- [ ] Vérifier...\n",
+		"expected": "---\ntitle: \"Raw  ...\"\n---\n\n# Revue…\n\n| Statut | Délai |\n| --- | --- |\n| Prêt\u202f! | 10–12 jours |\n\n    echo \"Raw  ...\"\n\n- [ ] Vérifier…\n"
+	},
+	{
+		"name": "Markdown spacing must not create escapes, entities or new syntax",
+		"format": "text/markdown",
+		"locale": "en-US",
+		"input": "Keep \\ *literal* and & amp; as written.\n\n- [ x] text...\n\n[ ^1]: note...\n\n[link]: https://example.test/a... \"Title  ...\"\n",
+		"expected": "Keep \\ *literal* and & amp; as written.\n\n- [ x] text…\n\n[ ^1]: note...\n\n[link]: https://example.test/a... \"Title  ...\"\n"
+	},
+	{
+		"name": "Markdown autolinks and inline HTML",
+		"format": "text/markdown",
+		"locale": "en-GB",
+		"input": "Read  more... <https://example.test/a...> <span title=\"Raw  ...\">We can't confirm...</span>\n",
+		"expected": "Read more… <https://example.test/a...> <span title=\"Raw  ...\">We can’t confirm…</span>\n"
+	},
+	{
+		"name": "HTML email with attributes, entities, comments and protected elements",
+		"format": "text/html",
+		"locale": "en-US",
+		"input": "<!-- Raw  ... --><p data-title=\"Raw  ...\">We  can't confirm... <a href=\"/a--b?q=x...&amp;y=2\">Read  more...</a> &amp; &#8212; &#x200B;</p><pre>Raw  ...\n</pre><code>x  ...</code><script>const x = \"Raw  ...\";</script><style>.x { content: \"Raw  ...\"; }</style>",
+		"expected": "<!-- Raw  ... --><p data-title=\"Raw  ...\">We can’t confirm… <a href=\"/a--b?q=x...&amp;y=2\">Read more…</a> &amp; &#8212; &#x200B;</p><pre>Raw  ...\n</pre><code>x  ...</code><script>const x = \"Raw  ...\";</script><style>.x { content: \"Raw  ...\"; }</style>"
+	},
+	{
+		"name": "French HTML with nested emphasis",
+		"format": "text/html",
+		"locale": "fr",
+		"input": "<p class=\"raw  value\">Prêt ! Budget : 20 €... <strong>À vérifier ?</strong></p>",
+		"expected": "<p class=\"raw  value\">Prêt\u202f! Budget\u00a0: 20\u00a0€… <strong>À vérifier\u202f?</strong></p>"
+	}
+]
