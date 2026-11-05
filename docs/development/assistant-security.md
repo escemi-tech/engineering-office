@@ -16,6 +16,12 @@ Tools are disabled in the mounted configuration. Credentials for mail, calendars
 publication, infrastructure and household services must never be added to this
 runtime. Bitwarden remains the human custody store, with separate domain identities.
 
+The [Ansible delivery path](../usage/hermes-deployment.md) accepts only the model,
+endpoint and two runtime keys. It writes a root-only credential file, hides secret
+task output and copies no controller vault session, SSH key or checkout into the
+runtime. The host's Docker administrator can inspect service credentials; this
+requires a trusted dedicated host and does not replace connector isolation.
+
 The recovery operator can [stop Hermes and rotate credentials](../usage/hermes.md#stop-and-revoke-access)
 without its API, compiler or deployment configuration. Shutdown disables Docker
 restart and retains the container, logs and volume. It requires independent host

@@ -1,0 +1,7 @@
+---
+# Copy to .local/hermes-deployment.yml with mode 0600 and fill from Bitwarden.
+hermes_runtime:
+  model: ""
+  inference_url: ""
+  inference_api_key: ""
+  gateway_api_key: ""

@@ -6,6 +6,9 @@ extraction, telemetry submission and passive update checks are disabled. Policy
 files are mounted read-only; no host checkout, Docker socket or private source is
 mounted into the runtime.
 
+For an existing approved SSH host, use the [Ansible deployment guide](hermes-deployment.md).
+The commands below operate a Compose deployment from a local checkout.
+
 Use Linux with Docker Engine, Docker Compose v2 or later, and GNU Make. Allow
 2 CPUs, 4 GiB RAM and at least 10 GiB free Docker storage. The upstream image uses
 a root supervisor and runs the gateway as UID 10000. The image pin lives in

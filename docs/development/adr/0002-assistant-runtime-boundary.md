@@ -86,3 +86,40 @@ shutdown. Recreation rejects the previous gateway key and reads the original
 session with its replacement. Missing-container and unreachable-Docker cases
 also pass. These checks do not exercise a host/daemon restart or provider-side
 credential revocation; those remain operational qualification work.
+
+## Scoped host deployment: 2026-11-05
+
+Use native Ansible and `community.docker.docker_compose_v2` to deliver the existing
+runtime to an explicitly approved Docker host. Build policy on the controller
+and copy only the reviewed Compose/configuration files, compiled artifact and
+shutdown Makefile. Preserve the named volume. Repeating unchanged assets must
+preserve the container; changed mounted policy/configuration must recreate it.
+This implements delivery without introducing another installer or secret service.
+
+Keep human custody in Bitwarden. The operator supplies a protected inventory and
+a separate four-setting runtime mapping. Reject unknown keys, malformed endpoint
+URLs and missing credentials before changing the host. Deliver this mapping as a
+root-owned, mode `0600` dotenv file under a mode `0700` directory; do not mount it
+inside Hermes. Secret-bearing Ansible tasks use `no_log`, and template diffs are
+disabled. Use native JSON string quoting with literal-dollar escaping for Compose.
+Do not pass credential values in task environment variables: Ansible documents
+that these can appear in cleartext process arguments. See the official
+[environment guidance](https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_environment.html),
+[Compose module](https://docs.ansible.com/projects/ansible/latest/collections/community/docker/docker_compose_v2_module.html)
+and [dotenv interpolation rules](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/).
+
+The runtime receives only its gateway and inference credentials, model and endpoint.
+The controller's SSH identity and Bitwarden session stay outside it. Host/Docker
+administrators can still inspect the container environment; this is scoped delivery,
+not protection from a compromised host. Operator approval remains manual, and no
+workflow deploys to a real host. Cloud admission, restricted egress, unattended
+vault access, connector identities and provider revocation remain open gates.
+
+Ansible Core and `community.docker` are maintained GPL-3.0-or-later projects; use
+their native modules rather than a custom SSH/Compose adapter. Dependencies and
+controller Python are pinned in the Ansible manifests and updated by Dependabot
+and Renovate. The test workflow reuses its disposable VM for missing/excess-credential
+rejection, real entrypoint deployment and unchanged-state convergence. Goss owns
+filesystem/runtime assertions, including special-character credential preservation
+and exclusion of synthetic controller/operator credentials. These checks do not
+qualify a real provider, private source or operational host.

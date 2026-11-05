@@ -1,0 +1,7 @@
+---
+hermes:
+  hosts:
+    assistant:
+      # Replace with the approved host's private SSH address and operator account.
+      ansible_host: ""
+      ansible_user: ""

@@ -1,0 +1,75 @@
+file:
+  /srv/engineering-office/services/hermes/config.yaml:
+    exists: true
+    owner: root
+    group: root
+    mode: "0444"
+  /srv/engineering-office/.build/hermes/AGENTS.md:
+    exists: true
+    owner: root
+    group: root
+    mode: "0444"
+  /srv/engineering-office/.local:
+    exists: true
+    owner: root
+    group: root
+    mode: "0700"
+  /etc/engineering-office-operator-only:
+    exists: true
+    owner: root
+    mode: "0600"
+command:
+  deployed-credentials-are-readable-only-by-root:
+    exec: |
+      # Arrange: Goss runs as the SSH operator, outside the root-only directory.
+      # Act
+      test ! -r /srv/engineering-office/.local/hermes.env &&
+      sudo -n stat --format='%U:%G:%a' /srv/engineering-office/.local/hermes.env &&
+      sudo -n cat /etc/engineering-office-operator-only
+      # Assert: inspect metadata without printing runtime credentials.
+    exit-status: 0
+    stdout:
+      - root:root:600
+      - synthetic-operator-credential-never-for-hermes
+  deployed-hermes-keeps-operator-credentials-outside-runtime:
+    exec: |
+      # Arrange: use the gateway's unprivileged identity.
+      # Act
+      docker exec --user 10000:10000 engineering-office-hermes-test-hermes-1 sh -ec '
+        test ! -e /etc/engineering-office-operator-only
+        test ! -e /srv/engineering-office
+        test ! -e /var/run/docker.sock
+        test ! -w /opt/data/config.yaml
+        test ! -w /opt/writing-policy/AGENTS.md
+        test ! -w /opt/writing-policy
+        test -z "${DEPLOYER_CANARY+x}"
+      '
+      # Assert: each separation check must succeed.
+    exit-status: 0
+  deployed-hermes-preserves-literal-key-characters:
+    exec: |
+      # Arrange
+      # Act
+      docker exec -i engineering-office-hermes-test-hermes-1 node --input-type=module <<'JS'
+      import assert from 'node:assert/strict';
+      // Assert: dollar signs, quotes and backslashes survive native dotenv loading.
+      assert.equal(process.env.API_SERVER_KEY, String.raw`synthetic-gateway-key-for-tests-$'"\only`);
+      JS
+    exit-status: 0
+  deployed-hermes-loads-policy-and-uses-scoped-credentials:
+    exec: |
+      # Arrange: use the exact gateway key delivered by the deployment.
+      # Act
+      docker exec engineering-office-hermes-test-hermes-1 sh -c '
+        curl --fail --silent --show-error --max-time 90 \
+          -H "Authorization: Bearer $API_SERVER_KEY" \
+          -H "Content-Type: application/json" \
+          --data-binary "{\"messages\":[{\"role\":\"user\",\"content\":\"Prepare a synthetic briefing.\"}],\"stream\":false}" \
+          http://127.0.0.1:8642/v1/chat/completions
+      '
+      # Assert: fake inference also requires the deployed policy and inference key.
+    timeout: 100000
+    exit-status: 0
+    stdout:
+      - "Synthetic briefing: no connected sources."
+      - '"finish_reason": "stop"'
