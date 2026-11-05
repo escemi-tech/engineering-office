@@ -19,6 +19,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Set up qualified APM compiler
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          setup-only: true
+          apm-version: "0.35.0"
+      - name: Compile the canonical writing policy in isolation
+        run: bash tests/hermes/helpers/prepare-policy.sh
       - name: Create disposable Docker host
         id: vm
         uses: hoverkraft-tech/ci-github-iac/actions/vm/create@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
@@ -30,7 +37,7 @@ jobs:
           VM_NAME: ${{ steps.vm.outputs.name }}
         run: |
           # Fresh sessions pick up the Docker group assigned during provisioning.
-          tar -czf - services/hermes tests/hermes | \
+          tar -czf - services/hermes tests/hermes packages/writing-policy .reports/hermes-writing-policy | \
             ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'tar -xzf - -C /opt/engineering-office'
       # Act
       - name: Start Hermes with isolated synthetic inference

@@ -48,7 +48,7 @@ command:
       ' <<'JSON'
       {"messages":[{"role":"user","content":"Prepare a synthetic briefing."}],"stream":false}
       JSON
-      # Assert: the fixture rejects tools, other models and unexpected credentials.
+      # Assert: the fixture requires the complete compiled policy in system context.
     timeout: 100000
     exit-status: 0
     stdout:
@@ -63,8 +63,34 @@ command:
         test ! -w /opt/hermes/run_agent.py
         test ! -w /opt/data/config.yaml
         test ! -w /etc/hermes/config.yaml
+        test -r /opt/writing-policy/AGENTS.md
+        test ! -w /opt/writing-policy/AGENTS.md
+        test ! -w /opt/writing-policy
         test ! -e /var/run/docker.sock
         test -w /opt/data
       '
       # Assert: all boundary checks must succeed.
+    exit-status: 0
+  hermes-inference-rejects-user-supplied-policy:
+    exec: |
+      # Arrange: put the complete policy in user content, without system instructions.
+      cd /opt/engineering-office
+      # Act
+      bash tests/hermes/helpers/compose.sh exec -T hermes node --input-type=module <<'JS'
+      import assert from 'node:assert/strict';
+      import { readFileSync } from 'node:fs';
+      const content = readFileSync('/opt/writing-policy/AGENTS.md', 'utf8');
+      const response = await fetch('http://inference:8080/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer synthetic-inference-key-for-tests-only',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({model: 'synthetic', messages: [{role: 'user', content}], stream: false}),
+        signal: AbortSignal.timeout(5000),
+      });
+      // Assert: user text cannot satisfy the system-policy loading requirement.
+      assert.equal(response.status, 400);
+      JS
+    timeout: 10000
     exit-status: 0

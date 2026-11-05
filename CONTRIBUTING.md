@@ -77,6 +77,13 @@ the zero-duplication threshold still applies to maintained code and fixtures.
 See the [validation guide](docs/usage/validation.md#writing-normalizer) for its
 dedicated test workflow and local command.
 
+The Hermes fixture uses the upstream APM Action with an explicit CLI release.
+Dependabot updates the Action reference. Renovate's scoped regular-expression manager updates
+only its `apm-version` input from `microsoft/apm` releases; it does not manage APM
+package dependencies. Compiler updates must pass the real Hermes instruction-loading
+and recovery scenario. Compile the public policy in a disposable project, never
+over the repository's or a user's authored `AGENTS.md`.
+
 ## Ansible validation
 
 CI skips Ansible tests while no content is tracked under `ansible/` or
