@@ -42,8 +42,30 @@ Renovate uses the organization's `CI_BOT_APP_CLIENT_ID` Actions variable and
 `CI_BOT_APP_PRIVATE_KEY` Actions secret. Its GitHub App must be installed on this
 repository with the permissions requested by the token-generation step.
 Keep the token scoped to this repository and the repository configuration in
-`.github/renovate.json`. Dependabot owns Actions, Dockerfile and Docker Compose
-image updates, grouped per ecosystem with weekly checks and a seven-day cooldown.
+`.github/renovate.json`. Dependabot owns Actions, Dockerfile, Docker Compose and
+APM dependency updates, grouped per ecosystem with weekly checks and a seven-day
+cooldown. The APM entry covers `packages/writing-policy/apm.yml`; this source
+package currently has no dependencies to update. When introducing another APM
+consumer, add its manifest directory and commit its native lockfile. Dependabot
+regenerates existing lockfiles but does not create them.
+
+The shared linter temporarily excludes only `.github/dependabot.yml` because
+zizmor rejects the supported `apm` ecosystem during schema validation. This
+exclusion applies to all Super-Linter checks on that file, including formatting;
+GitHub's native Dependabot configuration validation remains active. Workflow
+security checks remain enabled. Remove the matching exclusions from `Makefile`
+and `shared-ci.yml` once the bundled zizmor accepts APM. For this file, check
+formatting directly with the repository image's `prettier --check` command.
+
+Declare APM Git dependencies as strings pinned to full commit SHAs, followed by
+the matching release tag as an inline comment: `owner/repo#<40-character SHA> # vX.Y.Z`.
+Dependabot updates both the SHA and tag comment to the latest eligible annotated
+release tag. Use `# untagged` when no tag exists; do not invent a version or claim
+that a SHA pin without upstream release tags receives automatic updates. Keep
+other explanations on separate lines because Dependabot replaces inline comments.
+APM version updates do not provide security updates. See
+[GitHub's APM support reference](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories#apm).
+
 The Hermes Compose image is pinned by release tag and digest. Renovate handles
 Ansible and Terraform dependencies when their manifests are present; none are
 currently tracked.
