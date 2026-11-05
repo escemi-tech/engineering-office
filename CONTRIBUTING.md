@@ -43,7 +43,7 @@ Renovate uses the organization's `CI_BOT_APP_CLIENT_ID` Actions variable and
 repository with the permissions requested by the token-generation step.
 Keep the token scoped to this repository and the repository configuration in
 `.github/renovate.json`. Dependabot owns Actions, Dockerfile, Docker Compose and
-APM dependency updates, grouped per ecosystem with weekly checks and a seven-day
+APM and npm dependency updates, grouped per ecosystem with weekly checks and a seven-day
 cooldown. The APM entry covers `packages/writing-policy/apm.yml`; this source
 package currently has no dependencies to update. When introducing another APM
 consumer, add its manifest directory and commit its native lockfile. Dependabot
@@ -67,8 +67,15 @@ APM version updates do not provide security updates. See
 [GitHub's APM support reference](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories#apm).
 
 The Hermes Compose image is pinned by release tag and digest. Renovate handles
-Ansible and Terraform dependencies when their manifests are present; none are
-currently tracked.
+the writing normalizer's `.node-version` through its native `nodenv` manager,
+and Ansible/Terraform dependencies when their manifests are present. Dependabot
+updates the normalizer's exact npm dependency pin and native lockfile. Keep its
+English/French and format-preservation corpus as the dependency upgrade gate;
+review changed behavior before accepting an update. Install with `npm ci --ignore-scripts`.
+Duplication detection excludes generated npm lockfiles, matching ci-github-iac;
+the zero-duplication threshold still applies to maintained code and fixtures.
+See the [validation guide](docs/usage/validation.md#writing-normalizer) for its
+dedicated test workflow and local command.
 
 ## Ansible validation
 

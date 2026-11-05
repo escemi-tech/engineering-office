@@ -1,7 +1,7 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
 	"extends": ["config:recommended"],
-	"enabledManagers": ["ansible", "ansible-galaxy", "terraform"],
+	"enabledManagers": ["ansible", "ansible-galaxy", "terraform", "nodenv"],
 	"semanticCommits": "enabled",
 	"minimumReleaseAge": "7 days"
 }

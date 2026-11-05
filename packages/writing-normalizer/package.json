@@ -1,0 +1,17 @@
+{
+	"name": "@escemi-tech/writing-normalizer",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Local typography normalization of classified English and French drafts",
+	"license": "MIT",
+	"type": "module",
+	"exports": "./src/writing-normalizer.js",
+	"scripts": {
+		"test": "node --test",
+		"pretest:ci": "node -e \"require('node:fs').mkdirSync('.reports', { recursive: true })\"",
+		"test:ci": "node --test --experimental-test-coverage --test-coverage-include='src/**/*.js' --test-reporter=junit --test-reporter-destination=.reports/junit.xml --test-reporter=lcov --test-reporter-destination=.reports/lcov.info"
+	},
+	"dependencies": {
+		"polytypo": "1.19.0"
+	}
+}
