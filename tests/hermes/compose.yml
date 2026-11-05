@@ -2,15 +2,6 @@ services:
   hermes:
     depends_on:
       - inference
-    environment:
-      TERMINAL_CWD: /opt/writing-policy
-    volumes:
-      - type: bind
-        source: ../../.reports/hermes-writing-policy
-        target: /opt/writing-policy
-        read_only: true
-        bind:
-          create_host_path: false
   inference:
     image: ${HERMES_TEST_IMAGE:?Use the image selected by the deployment compose file}
     entrypoint: [node, /fixtures/inference.mjs]
@@ -19,7 +10,7 @@ services:
     volumes:
       - ../../tests/hermes/fixtures/inference.mjs:/fixtures/inference.mjs:ro
       - type: bind
-        source: ../../.reports/hermes-writing-policy/AGENTS.md
+        source: ../../.build/hermes/AGENTS.md
         target: /fixtures/AGENTS.md
         read_only: true
         bind:

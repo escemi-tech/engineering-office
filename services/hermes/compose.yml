@@ -6,6 +6,7 @@ services:
     environment:
       API_SERVER_ENABLED: "true"
       API_SERVER_HOST: 0.0.0.0
+      TERMINAL_CWD: /opt/writing-policy
       API_SERVER_KEY: ${HERMES_GATEWAY_API_KEY:?Set a dedicated gateway key of at least 32 random characters}
       HERMES_MODEL: ${HERMES_MODEL:?Select the approved model}
       HERMES_INFERENCE_URL: ${HERMES_INFERENCE_URL:?Select the approved OpenAI-compatible endpoint}
@@ -16,6 +17,12 @@ services:
       - state:/opt/data
       - ./config.yaml:/opt/data/config.yaml:ro
       - ./config.yaml:/etc/hermes/config.yaml:ro
+      - type: bind
+        source: ../../.build/hermes/AGENTS.md
+        target: /opt/writing-policy/AGENTS.md
+        read_only: true
+        bind:
+          create_host_path: false
     security_opt:
       - no-new-privileges:true
     cpus: 2

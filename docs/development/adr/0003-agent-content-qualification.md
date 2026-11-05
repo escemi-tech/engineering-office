@@ -2,8 +2,8 @@
 
 Date: 2026-11-05
 
-Status: Accepted source package and isolated Hermes fixture qualification;
-operational adoption and workstation migration remain gated.
+Status: Accepted source package, isolated Hermes qualification and local Compose
+delivery; cloud deployment and workstation migration remain gated.
 
 ## Context and decision
 
@@ -94,9 +94,9 @@ no actual client-loading test was run.
 ## Consequences and reopening criteria
 
 Retain existing workstation ownership and explicit
-[coverage limits](../../usage/writing-policy.md). Generated guidance is confined
-to the synthetic Hermes fixture described below. The operational Compose service
-does not mount it, and its permissions remain unchanged.
+[coverage limits](../../usage/writing-policy.md). The initial instruction-loading
+qualification confined generated guidance to the synthetic fixture. The local
+Compose delivery decision below extends that qualified path to configured startup.
 
 Before migration, resolve and retest populated-project recovery without an
 unsafe overwrite or an extra custom recovery layer. Complete a real bot update,
@@ -145,3 +145,30 @@ tone quality, prompt-injection resistance or a publisher authorization boundary.
 It does not close Codex/Copilot loading, global profile isolation, real bot-update
 or populated-project recovery gates. Operational content delivery remains a
 separate reviewed change.
+
+## Local Compose policy delivery: 2026-11-05
+
+Use the qualified build for normal Hermes startup. Move the compilation helper
+beside the service and expose it as `make hermes-policy`; `make hermes-start`
+requires a successful build before calling Docker. Keep one compiler version
+file for local builds and the upstream setup Action. Renovate updates that file.
+A different CLI release is rejected rather than silently changing compilation.
+
+The base Compose service now owns the native working-directory setting and
+read-only policy mount. The test override no longer supplies either. Mount the
+generated file with `create_host_path: false`, so an absent artifact cannot
+become an empty directory. Recreate the gateway on startup to pick up a replaced
+file and clear cached context; the named session volume survives recreation.
+This intentionally trades a brief interruption for reliable instruction refresh.
+
+Compilation still uses a fresh project containing only public local source.
+There is no remote installation, workstation migration, custom compiler or
+change to existing tool/credential permissions. Tests cover compiler rejection,
+authored-file preservation, missing-artifact failure and the common mount's
+system-context loading through startup, restart and restore. Build and preflight
+assertions live in dedicated Goss scenarios in the existing disposable VM, with
+the compiler distribution supplied by the upstream setup Action. Build probes
+use separate temporary projects so concurrent commands cannot alter one another
+or the deployment artifact. The shared VM test action owns Goss installation
+and reports; the workflow owns orchestration. This decision does not qualify
+model adherence, private data processing or a cloud deployment.
