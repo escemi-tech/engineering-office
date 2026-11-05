@@ -14,25 +14,25 @@ a root supervisor and runs the gateway as UID 10000. The image pin lives in
 ## Try the synthetic demo
 
 Install the APM CLI release selected by the
-[Hermes test workflow](../../.github/workflows/test-hermes.yml), following the
+[compiler version file](../../services/hermes/.apm-version), following the
 [upstream installation guide](https://microsoft.github.io/apm/getting-started/installation/).
-Compile the public writing policy before starting the fixture. Compilation uses
-a fresh temporary project and writes only `.reports/hermes-writing-policy/AGENTS.md`;
+Both the demo and configured gateway require this compiler. Compilation uses
+a fresh temporary project and writes only `.build/hermes/AGENTS.md`;
 it does not change this checkout's authored instructions or install skills.
 
 From the repository root:
 
 ```sh
-bash tests/hermes/helpers/prepare-policy.sh
-bash tests/hermes/helpers/compose.sh up -d --wait --wait-timeout 180
+make hermes-policy
+bash tests/hermes/helpers/compose.sh up -d --force-recreate --wait --wait-timeout 180
 ```
 
 This starts the real Hermes runtime and a fake inference endpoint on an internal
 Docker network. It uses only public fixture credentials and cannot call a paid
 model API. The Compose project `engineering-office-hermes-test` is reserved for
 these disposable fixtures. Do not put real data in it.
-The fixture mounts the compiled policy read-only in Hermes' configured working
-directory. Its fake inference endpoint checks that the complete policy reaches
+The deployment mounts the compiled policy read-only in Hermes' configured working
+directory. The demo's fake inference endpoint checks that the complete policy reaches
 system context; putting the same text in a user message cannot satisfy the check.
 Missing or stale compiled content fails the fixture. Rebuild after editing the
 canonical writing policy, then recreate the fixture containers.
@@ -49,9 +49,8 @@ JSON
 
 The response contains `Synthetic briefing: no connected sources.` This validates
 the request path and instruction loading; the fixture does not evaluate writing
-quality or generate intelligent answers. The configured deployment below does
-not mount this test artifact. Remove the
-demo and its disposable conversations when finished:
+quality or generate intelligent answers. Remove the demo and its disposable
+conversations when finished:
 
 ```sh
 bash tests/hermes/helpers/compose.sh down --volumes
@@ -80,8 +79,18 @@ make hermes-logs
 make hermes-stop
 ```
 
-Starting waits for the health check and returns an error if it fails. Stopping
-preserves the state volume. Start again with the same command to resume it.
+Starting rebuilds the policy with the qualified compiler, recreates the container
+and waits for health. Recreation causes a brief interruption and preserves the
+state volume. It ensures a policy update reaches new conversations instead of
+leaving the old file mounted or cached. Existing session history is preserved;
+start a new conversation when verifying updated instructions.
+
+A missing or different compiler, failed compilation or empty output stops
+`make hermes-start` before Docker is called, leaving an existing gateway running.
+Direct Compose creation also rejects a missing compiled file; it does not build
+or check its freshness. Use `make hermes-start` after source updates. Generated
+policy is disposable build output, separate from session backups. Stopping
+preserves state and needs no compiler. Start again with the same command to resume.
 The configured project is `engineering-office-hermes`, separate from the demo;
 stop the demo before using it. Access a remote host
 through an SSH tunnel, keeping the listener on loopback. The gateway key controls

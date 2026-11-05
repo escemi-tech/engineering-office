@@ -6,9 +6,11 @@ messages, reviews, briefings and personal communication. It protects raw evidenc
 code, quotations, citations and factual uncertainty.
 
 Use it when reviewing an assistant draft. The policy is packaged as APM source.
-The [synthetic Hermes fixture](hermes.md#try-the-synthetic-demo) compiles it with
-APM and verifies actual system-context loading. Operational Hermes deployments,
-Codex and Copilot do not receive it automatically from this repository.
+[`make hermes-start`](hermes.md#configure-a-model-endpoint) builds it with the
+qualified APM compiler and mounts it read-only in the configured gateway.
+The [synthetic demo](hermes.md#try-the-synthetic-demo) exercises that same mount
+and verifies actual system-context loading. Codex and Copilot do not receive it
+automatically from this repository.
 An instruction file does not enforce publishing permissions or normalize text.
 
 ## Review a draft
@@ -34,7 +36,7 @@ package dependencies and no generated client files committed beside this source.
 | ---------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Manual draft review          | Policy available for human review                                                                     |
 | Hermes synthetic fixture     | Compiled policy loaded into system context; verified after startup, restart and restore               |
-| Operational Hermes gateway   | No automatic writing-policy build or deployment                                                       |
+| Configured Hermes gateway    | Startup builds and mounts the public policy; cloud deployment and model adherence remain unqualified  |
 | Codex                        | No installation or verified client loading                                                            |
 | Copilot                      | No installation or verified client loading                                                            |
 | Local draft module           | [Typography adapter](writing-normalizer.md) for text, Markdown and HTML; explicit provenance required |

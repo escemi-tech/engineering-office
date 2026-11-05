@@ -38,14 +38,31 @@ requests and main pushes through shared CI. It composes the pinned
 Ubuntu VM installs Docker and receives only deployment assets and synthetic
 fixtures. No checkout or Docker socket is mounted inside Hermes.
 
-Before creating the VM, the pinned upstream APM Action sets up the CLI version
-declared in the workflow. The fixture compiles only the canonical local policy
-in a fresh temporary project. Generated instructions stay in `.reports/` and are
-copied into the disposable VM with the deployment assets. There are no external
-APM packages, shared build homes or workstation skill changes in this scenario.
+The pinned upstream APM Action sets up the CLI version declared in
+`services/hermes/.apm-version`. The workflow copies that complete distribution
+and the public build sources into the VM, then invokes Goss through the shared
+test action. The VM uses `make hermes-policy`, the same build required by normal
+startup. Generated instructions stay in its `.build/` directory. There are no
+external APM packages, shared build homes or workstation skill changes.
+
+Assertions belong to the Goss scenarios. [Policy build checks](../../tests/hermes/policy-build.goss.yaml)
+use a temporary project per command, prepared and cleaned by an explicit fixture
+helper. Concurrent tests cannot change each other's source or generated files.
+[Preflight checks](../../tests/hermes/preflight.goss.yaml) run before Hermes starts
+and restore the deployment artifact after testing its absence.
+[Startup](../../tests/hermes/goss.yaml) and [recovery](../../tests/hermes/recovery.goss.yaml)
+scenarios check the running gateway. Each invocation publishes its own named
+JUnit report through the same shared action; workflow steps only prepare assets,
+invoke scenarios and manage the service lifecycle.
 
 The scenario checks:
 
+- Rejection of an unqualified compiler before startup can call Docker, and
+  preservation of authored instructions across failed and repeated builds.
+- A failed or empty compilation leaves the previous artifact intact and cannot
+  start the gateway using that older artifact.
+- Rejection of a missing policy file by the deployment's own mount, without
+  relying on the inference fixture to stop startup.
 - Ubuntu/systemd startup and synthetic guest storage.
 - Hermes health, blocked external test-network access, authentication rejection, an unprivileged
   gateway and protected installation/configuration files.
@@ -53,7 +70,8 @@ The scenario checks:
   models, credentials, tools or streaming requests. It also requires the entire
   compiled writing policy in system context and rejects user-supplied policy text
   as a substitute. The fixture checks compiled content against the canonical source.
-- Read-only policy content and directory access for the gateway identity.
+- Read-only policy content and directory access for the gateway identity,
+  inherited from the deployment without a test-only policy override.
 - The original session after a gateway restart.
 - The same session after a stopped backup, volume destruction and restore into
   a new volume. Recovery checks only read history; they cannot recreate it.

@@ -19,26 +19,57 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Read qualified compiler version
+        id: apm
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { readFile } = require('node:fs/promises');
+            core.setOutput('version', (await readFile('services/hermes/.apm-version', 'utf8')).trim());
       - name: Set up qualified APM compiler
+        id: compiler
         uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
         with:
           setup-only: true
-          apm-version: "0.35.0"
-      - name: Compile the canonical writing policy in isolation
-        run: bash tests/hermes/helpers/prepare-policy.sh
+          apm-version: ${{ steps.apm.outputs.version }}
       - name: Create disposable Docker host
         id: vm
         uses: hoverkraft-tech/ci-github-iac/actions/vm/create@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
         with:
           vm-config: tests/lima.yml
-      - name: Copy deployment and synthetic fixtures
+      - name: Copy deployment, compiler and synthetic fixtures
+        env:
+          VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
+          VM_NAME: ${{ steps.vm.outputs.name }}
+          APM_PATH: ${{ steps.compiler.outputs.apm-path }}
+        run: |
+          # Fresh sessions pick up the Docker group assigned during provisioning.
+          tar -czf - Makefile AGENTS.md services/hermes tests/hermes packages/writing-policy | \
+            ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'tar -xzf - -C /opt/engineering-office'
+          # The released compiler needs its adjacent runtime files.
+          tar -czf - -C "$(dirname "$APM_PATH")" . | \
+            ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'mkdir -p /opt/engineering-office/.cache/apm && tar -xzf - -C /opt/engineering-office/.cache/apm'
+      # Act and Assert: each Goss scenario owns its arrangements and assertions.
+      - name: Verify policy build and failure boundaries
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: tests/hermes/policy-build.goss.yaml
+          report-name: engineering-office - Hermes policy build
+      # Act
+      - name: Build the deployment writing policy
         env:
           VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
           VM_NAME: ${{ steps.vm.outputs.name }}
         run: |
-          # Fresh sessions pick up the Docker group assigned during provisioning.
-          tar -czf - services/hermes tests/hermes packages/writing-policy .reports/hermes-writing-policy | \
-            ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'tar -xzf - -C /opt/engineering-office'
+          ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && PATH="$PWD/.cache/apm:$PATH" make hermes-policy'
+      # Assert
+      - name: Verify deployment preflight
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: tests/hermes/preflight.goss.yaml
+          report-name: engineering-office - Hermes preflight
       # Act
       - name: Start Hermes with isolated synthetic inference
         env:

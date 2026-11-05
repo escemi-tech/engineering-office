@@ -77,12 +77,21 @@ the zero-duplication threshold still applies to maintained code and fixtures.
 See the [validation guide](docs/usage/validation.md#writing-normalizer) for its
 dedicated test workflow and local command.
 
-The Hermes fixture uses the upstream APM Action with an explicit CLI release.
-Dependabot updates the Action reference. Renovate's scoped regular-expression manager updates
-only its `apm-version` input from `microsoft/apm` releases; it does not manage APM
-package dependencies. Compiler updates must pass the real Hermes instruction-loading
-and recovery scenario. Compile the public policy in a disposable project, never
-over the repository's or a user's authored `AGENTS.md`.
+The Hermes build and fixture share the compiler pin in
+[`services/hermes/.apm-version`](services/hermes/.apm-version). The upstream APM
+Action installs that release in CI; Dependabot updates the Action reference.
+Renovate's scoped regular-expression manager updates the version file from
+`microsoft/apm` releases; it does not manage APM package dependencies. Compiler
+updates must pass the real Hermes instruction-loading and recovery scenario.
+`make hermes-policy` compiles the public policy in a disposable project, never
+over the repository's or a user's authored `AGENTS.md`. Deployment and CI consume
+the same artifact and Compose mount. Keep generated content in `.build/`.
+Keep Hermes assertions in its Goss scenarios. Run build and preflight scenarios
+through the shared VM test action, alongside startup and recovery checks. The
+workflow transfers the compiler distribution returned by the upstream setup
+Action into the existing disposable VM; the shared test action owns Goss setup
+and reporting. Build probes use isolated temporary projects, with fixture setup
+and cleanup in `tests/hermes/helpers/`.
 
 ## Ansible validation
 

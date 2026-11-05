@@ -11,8 +11,8 @@
 	"customManagers": [
 		{
 			"customType": "regex",
-			"managerFilePatterns": ["/^\\.github/workflows/test-hermes\\.yml$/"],
-			"matchStrings": ["apm-version: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""],
+			"managerFilePatterns": ["/^services/hermes/\\.apm-version$/"],
+			"matchStrings": ["^(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*$"],
 			"depNameTemplate": "microsoft/apm",
 			"datasourceTemplate": "github-releases",
 			"extractVersionTemplate": "^v(?<version>.*)$"

@@ -1,0 +1,22 @@
+command:
+  hermes-rejects-missing-policy-before-startup:
+    exec: |
+      bash -euo pipefail <<'SH'
+      # Arrange: retain the generated policy for the positive lifecycle scenario.
+      cd /opt/engineering-office
+      log=$(mktemp)
+      mv .build/hermes/AGENTS.md .build/hermes/AGENTS.md.saved
+      trap 'mv .build/hermes/AGENTS.md.saved .build/hermes/AGENTS.md; rm -f "$log"' EXIT
+      # Act: --no-deps ensures the inference fixture cannot cause the rejection.
+      if bash tests/hermes/helpers/compose.sh up --no-start --no-deps hermes </dev/null > "$log" 2>&1; then
+        cat "$log"
+        exit 1
+      fi
+      # Assert: Goss requires the missing bind error; no empty directory may be created.
+      cat "$log"
+      test ! -e .build/hermes/AGENTS.md
+      SH
+    timeout: 300000
+    exit-status: 0
+    stdout:
+      - "bind source path does not exist"

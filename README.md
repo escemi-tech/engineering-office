@@ -7,7 +7,7 @@ API. Start with the [synthetic demo and runtime guide](docs/usage/hermes.md).
 Cloud provisioning and private integrations remain pending.
 
 Use the [shared writing policy](docs/usage/writing-policy.md) to review English
-and French drafts. Automatic installation into assistants is not enabled.
+and French drafts. Hermes startup builds and loads this policy automatically.
 
 Run `make help` for available commands. See the [documentation](docs/README.md)
 for prerequisites, validation and deployment boundaries.
