@@ -90,11 +90,57 @@ A missing or different compiler, failed compilation or empty output stops
 Direct Compose creation also rejects a missing compiled file; it does not build
 or check its freshness. Use `make hermes-start` after source updates. Generated
 policy is disposable build output, separate from session backups. Stopping
-preserves state and needs no compiler. Start again with the same command to resume.
+preserves state and needs no compiler or deployment configuration. Start again
+with `make hermes-start` to recreate the gateway and resume normal supervision.
 The configured project is `engineering-office-hermes`, separate from the demo;
 stop the demo before using it. Access a remote host
 through an SSH tunnel, keeping the listener on loopback. The gateway key controls
 the Hermes API, including session management; share it only with the operator.
+
+## Stop and revoke access
+
+Run `make hermes-stop` on the Docker host as the recovery operator. It selects
+only the `hermes` service in the `engineering-office-hermes` Compose project,
+disables its Docker restart policy, stops it with a 60-second grace period, then
+verifies shutdown. The command needs only the Makefile, Bash, GNU Make and access
+to that Docker daemon. Missing `.local/hermes.env`, Compose files or compiled
+policy, and an unresponsive gateway API, cannot block this path. A Docker error
+returns failure; no matching container is a successful no-op. Repeating it is safe.
+
+The stopped container, logs and state volume remain available. Other projects
+and services are untouched. For the synthetic demo, use
+`make HERMES_PROJECT=engineering-office-hermes-test hermes-stop`.
+The project override selects the same project for all Hermes Make targets.
+Docker's disabled restart policy prevents automatic restart, including after a
+daemon restart. A deliberate start or external deployer can still restart the
+service: suspend deployment automation before incident handling.
+
+For suspected credential exposure:
+
+1. Stop Hermes. If the host or Docker daemon cannot be controlled, use the
+   independent host/provider administration path to isolate it and revoke
+   provider credentials; do not assume a failed command stopped the service.
+2. Keep the stopped container and volume while collecting restricted incident
+   evidence. To find the container without Compose configuration, use
+   `docker container ls --all --filter label=com.docker.compose.project=engineering-office-hermes --filter label=com.docker.compose.service=hermes`.
+   Read its logs with `docker container logs <container-id>`. Keep them private;
+   they can contain conversation data. Avoid full container inspection output,
+   which includes environment credentials.
+3. Revoke an exposed inference key at its provider. Replace the affected keys in
+   Bitwarden and `.local/hermes.env`, retaining file mode `0600`. Generate a new
+   gateway key of at least 32 random characters. Stopping does not revoke keys
+   or cancel requests already accepted by an external provider.
+4. Once the incident is resolved, run `make hermes-start`. Recreation loads the
+   replacement credentials; `docker restart` alone does not update them. Verify
+   the old gateway key receives HTTP 401 and the new key can read the expected
+   session before reopening access. Recreating removes the old container and
+   its Docker logs, so collect needed evidence first. The state volume survives.
+
+This covers the current runtime and gateway credential. There are no connector
+tokens, publishers or scheduled jobs yet. Their independent revocation, pending
+action handling, host isolation and provider-specific recovery must be qualified
+when those capabilities are added. Shutdown requires access to the correct
+Docker context; it cannot stop a host the operator cannot reach.
 
 ## State and recovery
 

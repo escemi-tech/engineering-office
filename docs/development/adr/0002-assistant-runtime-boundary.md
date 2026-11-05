@@ -52,3 +52,37 @@ any inference processor, optional integration or private-data retention policy.
 Private-source admission and operational isolation/recovery remain acceptance
 gates. Review runtime qualification alongside each concrete dependency update;
 a generic metadata schema is not required to deliver this initial deployment.
+
+## Independent shutdown and gateway rotation: 2026-11-05
+
+The Compose stop command requires successful configuration interpolation, including
+credentials that an operator may have removed during an incident. Use native
+Docker container operations for `make hermes-stop` instead. Select exact Compose
+project and service labels, disable restart, stop with a bounded grace period and
+verify the resulting state. Keep logs and volumes; do not implement shutdown by
+destroying the deployment. The Make project variable defaults to the operational
+project and also supports the reserved synthetic fixture project.
+
+This reuses Docker's [restart policy update](https://docs.docker.com/reference/cli/docker/container/update/#update-a-containers-restart-policy---restart)
+and [bounded stop](https://docs.docker.com/reference/cli/docker/container/stop/#stop-container-with-timeout--t---timeout)
+instead of adding a control service or runtime endpoint. `unless-stopped` already
+respects manual stops; explicitly setting `no` records the disabled policy and
+also handles a changed restart policy. Normal startup recreates the service from
+the reviewed Compose definition and restores its configured policy.
+
+Gateway rotation uses the existing environment credential and recreation. It
+does not need a new secret manager or authentication layer. Retain Bitwarden
+custody and the protected local environment file pending scoped machine-secret
+delivery. Stop/recreate is operator-controlled and interrupts service. Collect
+incident evidence before recreation removes the old container's Docker logs.
+Docker/host access, provider revocation, connector credentials and independent
+deployment suspension remain separate operational controls.
+
+Local qualification on 2026-11-05 passed eleven startup and six revocation Goss
+assertions against the pinned Hermes image and synthetic inference. The fixture
+pauses the gateway process, verifies an HTTP timeout, stops it from a directory
+containing only the Makefile, and checks scope, retained logs/volume and repeated
+shutdown. Recreation rejects the previous gateway key and reads the original
+session with its replacement. Missing-container and unreachable-Docker cases
+also pass. These checks do not exercise a host/daemon restart or provider-side
+credential revocation; those remain operational qualification work.

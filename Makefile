@@ -3,7 +3,8 @@ SHELL := /bin/bash
 
 HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
-HERMES_COMPOSE := docker compose --env-file .local/hermes.env --project-name engineering-office-hermes -f services/hermes/compose.yml
+HERMES_PROJECT := engineering-office-hermes
+HERMES_COMPOSE := docker compose --env-file .local/hermes.env --project-name $(HERMES_PROJECT) -f services/hermes/compose.yml
 
 .PHONY: help lint-fix ci lint hermes-policy hermes-start hermes-stop hermes-logs plan provision configure deploy verify backup
 help: ## Display help
@@ -33,8 +34,25 @@ hermes-policy: ## Build the canonical writing policy with the qualified APM comp
 hermes-start: hermes-policy ## Rebuild policy and recreate Hermes while preserving sessions
 	$(HERMES_COMPOSE) up -d --force-recreate --wait --wait-timeout 180
 
-hermes-stop: ## Stop Hermes while preserving its state
-	$(HERMES_COMPOSE) stop
+hermes-stop: ## Disable Hermes restart and stop it without loading configuration
+	@set -euo pipefail; \
+	containers="$$(docker container ls --all --quiet \
+		--filter 'label=com.docker.compose.project=$(HERMES_PROJECT)' \
+		--filter 'label=com.docker.compose.service=hermes')"; \
+	if [[ -z "$$containers" ]]; then \
+		printf '%s\n' 'No Hermes containers found for $(HERMES_PROJECT).'; \
+		exit 0; \
+	fi; \
+	mapfile -t container_ids <<< "$$containers"; \
+	docker container update --restart=no "$${container_ids[@]}" >/dev/null; \
+	docker container stop --timeout 60 "$${container_ids[@]}" >/dev/null; \
+	for container_id in "$${container_ids[@]}"; do \
+		if [[ "$$(docker container inspect --format '{{.State.Running}} {{.State.Restarting}} {{.HostConfig.RestartPolicy.Name}}' "$$container_id")" != 'false false no' ]]; then \
+			printf 'Hermes shutdown could not be verified: %s\n' "$$container_id" >&2; \
+			exit 1; \
+		fi; \
+	done; \
+	printf '%s\n' 'Hermes stopped; automatic restart disabled. Containers, logs and volumes retained.'
 
 hermes-logs: ## Show recent Hermes logs
 	$(HERMES_COMPOSE) logs --tail 100
