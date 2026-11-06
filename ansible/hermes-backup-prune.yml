@@ -1,0 +1,13 @@
+---
+- name: Create and verify a new recovery point before retention
+  ansible.builtin.import_playbook: hermes-backup.yml
+
+- name: Enforce the Hermes recovery-point retention policy
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Prune only after the backup entrypoint succeeds
+      ansible.builtin.include_role:
+        name: hermes_backup
+        tasks_from: prune

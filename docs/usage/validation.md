@@ -136,7 +136,11 @@ The [encrypted recovery scenario](../../tests/ansible/hermes-backup.yml) initial
 a disposable Restic repository with a synthetic password outside Hermes. It
 exercises the public backup and restore playbooks, including missing/wrong keys,
 refusal to back up a live source, refusal of ambiguous snapshot selection and
-refusal to overwrite an existing volume. After verified backup it destroys only
+refusal to overwrite an existing volume. It runs the public retention entrypoint
+against sparse expired and dense daily histories, checks the daily/weekly limit,
+preserves an unrelated snapshot and rejects future timestamps without deleting
+existing recovery points. Wrong keys and a live source also block retention.
+After verified backup and pruning it destroys only
 the disposable source container and volume, restores the exact snapshot, verifies
 that recovery remains inactive, and explicitly deploys again.
 [Goss](../../tests/hermes/backup.goss.yaml) reads the original session, checks a
@@ -151,5 +155,5 @@ until cloud infrastructure and operational preflight are implemented. Use the
 `hermes-start`, `hermes-stop` and `hermes-logs` targets for the local Compose runtime,
 `hermes-host` to prepare an explicitly approved Ubuntu host, and `hermes-deploy`
 to install or update its runtime.
-Use `hermes-backup` and `hermes-restore` for explicit stopped-state recovery
+Use `hermes-backup`, `hermes-backup-prune` and `hermes-restore` for explicit stopped-state recovery
 operations, following the [backup guide](hermes-backup.md).

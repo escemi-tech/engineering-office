@@ -93,6 +93,9 @@
           - playbook: hermes-backup
             variables: {}
             message: Stop the selected deployment with make hermes-stop
+          - playbook: hermes-backup-prune
+            variables: {}
+            message: Stop the selected deployment with make hermes-stop
 
 - name: Enter the disposable maintenance window
   hosts: hermes
@@ -111,9 +114,109 @@
           ]
       changed_when: true
 
+- name: Prepare sparse expired history and an unrelated backup
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Arrange: sparse history exposes age limits independently of snapshot counts.
+    - name: Create old daily points
+      ansible.builtin.include_tasks: helpers/retention-fixture.yml
+      vars:
+        retention_fixture_days: [60, 35]
+    - name: Save the expired identities
+      ansible.builtin.set_fact:
+        expired_snapshots: >-
+          {{ retention_fixture_snapshots.results | map(attribute='stdout_lines') |
+             map('last') | map('from_json') | map(attribute='snapshot_id') | list }}
+    - name: Create a differently tagged snapshot outside the retention scope
+      ansible.builtin.command:
+        argv:
+          [
+            restic,
+            --no-cache,
+            backup,
+            --json,
+            --host,
+            "{{ hermes_project_name }}",
+            --tag,
+            unrelated-fixture,
+            "{{ fixture_state_volume.volume.Mountpoint }}",
+          ]
+      environment:
+        RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+        RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+      changed_when: true
+      no_log: true
+      register: unrelated_backup
+
 # Act
-- name: Back up through the public entrypoint
-  ansible.builtin.import_playbook: ../../ansible/hermes-backup.yml
+- name: Create a verified replacement and expire sparse history
+  ansible.builtin.import_playbook: ../../ansible/hermes-backup-prune.yml
+
+- name: Verify age expiry and prepare daily and weekly history
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Assert
+    - name: Require every expired recovery point to have been selected
+      ansible.builtin.assert:
+        that:
+          - expired_snapshots | difference(hermes_backup_retention_remove) | length == 0
+          - hermes_backup_snapshot not in hermes_backup_retention_remove
+        quiet: true
+    # Arrange
+    - name: Create a dense daily history
+      ansible.builtin.include_tasks: helpers/retention-fixture.yml
+      vars:
+        retention_fixture_days: "{{ range(1, 28) | list }}"
+    - name: Record the six most recent historical days
+      ansible.builtin.set_fact:
+        recent_daily_snapshots: >-
+          {{ retention_fixture_snapshots.results[:6] | map(attribute='stdout_lines') |
+             map('last') | map('from_json') | map(attribute='snapshot_id') | list }}
+
+# Act: repeat maintenance; the new snapshot replaces the previous same-day one.
+- name: Enforce daily and weekly limits through the public entrypoint
+  ansible.builtin.import_playbook: ../../ansible/hermes-backup-prune.yml
+
+- name: Verify retained points and scope preservation
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Assert
+    - name: Read the repository after actual deletion and data pruning
+      ansible.builtin.command:
+        argv: [restic, --no-cache, snapshots, --json]
+      environment:
+        RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+        RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+      changed_when: false
+      no_log: true
+      register: retained_snapshots
+    - name: Require daily points, bounded weekly history and the unrelated snapshot
+      ansible.builtin.assert:
+        that:
+          - kept_ids | length >= 8
+          - kept_ids | length <= 12
+          - hermes_backup_snapshot in kept_ids
+          - recent_daily_snapshots | difference(kept_ids) | length == 0
+          - expired_snapshots | intersect(kept_ids) | length == 0
+          - hermes_backup_retention_remove | intersect(kept_ids) | length == 0
+          - (unrelated_backup.stdout_lines[-1] | from_json).snapshot_id in kept_ids
+        quiet: true
+      vars:
+        kept_ids: "{{ retained_snapshots.stdout | from_json | map(attribute='id') | list }}"
+    # Arrange: a future timestamp must stop retention, not advance its clock.
+    - name: Add a snapshot with an invalid future timestamp
+      ansible.builtin.include_tasks: helpers/retention-fixture.yml
+      vars:
+        retention_fixture_days: [-1]
+    - name: Record the future snapshot identity
+      ansible.builtin.set_fact:
+        future_snapshot: "{{ (retention_fixture_snapshots.results[0].stdout_lines[-1] | from_json).snapshot_id }}"
 
 - name: Verify restore and key failure boundaries
   hosts: localhost
@@ -127,6 +230,13 @@
             variables:
               hermes_backup_password_file: /var/lib/hermes-backup-test/wrong-password
             message: Authenticate and verify the encrypted repository
+          - playbook: hermes-backup-prune
+            variables:
+              hermes_backup_password_file: /var/lib/hermes-backup-test/wrong-password
+            message: Authenticate and verify the encrypted repository
+          - playbook: hermes-backup-prune
+            variables: {}
+            message: Reject future timestamps
           - playbook: hermes-restore
             variables:
               hermes_restore_snapshot: latest
@@ -146,6 +256,23 @@
   gather_facts: false
   tasks:
     # Assert
+    - name: Read all snapshots after rejected maintenance
+      ansible.builtin.command:
+        argv: [restic, --no-cache, snapshots, --json]
+      environment: &fixture-restic-environment
+        RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+        RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+      changed_when: false
+      no_log: true
+      register: preserved_snapshots
+    - name: Require rejected operations to preserve every existing recovery point
+      ansible.builtin.assert:
+        that:
+          - (retained_snapshots.stdout | from_json | map(attribute='id') | list) | difference(preserved_ids) | length == 0
+          - future_snapshot in preserved_ids
+        quiet: true
+      vars:
+        preserved_ids: "{{ preserved_snapshots.stdout | from_json | map(attribute='id') | list }}"
     - name: Inspect the source after rejected recovery operations
       community.docker.docker_container_info:
         name: "{{ hermes_project_name }}-hermes-1"
@@ -157,6 +284,12 @@
           - not preserved_source.container.State.Running
         quiet: true
     # Arrange: only after verified backup and refusal-to-overwrite checks.
+    - name: Remove only the deliberate future-timestamp fixture
+      ansible.builtin.command:
+        argv: [restic, --no-cache, forget, "{{ future_snapshot }}"]
+      environment: *fixture-restic-environment
+      changed_when: true
+      no_log: true
     - name: Remove the disposable inference sidecar
       community.docker.docker_container:
         name: engineering-office-hermes-test-inference

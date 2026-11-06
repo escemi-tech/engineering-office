@@ -155,3 +155,32 @@ Same-guest CI storage demonstrates encryption and recovery mechanics, not
 independence from host loss. Storage placement, automatic scheduling, retention,
 private key recovery and an operational drill remain activation gates. The
 domain owner reviews those decisions before using private data.
+
+### Manual backup retention (2026-11-06)
+
+Implement the initial custody policy through an explicit `hermes-backup-prune`
+entrypoint. It first runs the production stopped-state backup and full integrity
+verification; deletion cannot proceed after a failed replacement. Keep Restic's
+native seven-daily/four-weekly selection, scoped to the deployment host, state
+path and Hermes tag. Record new snapshots in UTC and impose an absolute 28-day
+cutoff on that selection, independent of stored time zones. Preserve the replacement snapshot and reject future
+timestamps or a replacement older than one day before removing any snapshots.
+
+The [Restic retention rules](https://restic.readthedocs.io/en/stable/060_forget.html)
+combine keep options with OR; their durations refer to the newest snapshot rather
+than wall-clock time. A count-only or combined count/duration command therefore
+cannot enforce the agreed age ceiling when backups are sparse. Consume Restic's
+documented JSON dry-run result and apply only the age guard in Ansible; do not
+introduce a custom calendar policy, backup framework or scheduler. Pass exact
+snapshot IDs to native `forget`, then run `prune --max-unused 0` and full data
+verification. Native pruning reclaims unreferenced data repository-wide while
+preserving unrelated snapshots and data still referenced by retained snapshots.
+
+This remains manual, exclusive maintenance with root-held recovery credentials.
+Pruning may fail after snapshot deletion and requires scratch space; report failure
+and preserve the remaining repository for operator review. Do not silently prune
+the last usable copy or bypass locking. Synthetic tests cover sparse and dense
+history, timestamp rejection, scope preservation and recovery after pruning.
+Scheduling, failure notification, independent storage/key recovery and actual
+private-source deletion remain operational gates; this command alone does not
+enforce expiry while maintenance is not running.

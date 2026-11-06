@@ -81,10 +81,53 @@ A nonzero Restic exit, including an incomplete backup, fails the operation.
 Hermes stays stopped on both success and failure. Inspect any failure before
 ending maintenance; use `make hermes-deploy` from the controller to restart it.
 
-No pruning or scheduling is enabled. Qualify the approved retention and expiry
-policy before private use; do not delete the last verified recovery point to
-resolve a failed backup. Restic's repository locks remain enabled. These commands
-do not coordinate concurrent deployment or maintenance operators.
+Scheduling is not enabled. Restic's repository locks remain enabled, but these
+commands do not coordinate concurrent deployment or maintenance operators.
+
+## Expire recovery points
+
+During the same exclusive maintenance window, use this command instead of
+`make hermes-backup` when retention is approved for the selected repository:
+
+```sh
+make hermes-backup-prune
+```
+
+This command creates and verifies a new stopped-state backup before deleting
+anything. A failed backup or integrity check stops retention. It applies the
+initial policy to the selected deployment's host, volume path and Hermes tag:
+
+- Keep Restic's seven daily and four weekly recovery points, with overlapping
+  points counted once. Calendar grouping follows the recorded snapshot timestamps;
+  new backups use UTC.
+- Remove any selected point older than 28 days according to the host clock,
+  even if missed backups leave fewer daily or weekly points. Counts are ceilings,
+  not a guarantee of continuous coverage.
+- Preserve the newly verified snapshot. Reject future timestamps or a replacement
+  older than one day; correct the clock or investigate the repository before retrying.
+
+Restic selects the calendar points with a native dry run; Ansible applies the
+absolute age limit and passes the resulting full IDs to `forget`. Retention
+options alone do not impose a hard age limit: Restic combines them with OR, and
+its duration options are relative to the latest snapshot. See the
+[native retention semantics](https://restic.readthedocs.io/en/stable/060_forget.html#removing-snapshots-according-to-a-policy).
+
+The command then runs `prune --max-unused 0` and a full data check, leaving Hermes
+stopped. Pruning requires free scratch space. It reclaims repository-wide
+unreferenced data, including data from earlier interrupted maintenance; it does
+not remove unrelated snapshots. Content shared with a retained snapshot remains.
+This does not provide secure erasure from storage-provider replicas or copies.
+
+Record the reported new snapshot ID as the recovery point. Treat a nonzero exit
+as an operator alert: inspect the failure and preserve the remaining repository.
+A pruning failure can occur after snapshot removal, so review the actual state
+before retrying; a retry requires another successful new backup. Do not manually
+delete the last recovery point to make space. Once accepted, explicitly restart
+with `make hermes-deploy`.
+
+The policy runs only when invoked. Daily execution, failure notification,
+independent storage expiry and private recovery remain activation requirements;
+this manual command does not enforce a continuously running retention deadline.
 
 ## Restore without overwriting existing state
 
