@@ -1,0 +1,29 @@
+---
+# Act: isolate expected failures from the parent JUnit callback.
+- name: Run rejected recovery operations through the public playbooks
+  ansible.builtin.command:
+    argv:
+      - env
+      - -u
+      - ANSIBLE_CALLBACKS_ENABLED
+      - "{{ ansible_playbook_python | dirname }}/ansible-playbook"
+      - "{{ playbook_dir }}/../../ansible/{{ item.playbook }}.yml"
+      - -i
+      - "{{ backup_test_inventory.path }}"
+      - --extra-vars
+      - "{{ item.variables | to_json }}"
+  loop: "{{ backup_rejection_cases }}"
+  register: backup_rejections
+  changed_when: false
+  failed_when: false
+
+# Assert
+- name: Require each operation to fail at the intended boundary
+  ansible.builtin.assert:
+    that:
+      - item.rc == 2
+      - item.item.message in item.stdout
+    quiet: true
+  loop: "{{ backup_rejections.results }}"
+  loop_control:
+    label: "{{ item.item.message }}"

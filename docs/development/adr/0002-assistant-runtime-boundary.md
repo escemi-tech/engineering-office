@@ -123,3 +123,35 @@ rejection, real entrypoint deployment and unchanged-state convergence. Goss owns
 filesystem/runtime assertions, including special-character credential preservation
 and exclusion of synthetic controller/operator credentials. These checks do not
 qualify a real provider, private source or operational host.
+
+## Encrypted native-state recovery: 2026-11-06
+
+Use [Restic](https://github.com/restic/restic), licensed under
+[BSD-2-Clause](https://github.com/restic/restic/blob/master/LICENSE), for encrypted
+Hermes state snapshots. Install the Ubuntu-maintained package through the existing
+host role. Distribution package maintenance owns updates, as for Docker; the
+disposable Ubuntu image and integration scenario qualify the supplied CLI.
+This avoids a custom encryption/archive implementation, another backup daemon,
+or a separate container/binary update path.
+
+Start with an explicitly initialized filesystem repository and a separate
+root-only password file. Keep key custody and an offline recovery copy outside
+the runtime. Native Restic owns encryption, repository locking, snapshot metadata
+and integrity verification. Use its documented
+[data checks](https://restic.readthedocs.io/en/stable/045_working_with_repos.html#checking-integrity-and-consistency)
+and [subdirectory restore](https://restic.readthedocs.io/en/stable/050_restore.html).
+Snapshot contents stay in the approved repository; CLI output is hidden in
+Ansible, apart from the completed snapshot ID. No additional remote processor is
+introduced by this local filesystem integration.
+
+Require an exclusive operator maintenance window and a stopped gateway with
+restart disabled. Keep it stopped after backup, including on failure. Restore
+requires a full snapshot ID and an absent destination volume, and never starts
+the runtime automatically. Deploy reviewed assets and credentials explicitly
+after recovery and source-revocation review. Source-managed configuration and
+recovery credentials are not part of the state snapshot.
+
+Same-guest CI storage demonstrates encryption and recovery mechanics, not
+independence from host loss. Storage placement, automatic scheduling, retention,
+private key recovery and an operational drill remain activation gates. The
+domain owner reviews those decisions before using private data.

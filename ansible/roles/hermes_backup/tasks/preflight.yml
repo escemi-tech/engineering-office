@@ -1,0 +1,60 @@
+---
+- name: Require explicit local repository and password file paths
+  ansible.builtin.assert:
+    that:
+      - hermes_project_name is match('^[a-z0-9][a-z0-9_-]+$')
+      - hermes_backup_repository is defined
+      - hermes_backup_password_file is defined
+      - hermes_backup_repository is match('^/[^\x00-\x1f\x7f]+$')
+      - hermes_backup_password_file is match('^/[^\x00-\x1f\x7f]+$')
+    fail_msg: Supply an approved absolute repository path and a separate password file on the target.
+    quiet: true
+
+- name: Resolve the existing recovery paths on the target
+  ansible.builtin.command:
+    argv: [readlink, --canonicalize-existing, "{{ item }}"]
+  loop:
+    - "{{ hermes_backup_repository }}"
+    - "{{ hermes_backup_password_file }}"
+  changed_when: false
+  register: hermes_backup_canonical_paths
+
+- name: Require canonical paths without parent symlinks or traversal
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_canonical_paths.results[0].stdout == hermes_backup_repository
+      - hermes_backup_canonical_paths.results[1].stdout == hermes_backup_password_file
+    quiet: true
+
+- name: Inspect the repository and password file without reading credentials
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    get_checksum: false
+    get_mime: false
+  loop:
+    - "{{ hermes_backup_repository }}"
+    - "{{ hermes_backup_password_file }}"
+  register: hermes_backup_paths
+
+- name: Require protected recovery material outside the runtime
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_paths.results[0].stat.isdir | default(false)
+      - hermes_backup_paths.results[0].stat.uid == 0
+      - hermes_backup_paths.results[0].stat.mode == '0700'
+      - hermes_backup_paths.results[1].stat.isreg | default(false)
+      - hermes_backup_paths.results[1].stat.uid == 0
+      - hermes_backup_paths.results[1].stat.mode == '0600'
+      - hermes_backup_paths.results[1].stat.size > 0
+      - not hermes_backup_password_file.startswith(hermes_backup_repository.rstrip('/') ~ '/')
+    fail_msg: Use a root-owned mode-0700 repository and a separate nonempty mode-0600 password file, without symlinks.
+    quiet: true
+
+- name: Authenticate and verify the encrypted repository before changing state
+  ansible.builtin.command:
+    argv: [restic, --no-cache, check, --read-data]
+  environment:
+    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+  changed_when: false
+  no_log: true

@@ -1,0 +1,199 @@
+---
+# Arrange
+- name: Select the disposable host
+  ansible.builtin.import_playbook: helpers/inventory.yml
+
+- name: Supply synthetic recovery settings
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Configure only the disposable deployment
+      ansible.builtin.add_host:
+        name: "{{ lookup('ansible.builtin.env', 'VM_NAME') }}"
+        hermes_project_name: engineering-office-hermes-test
+        hermes_backup_repository: /var/lib/hermes-backup-test/repository
+        hermes_backup_password_file: /var/lib/hermes-backup-test/password
+        hermes_runtime: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/helpers/runtime.yml') | from_yaml }}"
+
+- name: Prepare the synthetic repository and state canary
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Create private fixture directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      loop:
+        - /var/lib/hermes-backup-test
+        - "{{ hermes_backup_repository }}"
+    - name: Write public fixture passwords outside Hermes
+      ansible.builtin.copy:
+        dest: "/var/lib/hermes-backup-test/{{ item }}"
+        content: "synthetic-restic-fixture-{{ item }}-never-for-production"
+        owner: root
+        group: root
+        mode: "0600"
+      loop: [password, wrong-password]
+      no_log: true
+    - name: Initialize the isolated encrypted repository
+      ansible.builtin.command:
+        argv: [restic, --no-cache, init]
+      environment:
+        RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+        RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+      changed_when: true
+      no_log: true
+    - name: Inspect the source state volume
+      community.docker.docker_volume_info:
+        name: "{{ hermes_project_name }}_state"
+      register: fixture_state_volume
+    - name: Add a synthetic ownership and encryption canary
+      ansible.builtin.copy:
+        dest: "{{ fixture_state_volume.volume.Mountpoint }}/recovery-canary"
+        content: synthetic-restic-plaintext-canary
+        owner: "10000"
+        group: "10000"
+        mode: "0600"
+
+- name: Verify backup admission failures
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Allocate the temporary test inventory
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .yml
+      register: backup_test_inventory
+    - name: Write the disposable recovery inventory
+      ansible.builtin.copy:
+        dest: "{{ backup_test_inventory.path }}"
+        mode: "0600"
+        content: |
+          hermes:
+            vars:
+              hermes_project_name: engineering-office-hermes-test
+              hermes_backup_repository: /var/lib/hermes-backup-test/repository
+              hermes_backup_password_file: /var/lib/hermes-backup-test/password
+            hosts:
+              {{ lookup('ansible.builtin.env', 'VM_NAME') | to_json }}:
+                ansible_ssh_common_args: {{ hostvars[lookup('ansible.builtin.env', 'VM_NAME')].ansible_ssh_common_args | to_json }}
+                ansible_python_interpreter: /usr/bin/python3
+    - name: Reject missing recovery keys and a live source
+      ansible.builtin.include_tasks: helpers/expect-backup-rejection.yml
+      vars:
+        backup_rejection_cases:
+          - playbook: hermes-backup
+            variables:
+              hermes_backup_password_file: /var/lib/hermes-backup-test/missing-password
+            message: Resolve the existing recovery paths on the target
+          - playbook: hermes-backup
+            variables: {}
+            message: Stop the selected deployment with make hermes-stop
+
+- name: Enter the disposable maintenance window
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Stop Hermes with the production shutdown command
+      ansible.builtin.command:
+        argv:
+          [
+            make,
+            -C,
+            /srv/engineering-office,
+            "HERMES_PROJECT={{ hermes_project_name }}",
+            hermes-stop,
+          ]
+      changed_when: true
+
+# Act
+- name: Back up through the public entrypoint
+  ansible.builtin.import_playbook: ../../ansible/hermes-backup.yml
+
+- name: Verify restore and key failure boundaries
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Reject wrong keys and existing state
+      ansible.builtin.include_tasks: helpers/expect-backup-rejection.yml
+      vars:
+        backup_rejection_cases:
+          - playbook: hermes-backup
+            variables:
+              hermes_backup_password_file: /var/lib/hermes-backup-test/wrong-password
+            message: Authenticate and verify the encrypted repository
+          - playbook: hermes-restore
+            variables:
+              hermes_restore_snapshot: latest
+            message: Supply the full reviewed Restic snapshot ID
+          - playbook: hermes-restore
+            variables:
+              hermes_restore_snapshot: "{{ hostvars[lookup('ansible.builtin.env', 'VM_NAME')].hermes_backup_snapshot }}"
+            message: Restore requires a new volume
+    - name: Remove the temporary inventory
+      ansible.builtin.file:
+        path: "{{ backup_test_inventory.path }}"
+        state: absent
+
+- name: Simulate loss of only the disposable runtime state
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Assert
+    - name: Inspect the source after rejected recovery operations
+      community.docker.docker_container_info:
+        name: "{{ hermes_project_name }}-hermes-1"
+      register: preserved_source
+    - name: Require the original source to remain stopped and present
+      ansible.builtin.assert:
+        that:
+          - preserved_source.exists
+          - not preserved_source.container.State.Running
+        quiet: true
+    # Arrange: only after verified backup and refusal-to-overwrite checks.
+    - name: Remove the disposable inference sidecar
+      community.docker.docker_container:
+        name: engineering-office-hermes-test-inference
+        state: absent
+    - name: Remove the disposable stopped gateway
+      community.docker.docker_container:
+        name: "{{ hermes_project_name }}-hermes-1"
+        state: absent
+    - name: Remove the disposable original volume
+      community.docker.docker_volume:
+        name: "{{ hermes_project_name }}_state"
+        state: absent
+    - name: Select exactly the verified snapshot
+      ansible.builtin.set_fact:
+        hermes_restore_snapshot: "{{ hermes_backup_snapshot }}"
+
+# Act
+- name: Restore through the public entrypoint
+  ansible.builtin.import_playbook: ../../ansible/hermes-restore.yml
+
+- name: Verify recovery remains inactive
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Assert
+    - name: Inspect the runtime before explicit deployment
+      community.docker.docker_container_info:
+        name: "{{ hermes_project_name }}-hermes-1"
+      register: inactive_recovery
+    - name: Require restoration not to activate Hermes
+      ansible.builtin.assert:
+        that:
+          - not inactive_recovery.exists
+        quiet: true
+
+# Act: the operator explicitly deploys reviewed configuration and credentials.
+- name: Deploy the recovered runtime
+  ansible.builtin.import_playbook: ../../ansible/hermes.yml
+# Assert: the following Goss scenario reads the original session and checks boundaries.

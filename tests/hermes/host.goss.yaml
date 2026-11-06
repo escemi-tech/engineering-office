@@ -7,6 +7,8 @@ package:
     installed: true
   python3-requests:
     installed: true
+  restic:
+    installed: true
 service:
   docker:
     enabled: true

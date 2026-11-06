@@ -1,0 +1,39 @@
+gossfile:
+  session.goss.yaml: {}
+command:
+  restored-state-keeps-content-and-permissions:
+    exec: |
+      # Arrange: read the restored file as the gateway user.
+      # Act
+      docker exec --user 10000:10000 engineering-office-hermes-test-hermes-1 sh -ec '
+        cat /opt/data/recovery-canary
+        stat --format="%u:%g:%a" /opt/data/recovery-canary
+      '
+      # Assert: content and ownership match the original fixture.
+    exit-status: 0
+    stdout:
+      - synthetic-restic-plaintext-canary
+      - "10000:10000:600"
+  recovery-credentials-stay-outside-hermes:
+    exec: |
+      # Act
+      docker exec --user 10000:10000 engineering-office-hermes-test-hermes-1 sh -ec '
+        test ! -e /var/lib/hermes-backup-test
+        test -z "${RESTIC_PASSWORD_FILE+x}"
+        test -z "${RESTIC_PASSWORD+x}"
+      '
+      # Assert: neither recovery files nor credentials enter the runtime.
+    exit-status: 0
+  encrypted-repository-rejects-an-unrelated-key:
+    exec: |
+      # Act
+      sudo -n restic --no-cache --repo /var/lib/hermes-backup-test/repository \
+        --password-file /var/lib/hermes-backup-test/wrong-password snapshots
+      # Assert: Restic's native wrong-password exit status.
+    exit-status: 12
+  encrypted-repository-does-not-contain-plaintext-state:
+    exec: |
+      # Act
+      sudo -n grep -R -a -F -q synthetic-restic-plaintext-canary /var/lib/hermes-backup-test/repository
+      # Assert: grep returns 1 only when the plaintext marker is absent.
+    exit-status: 1

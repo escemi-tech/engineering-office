@@ -1,0 +1,5 @@
+---
+model: synthetic
+inference_url: http://127.0.0.1:8080/v1
+inference_api_key: synthetic-inference-key-for-tests-only # checkov:skip=CKV_SECRET_6:Public synthetic fixture credential
+gateway_api_key: "synthetic-gateway-key-for-tests-$'\"\\only"

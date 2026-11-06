@@ -1,0 +1,67 @@
+---
+- name: Validate the recovery destination and key
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Inspect the Hermes container
+  community.docker.docker_container_info:
+    name: "{{ hermes_project_name }}-hermes-1"
+  no_log: true
+  register: hermes_backup_container
+
+- name: Require an explicitly stopped gateway with automatic restart disabled
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_container.exists
+      - not hermes_backup_container.container.State.Running
+      - hermes_backup_container.container.HostConfig.RestartPolicy.Name == 'no'
+      - hermes_backup_container.container.Config.Labels['com.docker.compose.project'] == hermes_project_name
+    fail_msg: Stop the selected deployment with make hermes-stop before backup; keep it stopped until backup completes.
+    quiet: true
+
+- name: Inspect the persistent Hermes volume
+  community.docker.docker_volume_info:
+    name: "{{ hermes_project_name }}_state"
+  register: hermes_backup_volume
+
+- name: Require dedicated local state with recovery material outside it
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_volume.exists
+      - hermes_backup_volume.volume.Driver == 'local'
+      - not hermes_backup_volume.volume.Options
+      - not hermes_backup_repository.startswith(hermes_backup_volume.volume.Mountpoint)
+      - not hermes_backup_password_file.startswith(hermes_backup_volume.volume.Mountpoint)
+      - hermes_backup_container.container.Mounts | selectattr('Destination', 'equalto', '/opt/data') | selectattr('Name', 'defined') | selectattr('Name', 'equalto', hermes_project_name ~ '_state') | list | length == 1
+    quiet: true
+
+- name: Encrypt a consistent snapshot using native Restic
+  ansible.builtin.command:
+    argv:
+      - restic
+      - --no-cache
+      - backup
+      - --json
+      - --host
+      - "{{ hermes_project_name }}"
+      - --tag
+      - engineering-office-hermes-state
+      - --exclude
+      - "{{ hermes_backup_volume.volume.Mountpoint }}/config.yaml"
+      - "{{ hermes_backup_volume.volume.Mountpoint }}"
+  environment:
+    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+  changed_when: true
+  no_log: true
+  register: hermes_backup_result
+
+- name: Verify the new encrypted recovery point
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Record the full snapshot identity
+  ansible.builtin.set_fact:
+    hermes_backup_snapshot: "{{ (hermes_backup_result.stdout_lines[-1] | from_json).snapshot_id }}"
+
+- name: Report the completed recovery point
+  ansible.builtin.debug:
+    msg: "Verified snapshot {{ hermes_backup_snapshot }}. Hermes remains stopped; restart only after the maintenance window."

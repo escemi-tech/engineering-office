@@ -1,0 +1,68 @@
+---
+- name: Validate the recovery repository and key
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Require an explicitly selected immutable snapshot
+  ansible.builtin.assert:
+    that:
+      - hermes_restore_snapshot is defined
+      - hermes_restore_snapshot is match('^[0-9a-f]{64}$')
+    fail_msg: Supply the full reviewed Restic snapshot ID in hermes_restore_snapshot.
+    quiet: true
+
+- name: Read the selected snapshot metadata
+  ansible.builtin.command:
+    argv:
+      [restic, --no-cache, snapshots, --json, "{{ hermes_restore_snapshot }}"]
+  environment:
+    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+  changed_when: false
+  no_log: true
+  register: hermes_backup_restore_metadata
+
+- name: Require one Hermes state snapshot
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_restore_metadata.stdout | from_json | length == 1
+      - (hermes_backup_restore_metadata.stdout | from_json)[0].id == hermes_restore_snapshot
+      - "'engineering-office-hermes-state' in (hermes_backup_restore_metadata.stdout | from_json)[0].tags"
+      - (hermes_backup_restore_metadata.stdout | from_json)[0].paths | length == 1
+    quiet: true
+  no_log: true
+
+- name: Inspect the destination volume
+  community.docker.docker_volume_info:
+    name: "{{ hermes_project_name }}_state"
+  register: hermes_backup_restore_existing
+
+- name: Refuse to overwrite an existing volume
+  ansible.builtin.assert:
+    that:
+      - not hermes_backup_restore_existing.exists
+    fail_msg: Restore requires a new volume. Preserve existing state and select a fresh recovery host or project.
+    quiet: true
+
+- name: Create the new Compose-owned state volume
+  community.docker.docker_volume:
+    name: "{{ hermes_project_name }}_state"
+    labels:
+      com.docker.compose.project: "{{ hermes_project_name }}"
+      com.docker.compose.volume: state
+  register: hermes_backup_restore_volume
+
+- name: Restore and verify state without starting the runtime
+  ansible.builtin.command:
+    argv:
+      - restic
+      - --no-cache
+      - restore
+      - "{{ hermes_restore_snapshot }}:{{ (hermes_backup_restore_metadata.stdout | from_json)[0].paths[0] }}"
+      - --target
+      - "{{ hermes_backup_restore_volume.volume.Mountpoint }}"
+      - --verify
+  environment:
+    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+  changed_when: true
+  no_log: true

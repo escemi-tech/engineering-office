@@ -1,0 +1,8 @@
+---
+# Existing, initialized repository on the target host's approved backup filesystem.
+hermes_backup_repository: /mnt/engineering-office-backups/hermes
+# Root-owned mode-0600 file on the target, outside the repository and Hermes state.
+# Retain the password independently in the professional Bitwarden vault.
+hermes_backup_password_file: /etc/engineering-office/restic-password
+# Restore requires an explicitly selected full snapshot ID; never "latest".
+# hermes_restore_snapshot: <64-character snapshot ID>

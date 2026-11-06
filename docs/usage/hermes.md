@@ -152,13 +152,12 @@ conversations and any upstream runtime configuration. Treat it as sensitive.
 Stopping or replacing the container preserves it. Never run `down --volumes` for
 an operational deployment unless its data is explicitly disposable.
 
-Back up with Hermes stopped, preserving ownership and permissions. Restore into
-a new isolated volume with the same image and reviewed configuration before
-opening access. The repository's [restore test](../../tests/hermes/restore.sh)
-demonstrates the procedure using synthetic state: it excludes the read-only
-`config.yaml`, replaces the volume and checks the original session through the
-API. It is a destructive test utility, not an operational backup command.
+Use the [encrypted backup and recovery commands](hermes-backup.md) with Hermes
+stopped. Restore into a new isolated volume with the matching image and reviewed
+configuration before opening access. The commands preserve native state and
+ownership while excluding the source-managed `config.yaml`.
 
-Encrypted backup storage, retention, credential delivery, host isolation and an
-independent recovery drill must be implemented before private use. Container
-permissions and the disabled toolsets do not establish those wider boundaries.
+The Compose-only [restore fixture](../../tests/hermes/restore.sh) uses synthetic
+state and destroys its test volume; operators use the Ansible recovery commands.
+Independent storage and key recovery, retention, credential delivery and a private
+recovery drill remain required before private use.
