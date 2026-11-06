@@ -74,7 +74,7 @@ make hermes-host
 ```
 
 The [host playbook](../../ansible/hermes-host.yml) checks the qualified platform,
-installs Ubuntu's `docker.io`, `docker-compose-v2`, `make` and `python3-requests`
+installs Ubuntu's `docker.io`, `docker-compose-v2`, `make`, `python3-requests` and `restic`
 packages, and starts and enables Docker. It uses Ansible's built-in modules and
 the [Ubuntu package installation path](https://ubuntu.com/server/docs/how-to/containers/docker-for-system-admins/),
 without another package repository or Galaxy role. Package versions come from
@@ -134,3 +134,5 @@ the local file does not revoke a credential at its provider.
 
 Unattended vault access, connector identities, provider revocation, production
 approval automation and private-data recovery remain separate implementation work.
+Use the [backup guide](hermes-backup.md) to prepare encrypted recovery material
+and restore state before deploying a recovered runtime.

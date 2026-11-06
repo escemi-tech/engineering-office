@@ -4,6 +4,7 @@
 - [Run Hermes](usage/hermes.md)
 - [Qualify the OVHcloud host](usage/ovh-qualification.md)
 - [Deploy Hermes to an approved host](usage/hermes-deployment.md)
+- [Back up and recover Hermes state](usage/hermes-backup.md)
 - [Review drafts with the shared writing policy](usage/writing-policy.md)
 - [Normalize classified draft prose locally](usage/writing-normalizer.md)
 - [Make and workflow conventions](../CONTRIBUTING.md)

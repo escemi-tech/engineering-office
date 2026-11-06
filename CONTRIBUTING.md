@@ -110,6 +110,11 @@ The tests exercise those entrypoints and repeat each role to verify convergence.
 Keep the Lima fixture free of runtime installation logic. Reboot the deployed
 guest through Ansible, then assert persistent state in Goss without redeploying.
 Shared test inventory setup belongs in `tests/ansible/helpers/`.
+The encrypted recovery scenario uses the production backup/restore entrypoints,
+the distribution's Restic package and disposable guest storage. Keep encryption,
+snapshot selection and integrity checking in native Restic. Never run its
+destructive fixture against an operational inventory. Shared synthetic runtime
+settings and expected-rejection probes stay in the same explicit helpers directory.
 Supply only synthetic inputs and the shared VM's
 SSH configuration; never connect this test to an operational inventory. No generic
 Ansible target-discovery job is needed for this concrete integration.
@@ -128,9 +133,12 @@ as described in the [deployment guide](docs/usage/hermes-deployment.md), then ru
 ```sh
 ansible-playbook --syntax-check ansible/hermes-host.yml
 ansible-playbook --syntax-check ansible/hermes.yml
+ansible-playbook --syntax-check ansible/hermes-backup.yml
+ansible-playbook --syntax-check ansible/hermes-restore.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-host.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-reboot.yml
+ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-backup.yml
 ```
 
 The actual deployment scenarios require the disposable VM and run in hosted CI.

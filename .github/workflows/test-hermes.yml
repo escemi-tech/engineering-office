@@ -187,8 +187,25 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/reboot.goss.yaml
+          goss-file: tests/hermes/session.goss.yaml
           report-name: engineering-office - Hermes session after host reboot
+      # Act and Assert: exercise the public backup and restore playbooks.
+      - name: Test encrypted backup and isolated recovery
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        env: *vm-connection
+        with:
+          ansible-requirements: ansible/requirements.txt
+          galaxy-requirements: ansible/collections/requirements.yml
+          ansible-config: tests/ansible/ansible.cfg
+          test-playbook: tests/ansible/hermes-backup.yml
+          report-name: engineering-office - Hermes encrypted recovery
+      # Assert
+      - name: Verify restored state and recovery credential separation
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: tests/hermes/backup.goss.yaml
+          report-name: engineering-office - Hermes restored backup
       - name: Destroy disposable host and all test state
         if: ${{ always() && steps.vm.outputs.vm != '' }}
         uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0

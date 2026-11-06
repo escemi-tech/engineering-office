@@ -127,13 +127,29 @@ reports remain separate; see [CONTRIBUTING](../../CONTRIBUTING.md#ansible-valida
 After that conversation, the [reboot scenario](../../tests/ansible/hermes-reboot.yml)
 uses Ansible's reboot module to restart the whole guest and wait for SSH and the
 gateway health endpoint. It does not rerun host preparation or deployment.
-Goss repeats the host checks and [reads the original conversation](../../tests/hermes/reboot.goss.yaml)
+Goss repeats the host checks and [reads the original conversation](../../tests/hermes/session.goss.yaml)
 without submitting another inference request. This verifies automatic runtime
 startup and persistent session storage. It does not test a new model request
 after reboot or qualify provider availability.
+
+The [encrypted recovery scenario](../../tests/ansible/hermes-backup.yml) initializes
+a disposable Restic repository with a synthetic password outside Hermes. It
+exercises the public backup and restore playbooks, including missing/wrong keys,
+refusal to back up a live source, refusal of ambiguous snapshot selection and
+refusal to overwrite an existing volume. After verified backup it destroys only
+the disposable source container and volume, restores the exact snapshot, verifies
+that recovery remains inactive, and explicitly deploys again.
+[Goss](../../tests/hermes/backup.goss.yaml) reads the original session, checks a
+restored file's content/ownership/mode, rejects an unrelated key, checks for a
+plaintext canary in the encrypted repository, and verifies recovery credentials
+stay outside Hermes. Neither backup contents nor keys are uploaded as artifacts.
+This qualifies the native recovery mechanism on the guest; it does not establish
+independent off-host storage, automated retention or an operational disaster drill.
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail explicitly
 until cloud infrastructure and operational preflight are implemented. Use the
 `hermes-start`, `hermes-stop` and `hermes-logs` targets for the local Compose runtime,
 `hermes-host` to prepare an explicitly approved Ubuntu host, and `hermes-deploy`
 to install or update its runtime.
+Use `hermes-backup` and `hermes-restore` for explicit stopped-state recovery
+operations, following the [backup guide](hermes-backup.md).
