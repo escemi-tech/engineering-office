@@ -1,0 +1,17 @@
+---
+- name: Select the disposable VM supplied by shared CI
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require the test VM connection
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.env', 'VM_NAME') | length > 0
+          - lookup('ansible.builtin.env', 'VM_SSH_CONFIG') | length > 0
+        quiet: true
+    - name: Register the isolated host
+      ansible.builtin.add_host:
+        name: "{{ lookup('ansible.builtin.env', 'VM_NAME') }}"
+        groups: hermes
+        ansible_ssh_common_args: "-o ControlMaster=no -o ControlPath=none -F {{ lookup('ansible.builtin.env', 'VM_SSH_CONFIG') | quote }}"
+        ansible_python_interpreter: /usr/bin/python3

@@ -35,8 +35,8 @@ not a publisher or a client's instruction loading.
 The [dedicated workflow](../../.github/workflows/test-hermes.yml) runs on pull
 requests and main pushes through shared CI. It composes the pinned
 `ci-github-iac` VM creation, Goss testing and destruction actions. A disposable
-Ubuntu VM installs Docker and receives only deployment assets and synthetic
-fixtures. No checkout or Docker socket is mounted inside Hermes.
+Ubuntu VM receives Docker through the production Ansible host playbook, then
+deployment assets and synthetic fixtures. No checkout or Docker socket is mounted inside Hermes.
 
 The pinned upstream APM Action sets up the CLI version declared in
 `services/hermes/.apm-version`. The workflow copies that complete distribution
@@ -96,9 +96,18 @@ its restore script deliberately destroys and replaces that project's volume.
 These checks do not qualify a paid model, writing quality, cloud host or private
 connector. They do not resolve APM's separate populated-workstation recovery gate.
 Revocation uses synthetic gateway keys; it does not test provider credential
-revocation or a host/daemon restart.
+revocation. Host reboot recovery is checked separately below.
 
-## Infrastructure provisioning
+## Host preparation and deployment
+
+The workflow starts with a fresh Ubuntu image without Docker. The released
+`ansible/test` action runs the [host preparation scenario](../../tests/ansible/hermes-host.yml)
+against the production [host playbook](../../ansible/hermes-host.yml). Native
+assertions require an initial package installation, an unchanged second run and
+preservation of the SSH operator's privileges. Only the disposable fixture then
+grants that user Docker access for the Compose demo. [Goss host checks](../../tests/hermes/host.goss.yaml)
+verify installed packages, Compose availability, the Docker socket and its enabled,
+running service.
 
 After the Compose lifecycle, the same disposable VM receives the actual
 [Ansible deployment](../../ansible/hermes.yml). The released `ansible/test`
@@ -115,7 +124,16 @@ namespace and is accessed through loopback; it holds no provider credentials. Th
 does not qualify production egress restrictions. Native Ansible reports and Goss
 reports remain separate; see [CONTRIBUTING](../../CONTRIBUTING.md#ansible-validation).
 
+After that conversation, the [reboot scenario](../../tests/ansible/hermes-reboot.yml)
+uses Ansible's reboot module to restart the whole guest and wait for SSH and the
+gateway health endpoint. It does not rerun host preparation or deployment.
+Goss repeats the host checks and [reads the original conversation](../../tests/hermes/reboot.goss.yaml)
+without submitting another inference request. This verifies automatic runtime
+startup and persistent session storage. It does not test a new model request
+after reboot or qualify provider availability.
+
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail explicitly
 until cloud infrastructure and operational preflight are implemented. Use the
 `hermes-start`, `hermes-stop` and `hermes-logs` targets for the local Compose runtime,
-and `hermes-deploy` for an explicitly approved existing Docker host.
+`hermes-host` to prepare an explicitly approved Ubuntu host, and `hermes-deploy`
+to install or update its runtime.

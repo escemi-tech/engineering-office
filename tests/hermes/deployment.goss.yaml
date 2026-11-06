@@ -63,6 +63,7 @@ command:
       docker exec engineering-office-hermes-test-hermes-1 sh -c '
         curl --fail --silent --show-error --max-time 90 \
           -H "Authorization: Bearer $API_SERVER_KEY" \
+          -H "X-Hermes-Session-Id: engineering-office-host-reboot" \
           -H "Content-Type: application/json" \
           --data-binary "{\"messages\":[{\"role\":\"user\",\"content\":\"Prepare a synthetic briefing.\"}],\"stream\":false}" \
           http://127.0.0.1:8642/v1/chat/completions

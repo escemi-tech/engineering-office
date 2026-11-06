@@ -6,7 +6,7 @@ HOST_GID := $(shell id -g)
 HERMES_PROJECT := engineering-office-hermes
 HERMES_COMPOSE := docker compose --env-file .local/hermes.env --project-name $(HERMES_PROJECT) -f services/hermes/compose.yml
 
-.PHONY: help lint-fix ci lint hermes-policy hermes-start hermes-stop hermes-logs hermes-deploy plan provision configure deploy verify backup
+.PHONY: help lint-fix ci lint hermes-policy hermes-start hermes-stop hermes-logs hermes-host hermes-deploy plan provision configure deploy verify backup
 help: ## Display help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
@@ -33,6 +33,9 @@ hermes-policy: ## Build the canonical writing policy with the qualified APM comp
 
 hermes-start: hermes-policy ## Rebuild policy and recreate Hermes while preserving sessions
 	$(HERMES_COMPOSE) up -d --force-recreate --wait --wait-timeout 180
+
+hermes-host: ## Prepare Docker prerequisites on the explicitly configured approved Ubuntu host
+	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-host.yml
 
 hermes-deploy: hermes-policy ## Deploy Hermes to the explicitly configured approved host
 	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes.yml --extra-vars @.local/hermes-deployment.yml

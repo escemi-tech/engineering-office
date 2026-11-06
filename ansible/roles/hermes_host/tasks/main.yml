@@ -1,0 +1,31 @@
+---
+- name: Require the qualified Ubuntu host platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Ubuntu'
+      - ansible_facts.distribution_version == '26.04'
+      - ansible_facts.architecture == 'x86_64'
+      - ansible_facts.service_mgr == 'systemd'
+    fail_msg: Host preparation requires Ubuntu 26.04 amd64 with systemd.
+    quiet: true
+
+- name: Install the Ubuntu runtime prerequisites without removing packages
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose-v2
+      - make
+      - python3-requests
+    state: present
+    cache_valid_time: 3600
+    install_recommends: false
+    force_apt_get: true
+    fail_on_autoremove: true
+  register: hermes_host_packages
+
+- name: Start Docker and enable it at boot
+  ansible.builtin.systemd_service:
+    name: docker.service
+    state: started
+    enabled: true
+  register: hermes_host_service
