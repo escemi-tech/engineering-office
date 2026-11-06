@@ -1,0 +1,31 @@
+---
+# Arrange: dated snapshots of stopped, disposable state; never operational data.
+- name: Calculate synthetic UTC snapshot timestamps
+  ansible.builtin.command:
+    argv: [date, --utc, --date, "{{ item }} days ago", "+%Y-%m-%d %H:%M:%S"]
+  loop: "{{ retention_fixture_days }}"
+  changed_when: false
+  register: retention_fixture_dates
+
+- name: Create dated recovery points through native Restic
+  ansible.builtin.command:
+    argv:
+      - restic
+      - --no-cache
+      - backup
+      - --json
+      - --host
+      - "{{ hermes_project_name }}"
+      - --tag
+      - engineering-office-hermes-state
+      - --time
+      - "{{ item.stdout }}"
+      - "{{ fixture_state_volume.volume.Mountpoint }}"
+  environment:
+    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+    TZ: UTC
+  loop: "{{ retention_fixture_dates.results }}"
+  changed_when: true
+  no_log: true
+  register: retention_fixture_snapshots

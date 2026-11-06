@@ -190,7 +190,7 @@ jobs:
           goss-file: tests/hermes/session.goss.yaml
           report-name: engineering-office - Hermes session after host reboot
       # Act and Assert: exercise the public backup and restore playbooks.
-      - name: Test encrypted backup and isolated recovery
+      - name: Test encrypted backup, retention and isolated recovery
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
         env: *vm-connection
         with:

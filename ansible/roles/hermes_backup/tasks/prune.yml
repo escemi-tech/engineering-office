@@ -1,0 +1,101 @@
+---
+- name: Read the maintenance clock in UTC
+  ansible.builtin.command:
+    argv: [date, --utc, "+%Y-%m-%dT%H:%M:%SZ"]
+  changed_when: false
+  register: hermes_backup_retention_clock
+
+- name: Ask Restic to select the daily and weekly recovery points without deleting
+  ansible.builtin.command:
+    argv:
+      - restic
+      - --no-cache
+      - forget
+      - --dry-run
+      - --json
+      - --host
+      - "{{ hermes_project_name }}"
+      - --path
+      - "{{ hermes_backup_volume.volume.Mountpoint }}"
+      - --tag
+      - engineering-office-hermes-state
+      - --keep-daily
+      - "7"
+      - --keep-weekly
+      - "4"
+  environment: &restic-environment
+    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+    TZ: UTC
+  changed_when: false
+  no_log: true
+  register: hermes_backup_retention_policy
+
+- name: Require exactly the deployment snapshot group
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_retention_policy.stdout | from_json | length == 1
+      - (hermes_backup_retention_policy.stdout | from_json)[0].host == hermes_project_name
+      - (hermes_backup_retention_policy.stdout | from_json)[0].paths == [hermes_backup_volume.volume.Mountpoint]
+    quiet: true
+  no_log: true
+
+- name: Read Restic's selection and protect the new verified snapshot
+  ansible.builtin.set_fact:
+    hermes_backup_retention_keep: "{{ (hermes_backup_retention_policy.stdout | from_json)[0].keep }}"
+    hermes_backup_retention_remove: "{{ ((hermes_backup_retention_policy.stdout | from_json)[0].remove | default([], true)) | map(attribute='id') | list }}"
+  no_log: true
+
+- name: Reject future timestamps and a stale or missing replacement
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_snapshot in (hermes_backup_retention_keep | map(attribute='id') | list)
+      - snapshot_age >= 0
+      - item.id != hermes_backup_snapshot or snapshot_age <= 86400
+    fail_msg: Retention requires a newly verified snapshot and consistent host time; preserve the repository and investigate.
+    quiet: true
+  vars:
+    snapshot_age: &snapshot-age >-
+      {{ ((hermes_backup_retention_clock.stdout | to_datetime('%Y-%m-%dT%H:%M:%S%z')) -
+          (item.time | regex_replace('[.][0-9]+', '') | to_datetime('%Y-%m-%dT%H:%M:%S%z'))).total_seconds() }}
+  loop: "{{ hermes_backup_retention_keep + ((hermes_backup_retention_policy.stdout | from_json)[0].remove | default([], true)) }}"
+  no_log: true
+
+- name: Expire daily or weekly points older than 28 days on the host clock
+  ansible.builtin.set_fact:
+    hermes_backup_retention_remove: "{{ hermes_backup_retention_remove + [item.id] }}"
+  when: snapshot_age > 2419200
+  vars:
+    snapshot_age: *snapshot-age
+  loop: "{{ hermes_backup_retention_keep }}"
+  no_log: true
+
+- name: Require the verified recovery point to survive retention
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_snapshot not in hermes_backup_retention_remove
+    quiet: true
+
+- name: Remove only the selected snapshot identities
+  ansible.builtin.command:
+    argv: "{{ ['restic', '--no-cache', 'forget'] + hermes_backup_retention_remove }}"
+  environment: *restic-environment
+  when: hermes_backup_retention_remove | length > 0
+  changed_when: true
+  no_log: true
+
+- name: Reclaim all data no longer referenced by retained snapshots
+  ansible.builtin.command:
+    argv: [restic, --no-cache, prune, --max-unused, "0"]
+  environment: *restic-environment
+  changed_when: true
+  no_log: true
+
+- name: Verify repository integrity after pruning
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Report completed retention without exposing snapshot contents
+  ansible.builtin.debug:
+    msg: >-
+      Removed {{ hermes_backup_retention_remove | length }} snapshots;
+      verified recovery point {{ hermes_backup_snapshot }} retained. Hermes remains stopped.

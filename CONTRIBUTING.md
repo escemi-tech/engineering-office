@@ -111,7 +111,9 @@ Keep the Lima fixture free of runtime installation logic. Reboot the deployed
 guest through Ansible, then assert persistent state in Goss without redeploying.
 Shared test inventory setup belongs in `tests/ansible/helpers/`.
 The encrypted recovery scenario uses the production backup/restore entrypoints,
-the distribution's Restic package and disposable guest storage. Keep encryption,
+the distribution's Restic package and disposable guest storage. Retention tests
+cover sparse expired history, daily/weekly limits, unrelated snapshots, future
+timestamps and preserved recovery after pruning. Keep encryption,
 snapshot selection and integrity checking in native Restic. Never run its
 destructive fixture against an operational inventory. Shared synthetic runtime
 settings and expected-rejection probes stay in the same explicit helpers directory.
@@ -134,6 +136,7 @@ as described in the [deployment guide](docs/usage/hermes-deployment.md), then ru
 ansible-playbook --syntax-check ansible/hermes-host.yml
 ansible-playbook --syntax-check ansible/hermes.yml
 ansible-playbook --syntax-check ansible/hermes-backup.yml
+ansible-playbook --syntax-check ansible/hermes-backup-prune.yml
 ansible-playbook --syntax-check ansible/hermes-restore.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-host.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes.yml
