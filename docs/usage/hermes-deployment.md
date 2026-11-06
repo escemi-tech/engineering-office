@@ -7,7 +7,8 @@ instance, install Docker, open a firewall or admit private sources.
 
 Before deployment, approve the host, model processor, credentials and network
 access under the [permission policy](../development/assistant-security.md).
-Cloud target qualification, budgets, independent management access and encrypted
+Follow the [OVHcloud qualification guide](ovh-qualification.md) to identify the
+target and complete quote. Budgets, independent management access and encrypted
 backups remain prerequisites for an operational deployment. The `production`
 GitHub environment is reserved for future automated delivery; no workflow deploys
 to a real host. An operator runs this command after approving the target and change.
