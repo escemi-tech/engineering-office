@@ -1,0 +1,25 @@
+package:
+  docker.io:
+    installed: true
+  docker-compose-v2:
+    installed: true
+  make:
+    installed: true
+  python3-requests:
+    installed: true
+service:
+  docker:
+    enabled: true
+    running: true
+file:
+  /var/run/docker.sock:
+    exists: true
+    owner: root
+    group: docker
+    mode: "0660"
+command:
+  docker-compose-is-available:
+    exec: docker compose version --short
+    exit-status: 0
+    stdout:
+      - '/^[2-9]\./'

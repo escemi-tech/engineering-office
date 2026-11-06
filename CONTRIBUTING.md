@@ -96,16 +96,21 @@ and cleanup in `tests/hermes/helpers/`.
 ## Ansible validation
 
 The Hermes workflow uses the released `ci-github-iac/actions/ansible/test` action
-for its native deployment tests. It reuses the disposable Docker VM after the
-Compose lifecycle has finished and its synthetic state has been removed. The
+for its native host preparation, deployment and reboot tests. Host preparation
+runs on the fresh Ubuntu VM before the Compose lifecycle. Runtime deployment
+reuses that VM after the demo's synthetic state has been removed. The
 shared action installs the pinned controller runtime and Galaxy requirements,
 executes the test playbook and publishes native JUnit reports. Goss separately
 checks the deployed service and filesystem boundaries. Assertions stay in these
 test files; workflow steps only prepare and invoke the scenarios.
 
-Keep the production entrypoint in `ansible/hermes.yml` and the reusable deployment
-in `ansible/roles/hermes`. The test playbook exercises that entrypoint and repeats
-the role to verify convergence. Supply only synthetic inputs and the shared VM's
+Keep the production entrypoints in `ansible/hermes-host.yml` and `ansible/hermes.yml`,
+with their respective roles in `ansible/roles/hermes_host` and `ansible/roles/hermes`.
+The tests exercise those entrypoints and repeat each role to verify convergence.
+Keep the Lima fixture free of runtime installation logic. Reboot the deployed
+guest through Ansible, then assert persistent state in Goss without redeploying.
+Shared test inventory setup belongs in `tests/ansible/helpers/`.
+Supply only synthetic inputs and the shared VM's
 SSH configuration; never connect this test to an operational inventory. No generic
 Ansible target-discovery job is needed for this concrete integration.
 
@@ -121,8 +126,11 @@ For local syntax validation, install the pinned tools in an isolated environment
 as described in the [deployment guide](docs/usage/hermes-deployment.md), then run:
 
 ```sh
+ansible-playbook --syntax-check ansible/hermes-host.yml
 ansible-playbook --syntax-check ansible/hermes.yml
+ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-host.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes.yml
+ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-reboot.yml
 ```
 
 The actual deployment scenarios require the disposable VM and run in hosted CI.

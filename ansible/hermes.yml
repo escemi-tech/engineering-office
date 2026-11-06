@@ -1,14 +1,6 @@
 ---
 - name: Require explicit deployment targets
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: Require an inventory containing approved Hermes hosts
-      ansible.builtin.assert:
-        that:
-          - groups.hermes | default([]) | length > 0
-        fail_msg: Configure the hermes inventory group with approved SSH targets.
-        quiet: true
+  ansible.builtin.import_playbook: helpers/hermes-inventory.yml
 
 - name: Deploy the professional Hermes runtime
   hosts: hermes

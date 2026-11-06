@@ -1,0 +1,30 @@
+---
+# Arrange: the preceding Goss scenario created the session on this disposable host.
+- name: Select the disposable host
+  ansible.builtin.import_playbook: helpers/inventory.yml
+
+- name: Reboot the deployed host without rerunning deployment
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Act
+    - name: Reboot and wait for the SSH connection to return
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+      register: hermes_host_reboot
+    # Assert
+    - name: Require a completed host reboot
+      ansible.builtin.assert:
+        that:
+          - hermes_host_reboot.rebooted
+        quiet: true
+    - name: Wait for the gateway to recover automatically
+      # checkov:skip=CKV2_ANSIBLE_1:Unauthenticated health check on loopback inside the disposable VM
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8642/health
+        status_code: 200
+      register: recovered_gateway
+      until: recovered_gateway.status == 200
+      retries: 30
+      delay: 5

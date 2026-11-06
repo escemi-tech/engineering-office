@@ -1,9 +1,9 @@
 # Deploy Hermes to an approved host
 
-The Ansible playbook installs the reviewed Compose assets, compiled writing policy
-and scoped credentials, then waits for the gateway to become healthy. It uses the
-existing Docker daemon on the selected SSH host. It does not provision a cloud
-instance, install Docker, open a firewall or admit private sources.
+Ansible prepares an approved Ubuntu host with Docker and Compose, then deploys
+the reviewed Hermes assets, compiled writing policy and scoped credentials.
+Host preparation and runtime deployment are separate commands. Neither creates
+a cloud instance, opens a firewall or admits private sources.
 
 Before deployment, approve the host, model processor, credentials and network
 access under the [permission policy](../development/assistant-security.md).
@@ -28,9 +28,8 @@ python -m pip install -r ansible/requirements.txt
 ansible-galaxy collection install -r ansible/collections/requirements.yml
 ```
 
-The target needs a supported Python 3 interpreter, GNU Make, a rootful Docker
-Engine at `/var/run/docker.sock`, and the Docker Compose plugin, version 2.18 or
-later. CI qualifies the repository's [Ubuntu VM](../../tests/lima.yml). Allow
+For host preparation, use Ubuntu 26.04 LTS amd64 with systemd, Python 3 and working
+Ubuntu package repositories. CI qualifies the repository's [Ubuntu VM](../../tests/lima.yml). Allow
 2 CPUs, 4 GiB RAM and enough Docker storage for the pinned image and state.
 The SSH operator must be able to become root; add `--ask-become-pass` to a direct
 Ansible invocation if required. Establish the SSH host key independently before
@@ -50,7 +49,8 @@ install -m 0600 ansible/hermes-deployment.example.yml .local/hermes-deployment.y
 ```
 
 Fill the inventory with the approved host's private SSH address and operator
-account. Fill `hermes_runtime` from the professional Bitwarden items:
+account. Host preparation needs only this inventory. For runtime deployment,
+fill `hermes_runtime` from the professional Bitwarden items:
 
 | Setting             | Required value                                                                                           |
 | ------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -64,6 +64,35 @@ query parameters and fragments are rejected in the endpoint URL. Extra keys in
 `hermes_runtime` are rejected, so a vault session or deployment token cannot be
 forwarded through this configuration mapping. Do not put credentials directly
 on the command line or commit either private file. Keep their mode `0600`.
+
+## Prepare the host
+
+With the inventory configured and the Ansible environment active:
+
+```sh
+make hermes-host
+```
+
+The [host playbook](../../ansible/hermes-host.yml) checks the qualified platform,
+installs Ubuntu's `docker.io`, `docker-compose-v2`, `make` and `python3-requests`
+packages, and starts and enables Docker. It uses Ansible's built-in modules and
+the [Ubuntu package installation path](https://ubuntu.com/server/docs/how-to/containers/docker-for-system-admins/),
+without another package repository or Galaxy role. Package versions come from
+the host's configured Ubuntu repositories. Repeating preparation keeps installed
+versions; operating-system security updates remain a separate operator task.
+APT fails if installation would remove packages, including conflicting Docker
+distributions. Review those conflicts rather than removing them automatically.
+
+Preparation does not change operator group membership, daemon configuration or
+SSH access, and does not reboot the host. It starts Docker, so review existing
+containers and their restart policies before running it on a reused host.
+Docker access is equivalent to host administration; production deployment uses
+privilege escalation instead of granting the SSH account Docker group access.
+
+An already prepared host can go directly to deployment. It needs GNU Make,
+Python 3 with Requests, a rootful Docker daemon at `/var/run/docker.sock`, and
+the Compose plugin version 2.18 or later. Only the Ubuntu platform above is
+covered by this repository's complete preparation and deployment CI scenario.
 
 ## Deploy and update
 

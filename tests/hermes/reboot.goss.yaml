@@ -1,0 +1,15 @@
+command:
+  deployed-hermes-retains-session-after-host-reboot:
+    exec: |
+      # Arrange: the deployment scenario created this conversation before reboot.
+      # Act: read the original history without another inference request.
+      docker exec engineering-office-hermes-test-hermes-1 sh -c '
+        curl --fail --silent --show-error --max-time 10 \
+          -H "Authorization: Bearer $API_SERVER_KEY" \
+          http://127.0.0.1:8642/api/sessions/engineering-office-host-reboot/messages
+      '
+      # Assert: both original messages survived the host reboot.
+    exit-status: 0
+    stdout:
+      - "Prepare a synthetic briefing."
+      - "Synthetic briefing: no connected sources."

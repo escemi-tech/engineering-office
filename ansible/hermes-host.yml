@@ -1,0 +1,10 @@
+---
+- name: Require explicit host preparation targets
+  ansible.builtin.import_playbook: helpers/hermes-inventory.yml
+
+- name: Prepare the professional Hermes host
+  hosts: hermes
+  become: true
+  gather_facts: true
+  roles:
+    - hermes_host

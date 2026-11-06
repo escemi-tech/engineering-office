@@ -3,8 +3,8 @@
 Use this procedure to prepare OVHcloud access and qualify the first professional
 Hermes host before implementing provisioning. It covers a new project setup or
 an existing project, without ordering compute. The
-[Hermes deployment playbook](hermes-deployment.md) requires an
-existing Docker host; it does not create cloud resources.
+[Hermes host and deployment playbooks](hermes-deployment.md) prepare an approved
+Ubuntu host and install the runtime; they do not create cloud resources.
 
 ## Select the target
 
