@@ -1,0 +1,205 @@
+---
+# Arrange: the preceding Goss scenario created a conversation on this guest.
+- name: Select the disposable host
+  ansible.builtin.import_playbook: helpers/inventory.yml
+
+- name: Exercise the public gateway health check on the disposable deployment
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Create a temporary controller inventory
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .yml
+      delegate_to: localhost
+      become: false
+      register: health_test_inventory
+    - name: Verify healthy and failed states without implicit recovery
+      block:
+        # Arrange
+        - name: Write only the disposable SSH target
+          ansible.builtin.copy:
+            dest: "{{ health_test_inventory.path }}"
+            mode: "0600"
+            content: |
+              hermes:
+                hosts:
+                  {{ inventory_hostname | to_json }}:
+                    ansible_ssh_common_args: {{ ansible_ssh_common_args | to_json }}
+                    ansible_python_interpreter: /usr/bin/python3
+          delegate_to: localhost
+          become: false
+        - name: Record the healthy deployment identity and restart policy
+          community.docker.docker_container_info:
+            name: engineering-office-hermes-test-hermes-1
+          register: health_test_before
+          no_log: true
+        # Act and Assert
+        - name: Check the live deployed gateway
+          ansible.builtin.include_tasks: helpers/check-health.yml
+          vars:
+            health_test_rc: 0
+            health_test_message: "Hermes gateway is healthy. Container restarts:"
+        - name: Reject an absent project despite a healthy unrelated gateway
+          ansible.builtin.include_tasks: helpers/check-health.yml
+          vars:
+            health_test_project: engineering-office-absent
+            health_test_message: Expected exactly one Hermes service container.
+        # Arrange
+        - name: Create an ambiguous service container with private diagnostic canaries
+          community.docker.docker_container:
+            name: engineering-office-hermes-health-probe
+            image: "{{ health_test_before.container.Config.Image }}"
+            entrypoint: [sleep, infinity]
+            command: []
+            env:
+              PRIVATE_CANARY: synthetic-health-private-canary
+            labels:
+              com.docker.compose.project: engineering-office-hermes-test
+              com.docker.compose.service: hermes
+            healthcheck:
+              test: [NONE]
+        # Act and Assert
+        - name: Reject ambiguity instead of selecting an arbitrary container
+          ansible.builtin.include_tasks: helpers/check-health.yml
+          vars:
+            health_test_message: Expected exactly one Hermes service container.
+        # Arrange
+        - name: Remove the ambiguity fixture
+          community.docker.docker_container:
+            name: engineering-office-hermes-health-probe
+            state: absent
+        - name: Pause the deployed gateway
+          ansible.builtin.command: docker container pause engineering-office-hermes-test-hermes-1
+          changed_when: true
+        # Act and Assert
+        - name: Reject a paused gateway even with a previously passing health check
+          ansible.builtin.include_tasks: helpers/check-health.yml
+          vars:
+            health_test_message: Hermes is not running normally.
+        # Arrange
+        - name: Unpause the deployment for the stopped-service scenario
+          ansible.builtin.command: docker container unpause engineering-office-hermes-test-hermes-1
+          changed_when: true
+        - name: Stop the gateway through the independent operator command
+          ansible.builtin.command:
+            argv:
+              [
+                make,
+                -C,
+                /srv/engineering-office,
+                HERMES_PROJECT=engineering-office-hermes-test,
+                hermes-stop,
+              ]
+          changed_when: true
+        # Act and Assert
+        - name: Reject a stopped gateway without undoing the kill switch
+          ansible.builtin.include_tasks: helpers/check-health.yml
+          vars:
+            health_test_message: Hermes is not running normally.
+        - name: Inspect the stopped deployment after the check
+          community.docker.docker_container_info:
+            name: engineering-office-hermes-test-hermes-1
+          register: health_test_stopped
+          no_log: true
+        - name: Require the original container to stay stopped with restart disabled
+          ansible.builtin.assert:
+            that:
+              - health_test_stopped.container.Id == health_test_before.container.Id
+              - not health_test_stopped.container.State.Running
+              - health_test_stopped.container.HostConfig.RestartPolicy.Name == 'no'
+            quiet: true
+        # Arrange: a synthetic endpoint avoids altering the real gateway's health config.
+        - name: Start a fixture with private health output and a failing native check
+          community.docker.docker_container: &health-endpoint
+            name: engineering-office-hermes-health-probe
+            image: "{{ health_test_before.container.Config.Image }}"
+            entrypoint: [node, --input-type=module, -e]
+            command:
+              - >-
+                import http from 'node:http';
+                http.createServer((_req, res) => {
+                  res.writeHead(503);
+                  res.end('synthetic-health-private-canary');
+                }).listen(8642, '0.0.0.0');
+            command_handling: correct
+            published_ports: [127.0.0.1:8642:8642]
+            labels:
+              com.docker.compose.project: engineering-office-hermes-health-probe
+              com.docker.compose.service: hermes
+            healthcheck:
+              test:
+                [
+                  CMD-SHELL,
+                  "echo synthetic-health-private-canary; exit {{ health_test_exit_code | default(1) }}",
+                ]
+              interval: 1s
+              timeout: 1s
+              retries: 1
+              start_period: 0s
+            state: "{{ health_test_state | default('started') }}"
+            healthy_wait_timeout: 30
+        - name: Wait for the fixture's unhealthy Docker state
+          community.docker.docker_container_info:
+            name: engineering-office-hermes-health-probe
+          register: health_test_unhealthy
+          until: health_test_unhealthy.container.State.Health.Status == 'unhealthy'
+          retries: 10
+          delay: 1
+          no_log: true
+        # Act and Assert
+        - name: Reject native health failure without printing its private output
+          ansible.builtin.include_tasks: helpers/check-health.yml
+          vars:
+            health_test_project: engineering-office-hermes-health-probe
+            health_test_message: Hermes has no passing Docker health check.
+        # Arrange
+        - name: Give the fixture a passing native check while its HTTP endpoint still fails
+          community.docker.docker_container: *health-endpoint
+          vars:
+            health_test_exit_code: 0
+            health_test_state: healthy
+        # Act and Assert
+        - name: Reject HTTP failure without printing its response body
+          ansible.builtin.include_tasks: helpers/check-health.yml
+          vars:
+            health_test_project: engineering-office-hermes-health-probe
+            health_test_message: Hermes did not answer its local health request successfully.
+      rescue:
+        - name: Fail the gateway health scenario
+          ansible.builtin.fail:
+            msg: The operator health check did not satisfy its expected state or diagnostic boundary.
+      always:
+        - name: Remove the disposable diagnostic endpoint
+          community.docker.docker_container:
+            name: engineering-office-hermes-health-probe
+            state: absent
+        - name: Resume only the disposable test gateway
+          community.docker.docker_container:
+            name: engineering-office-hermes-test-hermes-1
+            state: healthy
+            paused: false
+            restart_policy: unless-stopped
+            healthy_wait_timeout: 180
+          no_log: true
+        - name: Remove the temporary controller inventory
+          ansible.builtin.file:
+            path: "{{ health_test_inventory.path }}"
+            state: absent
+          delegate_to: localhost
+          become: false
+    # Assert: fixture arrangements must not replace the deployment or its volume.
+    - name: Inspect the final deployment identity and restart policy
+      community.docker.docker_container_info:
+        name: engineering-office-hermes-test-hermes-1
+      register: health_test_after
+      no_log: true
+    - name: Require the same healthy container and restored restart policy
+      ansible.builtin.assert:
+        that:
+          - health_test_after.container.Id == health_test_before.container.Id
+          - health_test_after.container.State.Health.Status == 'healthy'
+          - health_test_after.container.HostConfig.RestartPolicy == health_test_before.container.HostConfig.RestartPolicy
+        quiet: true
+# The following reboot/session Goss scenario also reads the original conversation.

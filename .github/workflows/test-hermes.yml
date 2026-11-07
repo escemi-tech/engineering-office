@@ -167,6 +167,16 @@ jobs:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/deployment.goss.yaml
           report-name: engineering-office - Hermes deployed boundary
+      # Act and Assert: inspect failures without exposing content or restarting the service.
+      - name: Test operator gateway health diagnostics
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        env: *vm-connection
+        with:
+          test-playbook: tests/ansible/hermes-health.yml
+          report-name: engineering-office - Hermes gateway health
+          ansible-requirements: ansible/requirements.txt
+          galaxy-requirements: ansible/collections/requirements.yml
+          ansible-config: tests/ansible/ansible.cfg
       # Act and Assert: reboot without reapplying either production playbook.
       - name: Test automatic recovery after host reboot
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0

@@ -1,0 +1,13 @@
+---
+- name: Require explicit health-check targets
+  ansible.builtin.import_playbook: helpers/hermes-inventory.yml
+
+- name: Check the deployed Hermes gateway without changing its state
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check gateway liveness through Docker and its local HTTP endpoint
+      ansible.builtin.include_role:
+        name: hermes
+        tasks_from: health

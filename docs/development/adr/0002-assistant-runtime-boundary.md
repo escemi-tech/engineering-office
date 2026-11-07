@@ -239,3 +239,28 @@ source completeness. The backup entrypoint continues to fail on any nonzero exit
 operators must investigate that failure even if a later check passes. Keep native
 backup outcomes and restore drills as separate evidence rather than introduce a
 custom success-marker store in this manual verification slice.
+
+### Operator gateway health (2026-11-07)
+
+Add `hermes-health` as a manual liveness signal alongside backup integrity and age.
+Reuse the installed Ansible Docker collection's
+[host inspection](https://docs.ansible.com/projects/ansible/latest/collections/community/docker/docker_host_info_module.html)
+and container inspection, followed by the built-in
+[HTTP module](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/uri_module.html).
+No new monitoring agent, polling loop, metrics backend or runtime dependency is
+needed for this operator command.
+
+Select the service by its Compose project/service labels, reject missing or
+ambiguous containers, and require running/unpaused state, passing Docker health
+and the expected loopback-only port binding. Check the current host-side endpoint
+without credentials, redirects, proxies or `.netrc` use. Hide full inspection and
+response data; expose only fixed diagnostics and a numeric restart count. This
+keeps health-check output separate from restricted incident evidence.
+
+Inspection must preserve a stopped service and disabled restart policy. Recovery
+remains an explicit operator decision. Synthetic tests exercise real stopped and
+paused state, ambiguity, private diagnostic canaries and a failing HTTP endpoint
+despite passing native health. The recovered runtime also passes without an
+inference sidecar: liveness deliberately does not claim model readiness. Source
+freshness, correlated request telemetry, scheduled checks, notifications and
+private operational qualification remain open under OPS-002.

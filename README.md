@@ -7,7 +7,7 @@ API. Start with the [synthetic demo and runtime guide](docs/usage/hermes.md).
 Cloud provisioning and private integrations remain pending.
 
 Use the [Ansible deployment guide](docs/usage/hermes-deployment.md) to prepare
-an approved Ubuntu host and install Hermes with scoped credentials.
+an approved Ubuntu host, install Hermes with scoped credentials and check gateway health.
 Use the [backup and recovery guide](docs/usage/hermes-backup.md) to encrypt stopped
 state, check backup integrity and age, expire old recovery points and restore a
 selected snapshot into a fresh volume.

@@ -146,12 +146,14 @@ as described in the [deployment guide](docs/usage/hermes-deployment.md), then ru
 ```sh
 ansible-playbook --syntax-check ansible/hermes-host.yml
 ansible-playbook --syntax-check ansible/hermes.yml
+ansible-playbook --syntax-check ansible/hermes-health.yml
 ansible-playbook --syntax-check ansible/hermes-backup.yml
 ansible-playbook --syntax-check ansible/hermes-backup-check.yml
 ansible-playbook --syntax-check ansible/hermes-backup-prune.yml
 ansible-playbook --syntax-check ansible/hermes-restore.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-host.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes.yml
+ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-health.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-reboot.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-backup.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-recovery.yml
@@ -161,3 +163,10 @@ The actual deployment scenarios require the disposable VM and run in hosted CI.
 Secret-bearing template and Compose tasks use `no_log`; never add debug output
 that prints their inputs or full results. Use native Compose dotenv quoting in
 the template, and retain the literal-character test when changing serialization.
+
+The operator health check reuses the `hermes` role's `health` tasks without running
+deployment tasks. Keep Docker inspection and HTTP responses hidden, and report
+only explicit safe fields. Its native Ansible scenario captures public-command
+output to check redaction and failed-state behavior. Only that disposable fixture
+may resume the service after testing the kill switch. The fresh-host recovery
+scenario also checks liveness without an inference endpoint.

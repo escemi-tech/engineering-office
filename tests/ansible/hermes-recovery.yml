@@ -74,6 +74,10 @@
 - name: Deploy the recovered runtime
   ansible.builtin.import_playbook: ../../ansible/hermes.yml
 
+# Act: gateway liveness does not require the lost host's inference sidecar.
+- name: Check the recovered gateway through the public entrypoint
+  ansible.builtin.import_playbook: ../../ansible/hermes-health.yml
+
 - name: Record the running deployment before checking backups
   hosts: hermes
   become: true
