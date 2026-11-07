@@ -123,6 +123,11 @@ synthetic key before restoring. Goss must read the original conversation without
 new inference. Always schedule cleanup of both guests and the runner copy; never
 upload the repository or keys as artifacts. Shared synthetic runtime/recovery
 settings and expected-rejection probes stay in the explicit helpers directory.
+The backup-check entrypoint verifies integrity and the daily freshness objective
+without changing the service or recovery points. Its negative cases use the same
+disposable history, unrelated host/path/tag snapshots and a separately damaged
+repository copy. Check both stopped and running services, and keep raw snapshot
+metadata and fixture credentials out of reports.
 Supply only synthetic inputs and the shared VM's
 SSH configuration; never connect this test to an operational inventory. No generic
 Ansible target-discovery job is needed for this concrete integration.
@@ -142,6 +147,7 @@ as described in the [deployment guide](docs/usage/hermes-deployment.md), then ru
 ansible-playbook --syntax-check ansible/hermes-host.yml
 ansible-playbook --syntax-check ansible/hermes.yml
 ansible-playbook --syntax-check ansible/hermes-backup.yml
+ansible-playbook --syntax-check ansible/hermes-backup-check.yml
 ansible-playbook --syntax-check ansible/hermes-backup-prune.yml
 ansible-playbook --syntax-check ansible/hermes-restore.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-host.yml

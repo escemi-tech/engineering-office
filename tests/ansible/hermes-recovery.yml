@@ -73,4 +73,37 @@
 # Act: deploy reviewed assets and synthetic credentials without an inference sidecar.
 - name: Deploy the recovered runtime
   ansible.builtin.import_playbook: ../../ansible/hermes.yml
+
+- name: Record the running deployment before checking backups
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Arrange
+    - name: Read the recovered container identity
+      community.docker.docker_container_info:
+        name: "{{ hermes_project_name }}-hermes-1"
+      register: recovery_before_check
+
+# Act: the public check must also work while the recovered runtime is running.
+- name: Check recovered backup integrity and freshness
+  ansible.builtin.import_playbook: ../../ansible/hermes-backup-check.yml
+
+- name: Verify backup checking preserves the live service
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Assert
+    - name: Read the container after checking
+      community.docker.docker_container_info:
+        name: "{{ hermes_project_name }}-hermes-1"
+      register: recovery_after_check
+    - name: Require the same running container and restart policy
+      ansible.builtin.assert:
+        that:
+          - recovery_after_check.container.Id == recovery_before_check.container.Id
+          - recovery_after_check.container.State.Running
+          - recovery_after_check.container.HostConfig.RestartPolicy == recovery_before_check.container.HostConfig.RestartPolicy
+        quiet: true
 # Assert: Goss reads the original conversation without making a new model request.

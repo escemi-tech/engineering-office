@@ -23,6 +23,8 @@
     that:
       - item.rc == 2
       - item.item.message in item.stdout
+      - "'synthetic-restic-fixture-password-never-for-production' not in item.stdout"
+      - "'synthetic-restic-plaintext-canary' not in item.stdout"
     quiet: true
   loop: "{{ backup_rejections.results }}"
   loop_control:

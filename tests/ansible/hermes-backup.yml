@@ -79,6 +79,13 @@
           - playbook: hermes-backup-prune
             variables: {}
             message: Stop the selected deployment with make hermes-stop
+          - playbook: hermes-backup-check
+            variables: {}
+            message: No matching Hermes recovery point exists
+          - playbook: hermes-backup-check
+            variables:
+              hermes_project_name: absent-fixture
+            message: Backup check requires the deployment's existing dedicated local state volume
 
 - name: Enter the disposable maintenance window
   hosts: hermes
@@ -132,6 +139,47 @@
       changed_when: true
       no_log: true
       register: unrelated_backup
+    - name: Create an unrelated fixture path
+      ansible.builtin.file:
+        path: /var/lib/hermes-backup-test/unrelated-state
+        state: directory
+        mode: "0700"
+    - name: Add fresh decoys for a different host or state path
+      ansible.builtin.command:
+        argv:
+          - restic
+          - --no-cache
+          - backup
+          - --json
+          - --host
+          - "{{ item.host }}"
+          - --tag
+          - engineering-office-hermes-state
+          - "{{ item.path }}"
+      environment:
+        RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+        RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+      loop:
+        - host: unrelated-host
+          path: "{{ fixture_state_volume.volume.Mountpoint }}"
+        - host: "{{ hermes_project_name }}"
+          path: /var/lib/hermes-backup-test/unrelated-state
+      changed_when: true
+      no_log: true
+      register: unrelated_check_snapshots
+
+# Act and Assert: fresh snapshots from other scopes must not hide stale state.
+- name: Verify stale-backup detection against the real encrypted repository
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Reject stale state despite fresh differently tagged, hosted or pathed snapshots
+      ansible.builtin.include_tasks: helpers/expect-backup-rejection.yml
+      vars:
+        backup_rejection_cases:
+          - playbook: hermes-backup-check
+            variables: {}
+            message: No matching recovery point is within 24 hours
 
 # Act
 - name: Create a verified replacement and expire sparse history
@@ -189,9 +237,16 @@
           - expired_snapshots | intersect(kept_ids) | length == 0
           - hermes_backup_retention_remove | intersect(kept_ids) | length == 0
           - (unrelated_backup.stdout_lines[-1] | from_json).snapshot_id in kept_ids
+          - unrelated_ids | difference(all_ids) | length == 0
         quiet: true
       vars:
-        kept_ids: "{{ retained_snapshots.stdout | from_json | map(attribute='id') | list }}"
+        all_ids: "{{ retained_snapshots.stdout | from_json | map(attribute='id') | list }}"
+        kept_ids: >-
+          {{ retained_snapshots.stdout | from_json | selectattr('hostname', 'equalto', hermes_project_name) |
+             selectattr('paths', 'equalto', [fixture_state_volume.volume.Mountpoint]) | map(attribute='id') | list }}
+        unrelated_ids: >-
+          {{ unrelated_check_snapshots.results | map(attribute='stdout_lines') |
+             map('last') | map('from_json') | map(attribute='snapshot_id') | list }}
     # Arrange: a future timestamp must stop retention, not advance its clock.
     - name: Add a snapshot with an invalid future timestamp
       ansible.builtin.include_tasks: helpers/retention-fixture.yml
@@ -220,6 +275,13 @@
           - playbook: hermes-backup-prune
             variables: {}
             message: Reject future timestamps
+          - playbook: hermes-backup-check
+            variables:
+              hermes_backup_password_file: /var/lib/hermes-backup-test/wrong-password
+            message: Authenticate and verify the encrypted repository
+          - playbook: hermes-backup-check
+            variables: {}
+            message: A matching recovery point is in the future
           - playbook: hermes-restore
             variables:
               hermes_restore_snapshot: latest
@@ -228,10 +290,6 @@
             variables:
               hermes_restore_snapshot: "{{ hostvars[lookup('ansible.builtin.env', 'VM_NAME')].hermes_backup_snapshot }}"
             message: Restore requires a new volume
-    - name: Remove the temporary inventory
-      ansible.builtin.file:
-        path: "{{ backup_test_inventory.path }}"
-        state: absent
 
 - name: Preserve recovery material outside the disposable source host
   hosts: hermes
@@ -273,6 +331,87 @@
       environment: *fixture-restic-environment
       changed_when: true
       no_log: true
+    # Act: checking a stopped service must not restart it.
+    - name: Check integrity and freshness of the valid stopped deployment
+      ansible.builtin.include_role:
+        name: hermes_backup
+        tasks_from: check
+    # Arrange: damage only a separate disposable repository copy.
+    - name: Copy the encrypted repository for corruption detection
+      ansible.builtin.copy:
+        src: "{{ hermes_backup_repository }}/"
+        dest: /var/lib/hermes-backup-test/corrupt-repository/
+        remote_src: true
+        mode: preserve
+        directory_mode: "0700"
+    - name: Find an encrypted pack in the disposable copy
+      ansible.builtin.find:
+        paths: /var/lib/hermes-backup-test/corrupt-repository/data
+        recurse: true
+        file_type: file
+      register: corrupt_fixture_packs
+    - name: Damage an encrypted data pack without touching the original
+      ansible.builtin.command:
+        argv:
+          [
+            truncate,
+            --size,
+            "0",
+            "{{ (corrupt_fixture_packs.files | sort(attribute='path'))[0].path }}",
+          ]
+      changed_when: true
+
+- name: Verify corrupt-backup rejection
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    # Act and Assert
+    - name: Reject corrupt encrypted data before reporting freshness
+      ansible.builtin.include_tasks: helpers/expect-backup-rejection.yml
+      vars:
+        backup_rejection_cases:
+          - playbook: hermes-backup-check
+            variables:
+              hermes_backup_repository: /var/lib/hermes-backup-test/corrupt-repository
+            message: Authenticate and verify the encrypted repository
+    - name: Remove the temporary inventory
+      ansible.builtin.file:
+        path: "{{ backup_test_inventory.path }}"
+        state: absent
+
+- name: Verify checks preserve state and export the verified original repository
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Assert
+    - name: Inspect the source after successful and failed backup checks
+      community.docker.docker_container_info:
+        name: "{{ hermes_project_name }}-hermes-1"
+      register: checked_source
+    - name: Require checks to preserve the stopped container and restart policy
+      ansible.builtin.assert:
+        that:
+          - checked_source.container.Id == preserved_source.container.Id
+          - not checked_source.container.State.Running
+          - checked_source.container.HostConfig.RestartPolicy.Name == 'no'
+        quiet: true
+    - name: Read snapshots after checks
+      ansible.builtin.command:
+        argv: [restic, --no-cache, snapshots, --json]
+      environment: *fixture-restic-environment
+      changed_when: false
+      no_log: true
+      register: checked_snapshots
+    - name: Require checks to preserve every recovery point
+      ansible.builtin.assert:
+        that:
+          - checked_ids | sort == expected_ids | sort
+        quiet: true
+      vars:
+        checked_ids: "{{ checked_snapshots.stdout | from_json | map(attribute='id') | list }}"
+        expected_ids: "{{ preserved_snapshots.stdout | from_json | map(attribute='id') | reject('equalto', future_snapshot) | list }}"
+    # Arrange
     - name: Allocate a protected encrypted-repository transport file
       ansible.builtin.file:
         path: /var/lib/hermes-backup-test/repository.tar
