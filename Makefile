@@ -6,7 +6,7 @@ HOST_GID := $(shell id -g)
 HERMES_PROJECT := engineering-office-hermes
 HERMES_COMPOSE := docker compose --env-file .local/hermes.env --project-name $(HERMES_PROJECT) -f services/hermes/compose.yml
 
-.PHONY: help lint-fix ci lint hermes-policy hermes-start hermes-stop hermes-logs hermes-host hermes-deploy hermes-health hermes-backup hermes-backup-check hermes-backup-prune hermes-restore plan provision configure deploy verify backup
+.PHONY: help lint-fix ci lint github-briefing hermes-policy hermes-start hermes-stop hermes-logs hermes-host hermes-deploy hermes-health hermes-backup hermes-backup-check hermes-backup-prune hermes-restore plan provision configure deploy verify backup
 help: ## Display help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
@@ -27,6 +27,9 @@ lint-fix: ## Execute linting and fix
 
 ci: ## Execute local CI tasks
 	$(MAKE) lint-fix
+
+github-briefing: ## Read recent open work from the approved public GitHub repository
+	@npm run --silent --prefix packages/github-briefing briefing
 
 hermes-policy: ## Build the canonical writing policy with the qualified APM compiler
 	bash services/hermes/build-policy.sh

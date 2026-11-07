@@ -27,9 +27,21 @@ jobs:
     uses: $/.github/workflows/test-hermes.yml
     permissions:
       contents: read
-      pull-requests: write
   test-writing-normalizer:
     uses: $/.github/workflows/test-writing-normalizer.yml
     permissions:
       contents: read
+  test-github-briefing:
+    uses: $/.github/workflows/test-github-briefing.yml
+    permissions:
+      contents: read
+
+  reports:
+    needs: [test-hermes, test-writing-normalizer, test-github-briefing]
+    if: always()
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@a9378a75e8d91af8f4cf3192cb74e68954259012 # Consolidated reports: ci-github-common PR 632
+    permissions:
+      contents: read
       pull-requests: write
+    with:
+      job-results: ${{ toJSON(needs) }}
