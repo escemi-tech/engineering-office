@@ -7,9 +7,10 @@ on:
 permissions: {}
 
 jobs:
-  linter:
-    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@44f6108cef0e9884ea7735f3d62932c2310745d4 # 0.39.1
+  lint:
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@d92fc45447587bab1daef3834b6596fb09a76292 # 2.0.1
     with:
+      comment: false
       # Remove with the Makefile exclusion once zizmor accepts the APM ecosystem.
       # GitHub's native Dependabot configuration validation remains active.
       linter-env: |
@@ -27,9 +28,21 @@ jobs:
     uses: $/.github/workflows/test-hermes.yml
     permissions:
       contents: read
-      pull-requests: write
   test-writing-normalizer:
     uses: $/.github/workflows/test-writing-normalizer.yml
     permissions:
       contents: read
+  test-github-briefing:
+    uses: $/.github/workflows/test-github-briefing.yml
+    permissions:
+      contents: read
+
+  reports:
+    needs: [lint, test-hermes, test-writing-normalizer, test-github-briefing]
+    if: always()
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@d92fc45447587bab1daef3834b6596fb09a76292 # 2.0.1
+    permissions:
+      contents: read
       pull-requests: write
+    with:
+      job-results: ${{ toJSON(needs) }}

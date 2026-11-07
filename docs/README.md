@@ -2,6 +2,7 @@
 
 - [Validate the repository](usage/validation.md)
 - [Run Hermes](usage/hermes.md)
+- [Read GitHub work for a professional briefing](usage/github-briefing.md)
 - [Qualify the OVHcloud host](usage/ovh-qualification.md)
 - [Deploy Hermes to an approved host](usage/hermes-deployment.md)
 - [Back up and recover Hermes state](usage/hermes-backup.md)
@@ -14,3 +15,4 @@
 - [ADR 0002: Professional assistant runtime boundary](development/adr/0002-assistant-runtime-boundary.md)
 - [ADR 0003: Writing-policy source and conditional APM delivery](development/adr/0003-agent-content-qualification.md)
 - [ADR 0004: Local normalization of classified draft prose](development/adr/0004-local-writing-normalization.md)
+- [ADR 0005: Bounded public GitHub evidence](development/adr/0005-github-briefing-source.md)

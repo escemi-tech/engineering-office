@@ -19,7 +19,11 @@ pushes and manual runs; PR CI also supports merge queues. Both cancel superseded
 runs for the same workflow and ref. Start workflows with `permissions: {}` and
 grant only the permissions required by each job. Keep step names descriptive and
 Actions pinned. Compose shared VM operations in the job, and review each job's
-result before merging.
+result before merging. Test actions and the shared linter use `comment: false`; the final shared
+reporting job updates the test, coverage and lint comments with collapsed details.
+The linter retains the permissions declared by its reusable workflow. Test jobs
+need no comment permission. Keep the caller job ID `lint` aligned with the shared
+linter so the publisher can associate its artifact with its job result.
 
 Use Conventional Commits and reviewed pull requests. Pin all infrastructure test actions
 to the same immutable revision in the workflow that owns the scenario. Update those references
@@ -67,15 +71,23 @@ APM version updates do not provide security updates. See
 [GitHub's APM support reference](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories#apm).
 
 The Hermes Compose image is pinned by release tag and digest. Renovate handles
-the writing normalizer's `.node-version` through its native `nodenv` manager,
+package `.node-version` files through its native `nodenv` manager,
 and Ansible/Terraform dependencies when their manifests are present. Dependabot
-updates the normalizer's exact npm dependency pin and native lockfile. Keep its
+updates both packages' exact npm dependency pins and native lockfiles. Keep the normalizer's
 English/French and format-preservation corpus as the dependency upgrade gate;
 review changed behavior before accepting an update. Install with `npm ci --ignore-scripts`.
 Duplication detection excludes generated npm lockfiles, matching ci-github-iac;
 the zero-duplication threshold still applies to maintained code and fixtures.
 See the [validation guide](docs/usage/validation.md#writing-normalizer) for its
 dedicated test workflow and local command.
+
+The GitHub briefing package has its own synthetic SDK/CLI contract suite and
+[dedicated workflow](.github/workflows/test-github-briefing.yml). Keep source
+admission in its manifest and ADR, validate identity before reading records and
+preserve sanitized failures. Do not add live API calls or credentials to its CI
+fixtures. Review the explicit GitHub API protocol version against upstream
+deprecation notices when maintaining the adapter; dependency bots do not update
+that header. See the [source tests](docs/usage/validation.md#github-briefing-source).
 
 The Hermes build and fixture share the compiler pin in
 [`services/hermes/.apm-version`](services/hermes/.apm-version). The upstream APM
