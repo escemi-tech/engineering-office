@@ -136,3 +136,34 @@ Unattended vault access, connector identities, provider revocation, production
 approval automation and private-data recovery remain separate implementation work.
 Use the [backup guide](hermes-backup.md) to prepare encrypted recovery material
 and restore state before deploying a recovered runtime.
+
+## Check gateway health
+
+From the controller, with the Ansible environment active and the approved SSH
+inventory configured:
+
+```sh
+make hermes-health
+```
+
+This checks the selected host's Docker daemon, requires exactly one running,
+unpaused Hermes service with a passing native health check, verifies its
+loopback-only port binding and requests `http://127.0.0.1:8642/health` on that host.
+It does not follow redirects or use HTTP proxies or `.netrc` credentials. Docker
+requests have a 10-second timeout; the HTTP request has a 5-second timeout.
+Run it after deployment has finished, since a starting container is not yet healthy.
+
+The command needs only the inventory and operator access, with the pinned Ansible
+collections installed. It does not load the runtime credential file, compile
+policy, make an inference request, read conversations or change service state.
+Docker inspection results and HTTP response bodies are hidden. Success reports
+gateway liveness and its numeric container restart count; missing, ambiguous,
+stopped, paused, unhealthy or unreachable services fail with a diagnostic message.
+A stopped service remains stopped, including when the kill switch disabled restart.
+
+This is a point-in-time liveness check, not proof of working model credentials,
+provider availability, private-source freshness or backup recoverability. Use
+[`make hermes-backup-check`](hermes-backup.md#check-backup-integrity-and-age)
+for backup verification. There is no scheduler or notification delivery yet.
+For failures, inspect restricted host logs using the [runtime runbook](hermes.md#stop-and-revoke-access);
+do not publish logs or full container inspection output in shared diagnostics.

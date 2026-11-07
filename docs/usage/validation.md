@@ -125,7 +125,16 @@ namespace and is accessed through loopback; it holds no provider credentials. Th
 does not qualify production egress restrictions. Native Ansible reports and Goss
 reports remain separate; see [CONTRIBUTING](../../CONTRIBUTING.md#ansible-validation).
 
-After that conversation, the [reboot scenario](../../tests/ansible/hermes-reboot.yml)
+After that conversation, the [health scenario](../../tests/ansible/hermes-health.yml)
+runs the operator's public health-check playbook against the same deployment.
+It verifies healthy output, absent/ambiguous services, paused and stopped gateways,
+a failed native health check and an HTTP failure despite a passing native check.
+Public synthetic canaries in container settings, health logs and response bodies
+must stay out of captured diagnostics. Checks must report zero changes and preserve
+the kill switch; only fixture cleanup deliberately resumes the disposable service.
+The scenario retains the original container identity and restart policy.
+
+The [reboot scenario](../../tests/ansible/hermes-reboot.yml)
 uses Ansible's reboot module to restart the whole guest and wait for SSH and the
 gateway health endpoint. It does not rerun host preparation or deployment.
 Goss repeats the host checks and [reads the original conversation](../../tests/hermes/session.goss.yaml)

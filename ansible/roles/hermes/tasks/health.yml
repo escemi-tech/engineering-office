@@ -1,0 +1,89 @@
+---
+- name: Require a valid Compose project
+  ansible.builtin.assert:
+    that:
+      - hermes_project_name is match('^[a-z0-9][a-z0-9_-]+$')
+    fail_msg: Supply a valid Hermes Compose project name.
+    quiet: true
+
+- name: Inspect the selected service through the host Docker socket
+  block:
+    - name: Find all containers belonging to the selected Hermes service
+      community.docker.docker_host_info:
+        docker_host: unix:///var/run/docker.sock
+        timeout: 10
+        containers: true
+        containers_all: true
+        containers_filters:
+          label:
+            - "com.docker.compose.project={{ hermes_project_name }}"
+            - com.docker.compose.service=hermes
+      register: hermes_health_service
+      no_log: true
+  rescue:
+    - name: Report unavailable Docker inspection
+      ansible.builtin.fail:
+        msg: Cannot inspect Hermes. Check the host Docker daemon and operator access.
+
+- name: Require one unambiguous service container
+  ansible.builtin.assert:
+    that:
+      - hermes_health_service.containers | length == 1
+    fail_msg: Expected exactly one Hermes service container. Inspect the selected Compose project.
+    quiet: true
+
+- name: Inspect the selected container without exposing its environment or logs
+  community.docker.docker_container_info:
+    docker_host: unix:///var/run/docker.sock
+    timeout: 10
+    name: "{{ hermes_health_service.containers[0].Id }}"
+  register: hermes_health_container
+  no_log: true
+
+- name: Require a running service
+  ansible.builtin.assert:
+    that:
+      - hermes_health_container.exists
+      - hermes_health_container.container.State.Status == 'running'
+      - not hermes_health_container.container.State.Paused
+    fail_msg: Hermes is not running normally. Inspect its state; this check never starts or restarts it.
+    quiet: true
+
+- name: Require a passing native Docker health check
+  ansible.builtin.assert:
+    that:
+      - hermes_health_container.container.State.Health.Status | default('missing') == 'healthy'
+    fail_msg: Hermes has no passing Docker health check. Inspect its startup or failure privately.
+    quiet: true
+
+- name: Require the selected container to own the expected loopback listener
+  ansible.builtin.assert:
+    that:
+      - >-
+        hermes_health_container.container.NetworkSettings.Ports['8642/tcp'] | default([]) ==
+        [{'HostIp': '127.0.0.1', 'HostPort': '8642'}]
+    fail_msg: Hermes does not publish the expected loopback-only gateway port. Review its deployment.
+    quiet: true
+
+- name: Check current gateway reachability without credentials or inference
+  block:
+    - name: Request the local health endpoint without forwarding or disclosing its response
+      # checkov:skip=CKV2_ANSIBLE_1:Unauthenticated health endpoint restricted to the target host loopback
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8642/health
+        method: GET
+        status_code: 200
+        timeout: 5
+        follow_redirects: none
+        use_proxy: false
+        use_netrc: false
+        return_content: false
+      no_log: true
+  rescue:
+    - name: Report an unavailable gateway
+      ansible.builtin.fail:
+        msg: Hermes did not answer its local health request successfully. Inspect the gateway privately.
+
+- name: Report only the verified gateway state and numeric restart count
+  ansible.builtin.debug:
+    msg: "Hermes gateway is healthy. Container restarts: {{ hermes_health_container.container.RestartCount | int }}."
