@@ -3,6 +3,13 @@
 The first MVP serves professional internal work. Its current runtime is qualified
 with public synthetic fixtures only. Personal and client sources remain disabled.
 
+The operator can separately collect public issue/PR metadata from the approved
+`escemi-tech/engineering-office` repository with the
+[GitHub source command](../usage/github-briefing.md). Its
+[admission record](adr/0005-github-briefing-source.md) defines the exact resource,
+anonymous reads, local processing and absence of persistence. This command has no
+connection to Hermes; runtime tools remain disabled.
+
 | Identity                   | Responsibility                                                                                                                       |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Human operator             | Select sources and processors, review final external actions, approve deployments and revoke access.                                 |

@@ -1,5 +1,15 @@
 # Validate the repository
 
+CI publishes two persistent PR comments: consolidated test results and coverage.
+Each test job retains its detailed summary and native report artifacts. The final
+reporting job includes failed, cancelled and skipped job states; individual test
+jobs remain the merge checks. Coverage stays separate for each package.
+
+Only artifacts from the current run attempt are included. A partial rerun can
+omit reports from successful jobs that were not rerun; rerun all test jobs for a
+complete report. Missing reports never mean passing tests. Fork and Dependabot
+runs retain summaries and artifacts without publishing comments.
+
 Static validation requires Docker and GNU Make. `make lint` runs the pinned
 Hoverkraft linter, including YAML, workflow, IaC and secret checks. `make ci`
 applies the supported automatic lint fixes.
@@ -29,6 +39,28 @@ dependencies first and run the suite in a disposable container with `--network n
 Reports stay in the gitignored `.reports/` directory. No host provisioning or
 credentials are needed. These tests qualify the [local adapter](writing-normalizer.md),
 not a publisher or a client's instruction loading.
+
+## GitHub briefing source
+
+The [dedicated workflow](../../.github/workflows/test-github-briefing.yml) uses the
+same Hoverkraft Node.js action to test the installed GitHub SDK and validation
+library with synthetic HTTP responses. Suites cover provenance, minimal data,
+repository identity and public visibility, revision consistency, bounded requests,
+truncation, malformed records, sanitized API failures and the actual CLI.
+
+Use the package's `.node-version` runtime:
+
+```sh
+cd packages/github-briefing
+npm ci --ignore-scripts
+npm run test:ci
+```
+
+JUnit and LCOV reports stay in `.reports/`. Tests require no GitHub credential,
+live API or model; they also run with networking disabled after installation.
+The fixtures exercise the SDK through a replaced fetch transport. They qualify
+the [source snapshot command](github-briefing.md), not GitHub's availability or
+an assistant's interpretation. Keep raw response/error canaries out of reports.
 
 ## Hermes lifecycle
 
