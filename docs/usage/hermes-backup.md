@@ -57,6 +57,40 @@ require a root-owned mode-`0700` repository and a separate nonempty mode-`0600`
 key file. They reject symlinks and noncanonical paths. They do not create a
 repository, mount storage or retrieve a key from the vault.
 
+## Check backup integrity and age
+
+With the same approved inventory and recovery settings, run from the controller:
+
+```sh
+make hermes-backup-check
+```
+
+The command checks the protected repository/key paths and runs Restic's full
+`check --read-data`. It then requires a snapshot matching this Compose project's
+backup host identity, Hermes tag and exact current Docker volume path. A fresh
+snapshot from another deployment, tag or path cannot hide stale Hermes state.
+The newest matching snapshot must be at most 24 hours old; any matching future
+timestamp fails the check. This implements the initial daily-backup objective,
+not an independently measured recovery guarantee. Keep the host clock correct.
+
+A successful run reports integrity verification and the newest snapshot's age in
+seconds. Raw snapshot metadata, file contents and credentials stay out of command
+output. Missing state or recovery points, stale/future timestamps, wrong keys,
+damaged data and repository access/locking failures return a nonzero exit.
+Inspect the named failure, preserve existing backups and arrange a stopped-state
+backup when freshness is the problem. Do not bypass verification or unlock a
+repository while another operation owns its lock.
+
+Hermes can be running or stopped. The check leaves its container, restart policy,
+state and snapshots untouched; native Restic uses temporary repository locks.
+Full verification reads all encrypted data and needs exclusive repository access,
+so reserve a suitable window and account for storage I/O. Scheduling and remote
+notifications are not enabled. A successful check describes that moment; it does
+not replace a restore drill, independent storage/key recovery or ongoing monitoring.
+Restic can retain a partial snapshot after a failed backup. Integrity and age
+alone cannot establish that all intended source files were captured; always
+review failed backup runs even when this check passes.
+
 ## Take a consistent backup
 
 Reserve an exclusive maintenance window. Do not deploy, start, modify or otherwise

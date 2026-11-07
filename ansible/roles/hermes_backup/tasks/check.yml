@@ -1,0 +1,90 @@
+---
+- name: Verify recovery credentials and full repository integrity
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Inspect the deployment's current state volume
+  community.docker.docker_volume_info:
+    name: "{{ hermes_project_name }}_state"
+  register: hermes_backup_check_volume
+
+- name: Require the deployment's dedicated local state
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_check_volume.exists
+      - hermes_backup_check_volume.volume.Driver == 'local'
+      - not hermes_backup_check_volume.volume.Options
+      - not hermes_backup_repository.startswith(hermes_backup_check_volume.volume.Mountpoint)
+      - not hermes_backup_password_file.startswith(hermes_backup_check_volume.volume.Mountpoint)
+    fail_msg: Backup check requires the deployment's existing dedicated local state volume and recovery material outside it.
+    quiet: true
+
+- name: Read only recovery points for this deployment and state path
+  ansible.builtin.command:
+    argv:
+      - restic
+      - --no-cache
+      - snapshots
+      - --json
+      - --host
+      - "{{ hermes_project_name }}"
+      - --path
+      - "{{ hermes_backup_check_volume.volume.Mountpoint }}"
+      - --tag
+      - engineering-office-hermes-state
+  environment:
+    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+  changed_when: false
+  no_log: true
+  register: hermes_backup_check_snapshots
+
+- name: Select snapshots containing exactly the deployment state path
+  ansible.builtin.set_fact:
+    hermes_backup_check_matching: >-
+      {{ hermes_backup_check_snapshots.stdout | from_json |
+         selectattr('paths', 'equalto', [hermes_backup_check_volume.volume.Mountpoint]) | list }}
+    hermes_backup_check_ages: []
+  no_log: true
+
+- name: Require a matching recovery point
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_check_matching | length > 0
+    fail_msg: No matching Hermes recovery point exists. Arrange a stopped-state backup; preserve other snapshots.
+    quiet: true
+
+- name: Read the verification clock in UTC
+  ansible.builtin.command:
+    argv: [date, --utc, "+%Y-%m-%dT%H:%M:%SZ"]
+  changed_when: false
+  register: hermes_backup_check_clock
+
+- name: Calculate ages without exposing snapshot metadata
+  ansible.builtin.set_fact:
+    hermes_backup_check_ages: "{{ hermes_backup_check_ages + [snapshot_age] }}"
+  vars:
+    snapshot_age: >-
+      {{ ((hermes_backup_check_clock.stdout | to_datetime('%Y-%m-%dT%H:%M:%S%z')) -
+          (item.time | regex_replace('[.][0-9]+', '') | to_datetime('%Y-%m-%dT%H:%M:%S%z'))).total_seconds() | int }}
+  loop: "{{ hermes_backup_check_matching }}"
+  no_log: true
+
+- name: Reject future-dated recovery points
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_check_ages | min >= 0
+    fail_msg: A matching recovery point is in the future. Verify the host clock and preserve the repository.
+    quiet: true
+
+- name: Require a recovery point within the daily backup objective
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_check_ages | min <= 86400
+    fail_msg: No matching recovery point is within 24 hours. Arrange a stopped-state backup; preserve existing recovery points.
+    quiet: true
+
+- name: Report verified integrity and freshness without source content
+  ansible.builtin.debug:
+    msg: >-
+      Backup check passed. Full repository integrity verified;
+      newest matching recovery point age: {{ hermes_backup_check_ages | min }} seconds (limit: 86400).

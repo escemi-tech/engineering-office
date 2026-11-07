@@ -50,7 +50,7 @@
     fail_msg: Use a root-owned mode-0700 repository and a separate nonempty mode-0600 password file, without symlinks.
     quiet: true
 
-- name: Authenticate and verify the encrypted repository before changing state
+- name: Authenticate and verify the encrypted repository
   ansible.builtin.command:
     argv: [restic, --no-cache, check, --read-data]
   environment:

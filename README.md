@@ -9,7 +9,8 @@ Cloud provisioning and private integrations remain pending.
 Use the [Ansible deployment guide](docs/usage/hermes-deployment.md) to prepare
 an approved Ubuntu host and install Hermes with scoped credentials.
 Use the [backup and recovery guide](docs/usage/hermes-backup.md) to encrypt stopped
-state, expire old recovery points and restore a selected snapshot into a fresh volume.
+state, check backup integrity and age, expire old recovery points and restore a
+selected snapshot into a fresh volume.
 
 Use the [shared writing policy](docs/usage/writing-policy.md) to review English
 and French drafts. Hermes startup builds and loads this policy automatically.

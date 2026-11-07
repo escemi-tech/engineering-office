@@ -208,3 +208,34 @@ on each guest. This demonstrates independence from loss of the source guest,
 while the runner remains available. A runner-local copy is not an operational
 backup destination. Provider/runner loss, actual Bitwarden/offline key recovery,
 scheduling and private incident qualification remain separate gates.
+
+### Operator backup verification (2026-11-07)
+
+Add a manual `hermes-backup-check` entrypoint as the first backup-health slice of
+operational observability. Reuse the existing repository/key preflight and native
+Restic full-data verification. Select snapshot metadata through its documented
+[JSON scripting interface](https://restic.readthedocs.io/en/stable/075_scripting.html#snapshots)
+and host/path/tag filters, then require the exact current Docker volume path.
+A different scope's recent backup must not hide missing or stale Hermes state.
+
+Use 24 hours as the initial daily-backup objective from the execution plan,
+without a new tuning option or an RPO guarantee. Compare timezone-aware timestamps
+with the host clock and reject future-dated matches. Keep raw metadata and
+credentials hidden; report only integrity success and numeric age, with actionable
+failure messages. Do not create or prune snapshots, start/restart Hermes or
+install a scheduler as a side effect of checking.
+
+Full `check --read-data` reads the entire repository and takes a native exclusive
+lock. This is an operator integrity/freshness check, not a cheap polling probe.
+Existing synthetic recovery fixtures cover wrong scopes, keys, ages and a damaged
+repository copy, plus preserved stopped/live service state. Native locks remain
+enabled; concurrent maintenance must be coordinated by the operator. Notification
+delivery, unattended execution, independent operational storage and private key
+recovery remain separate work.
+
+Restic documents that a backup with source read errors can retain an incomplete
+snapshot and exit with code 3. Repository integrity and snapshot age do not prove
+source completeness. The backup entrypoint continues to fail on any nonzero exit;
+operators must investigate that failure even if a later check passes. Keep native
+backup outcomes and restore drills as separate evidence rather than introduce a
+custom success-marker store in this manual verification slice.

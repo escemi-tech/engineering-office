@@ -1,0 +1,13 @@
+---
+- name: Require explicit backup-check targets
+  ansible.builtin.import_playbook: helpers/hermes-inventory.yml
+
+- name: Check Hermes backup integrity and freshness without changing the deployment
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify the recovery point through native Restic
+      ansible.builtin.include_role:
+        name: hermes_backup
+        tasks_from: check

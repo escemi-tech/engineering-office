@@ -141,6 +141,11 @@ refusal to overwrite an existing volume. It runs the public retention entrypoint
 against sparse expired and dense daily histories, checks the daily/weekly limit,
 preserves an unrelated snapshot and rejects future timestamps without deleting
 existing recovery points. Wrong keys and a live source also block retention.
+The backup-check entrypoint must reject missing state or snapshots, stale history
+despite fresh snapshots with another host/path/tag, wrong keys, future timestamps
+and a separately corrupted repository copy. A successful check preserves the
+stopped container, disabled restart policy and every existing snapshot. Failure
+reports must exclude the synthetic password and plaintext state canary.
 After verified backup and pruning, it copies only the encrypted Restic repository
 to a private runner directory, alongside the full snapshot ID and source machine
 identity. The workflow destroys the entire source VM and its disks before
@@ -153,6 +158,8 @@ fixture supplies its synthetic key independently of the lost host. Native
 Ansible transfers the retained repository, then the production restore entrypoint
 verifies integrity and restores the exact snapshot. Recovery must remain inactive
 until the scenario explicitly deploys reviewed assets and synthetic credentials.
+The public backup check then runs against the restored repository while Hermes
+is live; the running container identity and restart policy must remain unchanged.
 [Goss](../../tests/hermes/backup.goss.yaml) reads the original session, checks a
 restored file's content/ownership/mode, rejects an unrelated key, checks for a
 plaintext canary in the encrypted repository, and verifies recovery credentials
@@ -171,5 +178,6 @@ until cloud infrastructure and operational preflight are implemented. Use the
 `hermes-start`, `hermes-stop` and `hermes-logs` targets for the local Compose runtime,
 `hermes-host` to prepare an explicitly approved Ubuntu host, and `hermes-deploy`
 to install or update its runtime.
-Use `hermes-backup`, `hermes-backup-prune` and `hermes-restore` for explicit stopped-state recovery
+Use `hermes-backup-check` to verify integrity and freshness, and `hermes-backup`,
+`hermes-backup-prune` and `hermes-restore` for explicit stopped-state recovery
 operations, following the [backup guide](hermes-backup.md).
