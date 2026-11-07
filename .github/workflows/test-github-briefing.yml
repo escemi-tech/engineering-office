@@ -1,0 +1,29 @@
+---
+name: Test - GitHub briefing source
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  test-github-briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # Arrange
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Act and Assert: native suites use synthetic responses through the real SDK.
+      - name: Test public source boundaries and publish reports
+        uses: hoverkraft-tech/ci-github-nodejs/actions/test@93e7a7cdbe88ad0b8da335ed3800d2f3d0a0c08e # Consolidated reports: ci-github-nodejs PR 577
+        with:
+          working-directory: packages/github-briefing
+          report-file: |
+            .reports/junit.xml
+            .reports/lcov.info
+          comment: "false"
