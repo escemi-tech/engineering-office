@@ -7,38 +7,21 @@
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: Configure only the disposable deployment
-      ansible.builtin.add_host:
-        name: "{{ lookup('ansible.builtin.env', 'VM_NAME') }}"
-        hermes_project_name: engineering-office-hermes-test
-        hermes_backup_repository: /var/lib/hermes-backup-test/repository
-        hermes_backup_password_file: /var/lib/hermes-backup-test/password
-        hermes_runtime: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/helpers/runtime.yml') | from_yaml }}"
+    - name: Select the synthetic recovery settings
+      ansible.builtin.include_tasks: helpers/recovery-settings.yml
+    - name: Protect the runner handoff directory
+      ansible.builtin.file:
+        path: "{{ recovery_directory }}"
+        state: directory
+        mode: "0700"
 
 - name: Prepare the synthetic repository and state canary
   hosts: hermes
   become: true
   gather_facts: false
   tasks:
-    - name: Create private fixture directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0700"
-      loop:
-        - /var/lib/hermes-backup-test
-        - "{{ hermes_backup_repository }}"
-    - name: Write public fixture passwords outside Hermes
-      ansible.builtin.copy:
-        dest: "/var/lib/hermes-backup-test/{{ item }}"
-        content: "synthetic-restic-fixture-{{ item }}-never-for-production"
-        owner: root
-        group: root
-        mode: "0600"
-      loop: [password, wrong-password]
-      no_log: true
+    - name: Prepare the repository and independent fixture passwords
+      ansible.builtin.include_tasks: helpers/recovery-material.yml
     - name: Initialize the isolated encrypted repository
       ansible.builtin.command:
         argv: [restic, --no-cache, init]
@@ -250,7 +233,7 @@
         path: "{{ backup_test_inventory.path }}"
         state: absent
 
-- name: Simulate loss of only the disposable runtime state
+- name: Preserve recovery material outside the disposable source host
   hosts: hermes
   become: true
   gather_facts: false
@@ -290,43 +273,48 @@
       environment: *fixture-restic-environment
       changed_when: true
       no_log: true
-    - name: Remove the disposable inference sidecar
-      community.docker.docker_container:
-        name: engineering-office-hermes-test-inference
-        state: absent
-    - name: Remove the disposable stopped gateway
-      community.docker.docker_container:
-        name: "{{ hermes_project_name }}-hermes-1"
-        state: absent
-    - name: Remove the disposable original volume
-      community.docker.docker_volume:
-        name: "{{ hermes_project_name }}_state"
-        state: absent
-    - name: Select exactly the verified snapshot
-      ansible.builtin.set_fact:
-        hermes_restore_snapshot: "{{ hermes_backup_snapshot }}"
-
-# Act
-- name: Restore through the public entrypoint
-  ansible.builtin.import_playbook: ../../ansible/hermes-restore.yml
-
-- name: Verify recovery remains inactive
-  hosts: hermes
-  become: true
-  gather_facts: false
-  tasks:
-    # Assert
-    - name: Inspect the runtime before explicit deployment
-      community.docker.docker_container_info:
-        name: "{{ hermes_project_name }}-hermes-1"
-      register: inactive_recovery
-    - name: Require restoration not to activate Hermes
-      ansible.builtin.assert:
-        that:
-          - not inactive_recovery.exists
-        quiet: true
-
-# Act: the operator explicitly deploys reviewed configuration and credentials.
-- name: Deploy the recovered runtime
-  ansible.builtin.import_playbook: ../../ansible/hermes.yml
-# Assert: the following Goss scenario reads the original session and checks boundaries.
+    - name: Allocate a protected encrypted-repository transport file
+      ansible.builtin.file:
+        path: /var/lib/hermes-backup-test/repository.tar
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+    - name: Pack only the quiescent encrypted repository
+      ansible.builtin.command:
+        argv:
+          [
+            tar,
+            --create,
+            --file,
+            /var/lib/hermes-backup-test/repository.tar,
+            --directory,
+            "{{ hermes_backup_repository }}",
+            .,
+          ]
+      changed_when: true
+    - name: Fetch the encrypted copy with checksum verification
+      ansible.builtin.fetch:
+        src: /var/lib/hermes-backup-test/repository.tar
+        dest: "{{ hostvars.localhost.recovery_directory }}/repository.tar"
+        flat: true
+    - name: Restrict the runner copy
+      ansible.builtin.file:
+        path: "{{ hostvars.localhost.recovery_directory }}/repository.tar"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+    - name: Read the source host identity
+      ansible.builtin.slurp:
+        src: /etc/machine-id
+      register: source_machine_id
+    - name: Record the selected snapshot and source host identity separately
+      ansible.builtin.copy:
+        dest: "{{ hostvars.localhost.recovery_directory }}/snapshot.yml"
+        mode: "0600"
+        content: >-
+          {{ {'hermes_restore_snapshot': hermes_backup_snapshot,
+              'source_machine_id': source_machine_id.content | b64decode | trim} | to_nice_yaml }}
+      delegate_to: localhost
+      become: false
+# Act: the workflow destroys the entire source VM before creating a recovery host.

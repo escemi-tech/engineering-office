@@ -10,7 +10,10 @@ The supported destination is an existing filesystem repository visible on the
 target host. Before private use, qualify an independent backup filesystem and
 recoverable key, retention, access controls and a recovery drill after losing the
 original host. A repository on the runtime host's own disk does not meet that
-requirement. CI uses disposable guest storage and synthetic data only.
+requirement. The [synthetic CI scenario](validation.md#host-preparation-and-deployment)
+retains an encrypted copy outside the guest, destroys that guest, and recovers the
+original conversation on a fresh host with an independently supplied fixture key.
+It does not qualify an operational storage destination or recovery of real keys.
 
 ## Prepare recovery material
 

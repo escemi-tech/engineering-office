@@ -1,0 +1,18 @@
+---
+- name: Require the disposable runner's temporary directory
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.env', 'RUNNER_TEMP') is match('^/.+')
+    quiet: true
+
+- name: Select the private recovery handoff on the runner
+  ansible.builtin.set_fact:
+    recovery_directory: "{{ lookup('ansible.builtin.env', 'RUNNER_TEMP') }}/hermes-recovery"
+
+- name: Configure only the disposable deployment
+  ansible.builtin.add_host:
+    name: "{{ lookup('ansible.builtin.env', 'VM_NAME') }}"
+    hermes_project_name: engineering-office-hermes-test
+    hermes_backup_repository: /var/lib/hermes-backup-test/repository
+    hermes_backup_password_file: /var/lib/hermes-backup-test/password
+    hermes_runtime: "{{ lookup('ansible.builtin.file', 'runtime.yml') | from_yaml }}"
