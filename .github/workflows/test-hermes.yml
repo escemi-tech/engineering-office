@@ -9,7 +9,7 @@ permissions: {}
 jobs:
   test-hermes:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: write
@@ -189,8 +189,8 @@ jobs:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/session.goss.yaml
           report-name: engineering-office - Hermes session after host reboot
-      # Act and Assert: exercise the public backup and restore playbooks.
-      - name: Test encrypted backup, retention and isolated recovery
+      # Act and Assert: retain an encrypted copy outside the source VM.
+      - name: Test encrypted backup and retention before host loss
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
         env: *vm-connection
         with:
@@ -198,16 +198,57 @@ jobs:
           galaxy-requirements: ansible/collections/requirements.yml
           ansible-config: tests/ansible/ansible.cfg
           test-playbook: tests/ansible/hermes-backup.yml
-          report-name: engineering-office - Hermes encrypted recovery
-      # Assert
-      - name: Verify restored state and recovery credential separation
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+          report-name: engineering-office - Hermes backup retention
+      # Act: verify source removal before allocating the recovery host.
+      - name: Destroy the original host and its disks
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
+      # Arrange
+      - name: Create a fresh recovery host
+        id: recovery
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm-config: tests/lima.yml
+      # Act and Assert: use the runner copy, an independent key and production playbooks.
+      - name: Test recovery after complete host loss
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        env:
+          VM_SSH_CONFIG: ${{ steps.recovery.outputs.ssh-config }}
+          VM_NAME: ${{ steps.recovery.outputs.name }}
+        with:
+          ansible-requirements: ansible/requirements.txt
+          galaxy-requirements: ansible/collections/requirements.yml
+          ansible-config: tests/ansible/ansible.cfg
+          test-playbook: tests/ansible/hermes-recovery.yml
+          report-name: engineering-office - Hermes host loss recovery
+      # Assert
+      - name: Verify recovered host prerequisites
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.recovery.outputs.vm }}
+          goss-file: tests/hermes/host.goss.yaml
+          report-name: engineering-office - Hermes recovery host
+      - name: Verify original conversation and credential separation on the new host
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.recovery.outputs.vm }}
           goss-file: tests/hermes/backup.goss.yaml
-          report-name: engineering-office - Hermes restored backup
-      - name: Destroy disposable host and all test state
+          report-name: engineering-office - Hermes recovered conversation
+      - name: Ensure the original host is removed
         if: ${{ always() && steps.vm.outputs.vm != '' }}
         uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
+      - name: Destroy the recovery host and its restored state
+        if: ${{ always() && steps.recovery.outputs.vm != '' }}
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@89e3bf93adc94b592188e714f61d4abc391aab46 # 1.0.0
+        with:
+          vm: ${{ steps.recovery.outputs.vm }}
+      - name: Remove the runner recovery copy
+        if: ${{ always() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const path = require('node:path');
+            await io.rmRF(path.join(process.env.RUNNER_TEMP, 'hermes-recovery'));

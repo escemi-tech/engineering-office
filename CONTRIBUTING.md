@@ -96,7 +96,7 @@ and cleanup in `tests/hermes/helpers/`.
 ## Ansible validation
 
 The Hermes workflow uses the released `ci-github-iac/actions/ansible/test` action
-for its native host preparation, deployment and reboot tests. Host preparation
+for its native host preparation, deployment, reboot and recovery tests. Host preparation
 runs on the fresh Ubuntu VM before the Compose lifecycle. Runtime deployment
 reuses that VM after the demo's synthetic state has been removed. The
 shared action installs the pinned controller runtime and Galaxy requirements,
@@ -110,13 +110,19 @@ The tests exercise those entrypoints and repeat each role to verify convergence.
 Keep the Lima fixture free of runtime installation logic. Reboot the deployed
 guest through Ansible, then assert persistent state in Goss without redeploying.
 Shared test inventory setup belongs in `tests/ansible/helpers/`.
-The encrypted recovery scenario uses the production backup/restore entrypoints,
-the distribution's Restic package and disposable guest storage. Retention tests
+The backup and host-loss recovery scenarios use the production backup/restore
+entrypoints and the distribution's Restic package. Retention tests
 cover sparse expired history, daily/weekly limits, unrelated snapshots, future
 timestamps and preserved recovery after pruning. Keep encryption,
 snapshot selection and integrity checking in native Restic. Never run its
-destructive fixture against an operational inventory. Shared synthetic runtime
-settings and expected-rejection probes stay in the same explicit helpers directory.
+destructive fixture against an operational inventory. The workflow retains only
+the encrypted repository and snapshot/host identity record in a private runner
+directory, destroys the source VM, then creates a fresh recovery VM. Require a
+different machine identity, absent deployment files and an independently supplied
+synthetic key before restoring. Goss must read the original conversation without
+new inference. Always schedule cleanup of both guests and the runner copy; never
+upload the repository or keys as artifacts. Shared synthetic runtime/recovery
+settings and expected-rejection probes stay in the explicit helpers directory.
 Supply only synthetic inputs and the shared VM's
 SSH configuration; never connect this test to an operational inventory. No generic
 Ansible target-discovery job is needed for this concrete integration.
@@ -142,6 +148,7 @@ ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/a
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-reboot.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-backup.yml
+ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-recovery.yml
 ```
 
 The actual deployment scenarios require the disposable VM and run in hosted CI.

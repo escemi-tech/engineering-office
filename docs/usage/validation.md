@@ -87,8 +87,9 @@ The scenario checks:
 
 Inference runs on an internal Docker network with no external model access.
 The shared test action publishes Goss JUnit results, summaries and artifacts.
-CI always schedules VM destruction, including after failure. Test state and
-backups stay inside the disposable VM and are not published.
+CI always schedules VM destruction, including after failure. The Compose demo's
+state and backups stay inside that guest. The separate host-loss scenario below
+temporarily retains an encrypted repository on the runner; neither is published.
 
 See the [runtime guide](hermes.md#try-the-synthetic-demo) to exercise the same
 Compose deployment locally. The test project is reserved for synthetic data;
@@ -132,7 +133,7 @@ without submitting another inference request. This verifies automatic runtime
 startup and persistent session storage. It does not test a new model request
 after reboot or qualify provider availability.
 
-The [encrypted recovery scenario](../../tests/ansible/hermes-backup.yml) initializes
+The [backup scenario](../../tests/ansible/hermes-backup.yml) initializes
 a disposable Restic repository with a synthetic password outside Hermes. It
 exercises the public backup and restore playbooks, including missing/wrong keys,
 refusal to back up a live source, refusal of ambiguous snapshot selection and
@@ -140,15 +141,30 @@ refusal to overwrite an existing volume. It runs the public retention entrypoint
 against sparse expired and dense daily histories, checks the daily/weekly limit,
 preserves an unrelated snapshot and rejects future timestamps without deleting
 existing recovery points. Wrong keys and a live source also block retention.
-After verified backup and pruning it destroys only
-the disposable source container and volume, restores the exact snapshot, verifies
-that recovery remains inactive, and explicitly deploys again.
+After verified backup and pruning, it copies only the encrypted Restic repository
+to a private runner directory, alongside the full snapshot ID and source machine
+identity. The workflow destroys the entire source VM and its disks before
+creating a fresh Ubuntu VM.
+
+The [host-loss recovery scenario](../../tests/ansible/hermes-recovery.yml) repeats
+production host preparation and convergence checks. It requires a different
+machine identity and no inherited deployment or recovery files. The public
+fixture supplies its synthetic key independently of the lost host. Native
+Ansible transfers the retained repository, then the production restore entrypoint
+verifies integrity and restores the exact snapshot. Recovery must remain inactive
+until the scenario explicitly deploys reviewed assets and synthetic credentials.
 [Goss](../../tests/hermes/backup.goss.yaml) reads the original session, checks a
 restored file's content/ownership/mode, rejects an unrelated key, checks for a
 plaintext canary in the encrypted repository, and verifies recovery credentials
-stay outside Hermes. Neither backup contents nor keys are uploaded as artifacts.
-This qualifies the native recovery mechanism on the guest; it does not establish
-independent off-host storage, automated retention or an operational disaster drill.
+stay outside Hermes. There is no inference fixture on the recovery host to
+recreate the conversation. CI always schedules cleanup of both VMs and the runner
+copy. Neither repository contents nor keys are uploaded as artifacts.
+
+The job allows 60 minutes for the two sequential host preparations and runtime
+downloads, with at most one VM active at a time. This qualifies recovery after
+loss of the source guest. It does not establish an operational backup destination,
+recovery after runner/provider loss, Bitwarden key recovery, automated retention
+or a private operational disaster drill.
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail explicitly
 until cloud infrastructure and operational preflight are implemented. Use the

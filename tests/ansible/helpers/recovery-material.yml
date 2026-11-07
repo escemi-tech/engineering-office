@@ -1,0 +1,22 @@
+---
+- name: Create private fixture directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - /var/lib/hermes-backup-test
+    - "{{ hermes_backup_repository }}"
+
+# Public fixture values are supplied independently to each host, never fetched.
+- name: Write public fixture passwords outside Hermes
+  ansible.builtin.copy:
+    dest: "/var/lib/hermes-backup-test/{{ item }}"
+    content: "synthetic-restic-fixture-{{ item }}-never-for-production"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: [password, wrong-password]
+  no_log: true

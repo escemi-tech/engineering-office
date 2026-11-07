@@ -184,3 +184,27 @@ history, timestamp rejection, scope preservation and recovery after pruning.
 Scheduling, failure notification, independent storage/key recovery and actual
 private-source deletion remain operational gates; this command alone does not
 enforce expiry while maintenance is not running.
+
+### Recovery after source host loss (2026-11-07)
+
+Extend synthetic qualification to destroy the entire original VM and its disks
+before preparing the recovery host. Keep the production filesystem-repository
+contract: transfer a quiescent encrypted Restic repository to a private runner
+directory, together with the exact snapshot ID and source machine identity.
+Supply the public synthetic password independently on each host. Do not fetch
+the original key or publish the repository as an artifact.
+
+Compose the released VM actions and existing host, restore and deployment
+playbooks. Require a new machine identity and absent deployment/recovery files,
+verify repository and restored-file integrity through Restic, and keep the
+runtime inactive until explicit deployment. Goss reads the original conversation
+without an inference service on the new host. Shared fixture settings belong in
+the explicit test helpers directory; no new production backend or dependency is
+needed.
+
+The two guests run sequentially, with unconditional cleanup for both guests and
+the runner copy. Allow 60 minutes for cold host preparation and runtime downloads
+on each guest. This demonstrates independence from loss of the source guest,
+while the runner remains available. A runner-local copy is not an operational
+backup destination. Provider/runner loss, actual Bitwarden/offline key recovery,
+scheduling and private incident qualification remain separate gates.
