@@ -37,12 +37,12 @@ jobs:
           python-version-file: ansible/.python-version
       - name: Create a fresh Ubuntu host
         id: vm
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm-config: tests/lima.yml
       # Act and Assert: install prerequisites through the production playbook.
       - name: Test host preparation and convergence
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         env: &vm-connection
           VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
           VM_NAME: ${{ steps.vm.outputs.name }}
@@ -53,7 +53,7 @@ jobs:
           comment: "false"
           report-name: engineering-office - Hermes host preparation
       - name: Verify Docker host prerequisites
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/host.goss.yaml
@@ -74,7 +74,7 @@ jobs:
             ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'mkdir -p /opt/engineering-office/.cache/apm && tar -xzf - -C /opt/engineering-office/.cache/apm'
       # Act and Assert: each Goss scenario owns its arrangements and assertions.
       - name: Verify policy build and failure boundaries
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/policy-build.goss.yaml
@@ -90,7 +90,7 @@ jobs:
           ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && PATH="$PWD/.cache/apm:$PATH" make hermes-policy'
       # Assert
       - name: Verify deployment preflight
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/preflight.goss.yaml
@@ -104,7 +104,7 @@ jobs:
         run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && bash tests/hermes/helpers/compose.sh up -d --wait --wait-timeout 180'
       # Assert
       - name: Verify startup, authentication and synthetic conversation
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/goss.yaml
@@ -121,7 +121,7 @@ jobs:
             bash tests/hermes/helpers/compose.sh up -d --wait --wait-timeout 180'
       # Assert
       - name: Verify session after restart
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/recovery.goss.yaml
@@ -137,7 +137,7 @@ jobs:
       - name: Verify session after restore
         # The lifecycle repeats this assertion configuration after a state change.
         # jscpd:ignore-start
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/recovery.goss.yaml
@@ -145,7 +145,7 @@ jobs:
           report-name: engineering-office - Hermes restore
         # jscpd:ignore-end
       - name: Verify independent shutdown and gateway key rotation
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/revocation.goss.yaml
@@ -159,7 +159,7 @@ jobs:
         run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && bash tests/hermes/helpers/compose.sh down --volumes'
       # Act and Assert: native Ansible checks preflight and convergence.
       - name: Test scoped host deployment
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         env:
           VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
           VM_NAME: ${{ steps.vm.outputs.name }}
@@ -173,7 +173,7 @@ jobs:
           report-name: engineering-office - Hermes Ansible deployment
       # Assert: Goss checks the deployed service and filesystem boundaries.
       - name: Verify the deployed runtime and credential separation
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/deployment.goss.yaml
@@ -181,7 +181,7 @@ jobs:
           report-name: engineering-office - Hermes deployed boundary
       # Act and Assert: inspect failures without exposing content or restarting the service.
       - name: Test operator gateway health diagnostics
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         env: *vm-connection
         with:
           test-playbook: tests/ansible/hermes-health.yml
@@ -192,7 +192,7 @@ jobs:
           ansible-config: tests/ansible/ansible.cfg
       # Act and Assert: reboot without reapplying either production playbook.
       - name: Test automatic recovery after host reboot
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         env: *vm-connection
         with:
           ansible-requirements: ansible/requirements.txt
@@ -204,7 +204,7 @@ jobs:
       - name: Verify Docker after host reboot
         # The lifecycle repeats this assertion configuration after a state change.
         # jscpd:ignore-start
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/host.goss.yaml
@@ -212,7 +212,7 @@ jobs:
           report-name: engineering-office - Hermes host after reboot
         # jscpd:ignore-end
       - name: Verify the saved session after host reboot
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
           goss-file: tests/hermes/session.goss.yaml
@@ -220,7 +220,7 @@ jobs:
           report-name: engineering-office - Hermes session after host reboot
       # Act and Assert: retain an encrypted copy outside the source VM.
       - name: Test encrypted backup and retention before host loss
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         env: *vm-connection
         with:
           ansible-requirements: ansible/requirements.txt
@@ -231,18 +231,18 @@ jobs:
           report-name: engineering-office - Hermes backup retention
       # Act: verify source removal before allocating the recovery host.
       - name: Destroy the original host and its disks
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
       # Arrange
       - name: Create a fresh recovery host
         id: recovery
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm-config: tests/lima.yml
       # Act and Assert: use the runner copy, an independent key and production playbooks.
       - name: Test recovery after complete host loss
-        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         env:
           VM_SSH_CONFIG: ${{ steps.recovery.outputs.ssh-config }}
           VM_NAME: ${{ steps.recovery.outputs.name }}
@@ -255,14 +255,14 @@ jobs:
           report-name: engineering-office - Hermes host loss recovery
       # Assert
       - name: Verify recovered host prerequisites
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.recovery.outputs.vm }}
           goss-file: tests/hermes/host.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes recovery host
       - name: Verify original conversation and credential separation on the new host
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.recovery.outputs.vm }}
           goss-file: tests/hermes/backup.goss.yaml
@@ -270,12 +270,12 @@ jobs:
           report-name: engineering-office - Hermes recovered conversation
       - name: Ensure the original host is removed
         if: ${{ always() && steps.vm.outputs.vm != '' }}
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
       - name: Destroy the recovery host and its restored state
         if: ${{ always() && steps.recovery.outputs.vm != '' }}
-        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@29bf07d7ed1e69eb16b3aa5e87e8adba3cc12193 # Consolidated reports: ci-github-iac PR 14
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@2c1945afe85bb687c15da83e332b4c52aabae290 # 1.1.0
         with:
           vm: ${{ steps.recovery.outputs.vm }}
       - name: Remove the runner recovery copy
