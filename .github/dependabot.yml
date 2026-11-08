@@ -11,9 +11,7 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: npm
-    directories:
-      - /packages/writing-normalizer
-      - /packages/github-briefing
+    directory: /packages/writing-normalizer
     groups:
       npm-dependencies:
         patterns:

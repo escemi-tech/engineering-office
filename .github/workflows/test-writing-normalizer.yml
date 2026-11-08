@@ -12,6 +12,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: write
     steps:
       # Arrange
       - name: Checkout
@@ -20,10 +21,10 @@ jobs:
           persist-credentials: false
       # Act and Assert: the package suite owns the preservation assertions.
       - name: Test normalization and publish reports
-        uses: hoverkraft-tech/ci-github-nodejs/actions/test@93e7a7cdbe88ad0b8da335ed3800d2f3d0a0c08e # Consolidated reports: ci-github-nodejs PR 577
+        uses: hoverkraft-tech/ci-github-nodejs/actions/test@31cd29bfb95f6bc6490d6abe5d66690431b518e3 # 2.0.0
         with:
           working-directory: packages/writing-normalizer
           report-file: |
             .reports/junit.xml
             .reports/lcov.info
-          comment: "false"
+          github-token: ${{ github.token }}
