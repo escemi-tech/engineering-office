@@ -47,8 +47,9 @@ not a publisher or a client's instruction loading.
 The [dedicated workflow](../../.github/workflows/test-github-briefing.yml) uses the
 same Hoverkraft Node.js action to test the installed GitHub SDK and validation
 library with synthetic HTTP responses. Suites cover provenance, minimal data,
-repository identity and public visibility, revision consistency, bounded requests,
-truncation, malformed records, sanitized API failures and the actual CLI.
+account and repository identity, scope admission, public/private visibility, old
+unresolved work, relevance, pagination, partial coverage, request budgets, access
+revocation, malformed records, sanitized failures and protected CLI inputs.
 
 Use the package's `.node-version` runtime:
 

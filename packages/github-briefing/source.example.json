@@ -1,0 +1,11 @@
+{
+	"account": { "id": 123456, "login": "example-user" },
+	"scope": "professional-internal",
+	"repositories": [
+		{
+			"id": 987654,
+			"fullName": "example-org/example-repo",
+			"visibility": "public"
+		}
+	]
+}

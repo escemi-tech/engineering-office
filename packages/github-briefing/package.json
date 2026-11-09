@@ -2,7 +2,7 @@
 	"name": "@escemi-tech/github-briefing",
 	"version": "0.1.0",
 	"private": true,
-	"description": "Bounded public GitHub source snapshots for professional briefings",
+	"description": "Scoped account-wide GitHub work evidence for private briefings",
 	"license": "MIT",
 	"type": "module",
 	"exports": "./src/github-briefing.js",

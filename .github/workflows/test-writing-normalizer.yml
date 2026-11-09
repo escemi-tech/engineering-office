@@ -20,7 +20,7 @@ jobs:
           persist-credentials: false
       # Act and Assert: the package suite owns the preservation assertions.
       - name: Test normalization and publish reports
-        uses: hoverkraft-tech/ci-github-nodejs/actions/test@02a04ad25ceaacdf3b7200e45fb7fec07fadf4fa # 2.1.0
+        uses: hoverkraft-tech/ci-github-nodejs/actions/test@fbd3522b68c55a6314aadbededaa487825ba9b35 # 3.0.0
         with:
           working-directory: packages/writing-normalizer
           report-file: |

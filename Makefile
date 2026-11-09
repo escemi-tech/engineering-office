@@ -28,8 +28,8 @@ lint-fix: ## Execute linting and fix
 ci: ## Execute local CI tasks
 	$(MAKE) lint-fix
 
-github-briefing: ## Read recent open work from the approved public GitHub repository
-	@npm run --silent --prefix packages/github-briefing briefing
+github-briefing: ## Collect relevant GitHub work using the protected local source policy
+	@npm run --silent --prefix packages/github-briefing briefing -- --source "$(CURDIR)/.local/github-briefing/source.json" --token-file "$(CURDIR)/.local/github-briefing/token"
 
 hermes-policy: ## Build the canonical writing policy with the qualified APM compiler
 	bash services/hermes/build-policy.sh
@@ -94,7 +94,6 @@ define run_linter
 	DEFAULT_WORKSPACE="$(CURDIR)"; \
 	LINTER_IMAGE="engineering-office-linter:latest"; \
 	VOLUME="$$DEFAULT_WORKSPACE:$$DEFAULT_WORKSPACE"; \
-	DEFAULT_BRANCH="$$(git -C "$$DEFAULT_WORKSPACE" rev-parse --abbrev-ref HEAD)"; \
 	docker build --platform=linux/amd64 \
 		--build-arg UID=$(HOST_UID) --build-arg GID=$(HOST_GID) \
 		--tag "$$LINTER_IMAGE" .; \
@@ -102,8 +101,7 @@ define run_linter
 		-v "$$VOLUME" --rm \
 		-e RUN_LOCAL=true \
 		-e DEFAULT_WORKSPACE="$$DEFAULT_WORKSPACE" \
-		-e DEFAULT_BRANCH="$$DEFAULT_BRANCH" \
-		-e USE_FIND_ALGORITHM=false \
+		-e USE_FIND_ALGORITHM=true \
 		-e STRIP_DEFAULT_WORKSPACE_FOR_REGEX=true \
 		-e FILTER_REGEX_INCLUDE="$(filter-out $@,$(MAKECMDGOALS))" \
 		-e FILTER_REGEX_EXCLUDE='^\.github/dependabot\.yml$$' \

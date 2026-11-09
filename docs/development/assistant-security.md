@@ -3,12 +3,14 @@
 The first MVP serves professional internal work. Its current runtime is qualified
 with public synthetic fixtures only. Personal and client sources remain disabled.
 
-The operator can separately collect public issue/PR metadata from the approved
-`escemi-tech/engineering-office` repository with the
-[GitHub source command](../usage/github-briefing.md). Its
-[admission record](adr/0005-github-briefing-source.md) defines the exact resource,
-anonymous reads, local processing and absence of persistence. This command has no
-connection to Hermes; runtime tools remain disabled.
+The operator can separately collect relevant issue/PR metadata across repositories
+with the [GitHub source command](../usage/github-briefing.md). Its
+[admission contract](adr/0006-account-github-briefing.md) requires an explicit
+account, one scope, approved repository identities/visibility and a protected
+credential file. Discovery does not admit sources automatically. Account access
+does not authorize private processing: record source approval before invocation.
+Only the operator process reads the credential; neither it nor the source snapshot
+is connected to Hermes. Runtime tools remain disabled.
 
 | Identity                   | Responsibility                                                                                                                       |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |

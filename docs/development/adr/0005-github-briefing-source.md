@@ -1,6 +1,6 @@
 # ADR 0005: Bounded public GitHub evidence for professional briefings
 
-- Status: Accepted for operator-run public collection; runtime integration remains gated.
+- Status: Superseded by [ADR 0006](0006-account-github-briefing.md) for the operator collection contract; retained as qualification history.
 - Date: 2026-11-07
 - Owner: escemi-tech maintainers
 - Scope: Initial source qualification for AI-004, KNO-001 and KNO-002.

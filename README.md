@@ -6,7 +6,7 @@ Run a pinned Hermes gateway with persistent conversations and a local authentica
 API. Start with the [synthetic demo and runtime guide](docs/usage/hermes.md).
 Cloud provisioning and private integrations remain pending.
 
-Read recent public repository work with the
+Collect your relevant GitHub work across approved repositories with the
 [GitHub briefing source guide](docs/usage/github-briefing.md).
 
 Use the [Ansible deployment guide](docs/usage/hermes-deployment.md) to prepare

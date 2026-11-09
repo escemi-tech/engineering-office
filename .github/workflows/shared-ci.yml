@@ -8,7 +8,7 @@ permissions: {}
 
 jobs:
   lint:
-    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@90211d735aa0289702ddbd7eb95b218020ccadad # 2.0.2
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
     with:
       comment: false
       # Remove with the Makefile exclusion once zizmor accepts the APM ecosystem.
@@ -40,7 +40,7 @@ jobs:
   reports:
     needs: [lint, test-hermes, test-writing-normalizer, test-github-briefing]
     if: always()
-    uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@90211d735aa0289702ddbd7eb95b218020ccadad # 2.0.2
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
     permissions:
       contents: read
       pull-requests: write
