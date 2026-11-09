@@ -5,8 +5,9 @@ and [workflow layout](https://github.com/neilime/workstation-manager/tree/main/.
 Use annotated targets for `make help` and a shared `run_linter` helper for
 `make lint` and `make lint-fix`. The linter runs on Linux amd64 with the caller's
 UID/GID and the checkout's absolute path as its workspace. A failed image build
-stops the command before linting. The shared image respects `.gitignore`; keep
-local caches and generated reports excluded there.
+stops the command before linting. Local lint discovers files in the working tree,
+including new files that have not been committed. The shared image respects
+`.gitignore`; keep local caches and generated reports excluded there.
 
 `make lint-fix` applies supported automatic fixes. `make lint docs/` limits
 linting to matching paths. Positional filters apply only to lint commands;
@@ -37,7 +38,9 @@ Keep the five Hoverkraft maintenance workflows alongside the CI entrypoints:
 - `greetings.yml` welcomes first-time contributors on new issues and PRs.
 - `need-fix-to-issue.yml` turns fix markers into issues after main pushes, or
   for a manually selected commit range.
-- `semantic-pull-request.yml` validates Conventional Commit PR titles.
+- `semantic-pull-request.yml` validates PR titles with the repository's root
+  commitlint configuration or the shared Conventional Commits defaults. It needs
+  only `contents: read` to load that configuration.
 - `renovate.yml` runs dependency updates weekly and on manual dispatch.
 - `stale.yml` manages inactive issues and PRs daily using shared defaults.
 
@@ -83,7 +86,7 @@ dedicated test workflow and local command.
 
 The GitHub briefing package has its own synthetic SDK/CLI contract suite and
 [dedicated workflow](.github/workflows/test-github-briefing.yml). Keep source
-admission in its manifest and ADR, validate identity before reading records and
+admission in the protected operator policy and ADR, validate identity before reading records and
 preserve sanitized failures. Do not add live API calls or credentials to its CI
 fixtures. Review the explicit GitHub API protocol version against upstream
 deprecation notices when maintaining the adapter; dependency bots do not update

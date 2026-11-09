@@ -1,6 +1,7 @@
 # GitHub briefing source
 
-Collect a bounded snapshot of recently updated open work from the approved public
-repository. Uses GitHub's official Octokit client and Zod response validation.
+Collect relevant open GitHub work across accessible repositories within an
+explicitly approved scope. Uses Octokit and Zod; preserves source links and
+collection coverage for a later private briefing.
 
 See the [usage and source-boundary guide](../../docs/usage/github-briefing.md).
