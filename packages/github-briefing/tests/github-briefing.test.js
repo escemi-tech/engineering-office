@@ -16,7 +16,7 @@ suite("Account-wide scoped evidence", () => {
 		const snapshot = await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(snapshot.schemaVersion, 2);
+		assert.equal(snapshot.schemaVersion, 3);
 		assert.equal(snapshot.scope, "professional-internal");
 		assert.equal(snapshot.classification, "restricted");
 		assert.deepEqual(snapshot.source.account, api.viewer);
@@ -49,7 +49,7 @@ suite("Account-wide scoped evidence", () => {
 		await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(api.requests.length, 8);
+		assert.equal(api.requests.length, 12);
 		const discovery = api.requests[1].url.searchParams;
 		assert.equal(
 			discovery.get("affiliation"),

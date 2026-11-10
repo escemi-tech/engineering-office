@@ -1,13 +1,13 @@
+import { spawnSync } from "node:child_process";
 import {
+	chmodSync,
 	mkdtempSync,
 	rmSync,
-	writeFileSync,
-	chmodSync,
 	symlinkSync,
+	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 
 export class GitHubApiFixture {
 	requests = [];
@@ -26,6 +26,39 @@ export class GitHubApiFixture {
 		})),
 	};
 	overrides = new Map();
+	tasks = new Map();
+
+	task(repository, id = "task-1", state = "in_progress") {
+		return {
+			id,
+			name: "Synthetic Copilot work",
+			url: `https://api.github.com/agents/repos/${repository.full_name}/tasks/${id}`,
+			html_url: `${repository.html_url}/copilot/tasks/${id}`,
+			creator: { id: this.viewer.id },
+			repository: { id: repository.id },
+			state,
+			created_at: "2020-01-01T00:00:00Z",
+			updated_at: "2020-01-02T00:00:00Z",
+			session_count: 1,
+			archived_at: null,
+			artifacts: [],
+			sessions: [this.session(repository, id)],
+			prompt: "synthetic-prompt-canary",
+		};
+	}
+
+	session(repository, taskId, id = "session-1", state = "in_progress") {
+		return {
+			id,
+			task_id: taskId,
+			repository: { id: repository.id },
+			state,
+			created_at: "2020-01-01T00:00:00Z",
+			updated_at: "2020-01-02T00:00:00Z",
+			prompt: "synthetic-session-canary",
+			error: { message: "synthetic-error-canary" },
+		};
+	}
 
 	repository(id, name, privateRepository = false) {
 		return {
@@ -74,6 +107,15 @@ export class GitHubApiFixture {
 				incomplete_results: false,
 				items: [this.item(repository, kind)],
 			};
+		} else if (key.startsWith("/agents/repos/")) {
+			const repository = this.repositories.find((repo) =>
+				key.startsWith(`/agents/repos/${repo.full_name}/tasks`),
+			);
+			const tasks = this.tasks.get(repository.full_name) ?? [];
+			if (key.endsWith("/tasks")) {
+				key += `/${target.searchParams.get("page")}`;
+				payload = { tasks };
+			} else payload = tasks.find(({ id }) => key.endsWith(`/${id}`));
 		} else
 			payload = this.repositories.find(
 				(repo) => key === `/repos/${repo.full_name}`,

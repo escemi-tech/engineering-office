@@ -4,10 +4,13 @@ Collect your authored or assigned open issues and pull requests, plus pull
 requests with a direct review request for you. Discover repositories across
 ownership, collaboration and organization membership. Collection has no age cutoff;
 older unresolved work remains eligible and is retrieved first.
+Also collect non-archived Copilot cloud-agent tasks created by your authenticated
+account, with their session attempts and supplied PR/branch identities.
 
 The command produces scoped JSON evidence, not a prioritized assistant briefing.
-Mentions, team review requests, Copilot tasks, review decisions, CI results and
-closed work are not collected yet. These omissions are explicit in the output.
+Mentions, team review requests, tasks created by other accounts, archived tasks,
+local IDE/CLI agent activity, review decisions, CI results and closed issue/PR
+work are not collected. These omissions are explicit in the output.
 
 ## Approve sources and credentials
 
@@ -48,6 +51,17 @@ access. Organization approval and SSO restrictions may further limit results.
 The implementation supports user identity verification through `GET /user`;
 installation tokens are not an account-wide identity.
 
+Copilot reads require the additional `Agent tasks: read` repository permission.
+The [Agent Tasks API](https://docs.github.com/en/rest/agent-tasks/agent-tasks)
+supports fine-grained personal access tokens and GitHub App user access tokens;
+installation tokens are unsupported. It is in public preview. Before live use,
+verify that the chosen account/token and organization policies allow these reads,
+and include task names, session metadata and artifact identities in source
+admission. Task names can contain sensitive text derived from prompts.
+Synthetic tests do not establish your account's access or subscription eligibility.
+Missing task access produces explicit unavailable coverage while accessible
+issue/PR evidence remains usable.
+
 Keep the credential in Bitwarden and place only its value in
 `.local/github-briefing/token`, an owner-only file (`chmod 600`). Do not put it in
 command arguments, Git or CI secrets. The command does not read ambient `GH_TOKEN`
@@ -71,7 +85,7 @@ files to 16 KiB. Up to 1,000 repository admissions are supported per policy.
 
 ## Read coverage before using the evidence
 
-The snapshot uses `schemaVersion: 2`, the selected `scope` and conservative
+The snapshot uses `schemaVersion: 3`, the selected `scope` and conservative
 `classification: restricted`, including when some source repositories are public.
 `source.account` identifies the authenticated owner. Each admitted repository
 carries its identity, visibility, collection status and items. Items retain their
@@ -95,6 +109,13 @@ Check these fields before interpreting an empty list:
 - `repositories[].status` and `searches[]` distinguish complete collection from
   unavailable sources or partial searches. Missing repositories, changed identity,
   incomplete search, rate limits and exhausted budgets remain visible.
+- `repositories[].copilot` reports task coverage separately. Its boundary is
+  `created-by-authenticated-user`; it never establishes coverage of tasks started
+  by other people. The repository status is partial when task coverage is partial
+  or unavailable, even if both issue/PR searches succeeded.
+- `repositories[].access` records the final repository identity/access check.
+  A failed verification makes coverage partial; confirmed access loss or changed
+  identity/visibility removes all evidence collected for that repository.
 - `coverage.status: complete` means discovery and the admitted source queries
   completed within this credential's boundary. It does not include unadmitted
   sources or the capabilities listed in `coverage.excluded`.
@@ -108,13 +129,43 @@ scopes can therefore produce partial coverage; a later invocation starts fresh
 and does not resume a cursor. Do not treat repeated partial snapshots as complete
 coverage or enable a scheduled briefing on that assumption.
 
+Copilot listing reads at most ten pages of 100 non-archived tasks per admitted
+repository, most recently updated first, with no date or task-state cutoff.
+Each selected task needs one additional detail request for its sessions. Those
+requests share the existing global request, time and response-size limits.
+An extra page is checked when a full page has no continuation header; page numbers
+and task paths are constructed locally. Response-provided URLs are never followed.
+
 A valid partial snapshot is emitted with exit status zero and explicit coverage.
 Invalid credentials, the wrong account, malformed policy or inconsistent evidence
 produce a sanitized error and no JSON. No raw provider error bodies are logged.
 
+### Interpret Copilot tasks and attempts
+
+`copilot.tasks[]` preserves the provider's task ID, state, creation/update times,
+name and task link when supplied. Queued, running, waiting, failed, timed-out,
+completed, idle and cancelled states remain distinct. A task can exist without a
+PR. `sessions[]` preserves each attempt's own ID, state and timestamps; a previous
+completed attempt cannot hide a later running one. `sessionCoverage` is complete
+only when the detail response includes sessions matching its reported count.
+Missing, stale or failed detail is explicit and does not invent session results.
+
+`artifacts[]` preserves PR resource IDs and optional GraphQL IDs, or branch refs.
+GitHub's PR resource ID is not the issue ID or PR number; do not turn it into a
+`/pull/<number>` URL or join it to `items[].issueId`. PR URL resolution and grouping
+with collected issue/PR items remain follow-ups. Separate tasks referencing the
+same PR remain separate records. Optional fields omitted by GitHub remain absent
+in the output; absent artifact metadata is not proof that no PR exists.
+
+Agent completion does not mean tests passed, approval was granted or a PR is ready
+to merge. Review/CI state is outside this collector. For waiting or failed work,
+inspect the supplied task link; raw error messages, prompts, transcripts, model
+and billing details are excluded. A snapshot is an observation, not a live task
+monitor. Check its `observedAt` before relying on task states.
+
 ## Data handling and revocation
 
-GitHub can return bodies and user profile fields; only the metadata described
+GitHub can return bodies, prompts, error details and user profile fields; only the metadata described
 above is retained in the snapshot. Titles are untrusted source text: preserve
 attribution and never execute instructions found in them.
 
@@ -125,6 +176,9 @@ as CI artifacts. Stop invocation and revoke the credential at GitHub to disable
 access; remove local token/output files when no longer needed. Policy changes
 apply on the next run. Access loss never reuses a cached snapshot, but deleting
 previously redirected copies remains the operator's responsibility.
+Copilot collection only reads metadata; it never starts, steers, retries, stops
+or archives tasks. Task permission loss discards collected Copilot metadata for
+that repository. Confirmed repository access loss discards both work and tasks.
 
 See [source validation](validation.md#github-briefing-source) and the
 [source admission decision](../development/adr/0006-account-github-briefing.md).

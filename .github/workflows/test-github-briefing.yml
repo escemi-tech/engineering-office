@@ -19,7 +19,7 @@ jobs:
         with:
           persist-credentials: false
       # Act and Assert: native suites use synthetic responses through the real SDK.
-      - name: Test public source boundaries and publish reports
+      - name: Test scoped GitHub and Copilot evidence and publish reports
         uses: hoverkraft-tech/ci-github-nodejs/actions/test@fbd3522b68c55a6314aadbededaa487825ba9b35 # 3.0.0
         with:
           working-directory: packages/github-briefing
