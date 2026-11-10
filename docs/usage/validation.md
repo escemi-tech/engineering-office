@@ -53,8 +53,11 @@ revocation, malformed records, sanitized failures and protected CLI inputs.
 Copilot scenarios cover all task states, separate attempts, tasks without PRs,
 opaque artifact IDs, creator/source restrictions, pagination, request limits,
 missing permissions, incomplete or stale sessions and access loss. Raw prompt and
-error canaries must stay out of evidence. These tests do not qualify live Agent
-Tasks access, PR link resolution or tasks created by other accounts.
+error canaries must stay out of evidence. PR context scenarios cover resource-ID
+resolution, multiple tasks per PR, task-only merged PRs, opaque cursor pagination,
+review/check independence, unknown states, head changes, scoped fixed queries,
+GraphQL errors and rate limits. These tests do not qualify live Agent Tasks access
+or tasks created by other accounts.
 
 Use the package's `.node-version` runtime:
 

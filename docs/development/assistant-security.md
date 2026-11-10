@@ -15,6 +15,11 @@ Source admission must include task names and artifact identities before enabling
 Agent Tasks reads. Copilot access loss removes task metadata; confirmed repository
 access loss removes all of that repository's evidence. The command cannot execute
 or modify agent tasks. See the source guide for excluded data and partial coverage.
+PR context uses two fixed read-only GraphQL queries restricted to admitted
+repositories. Admission includes bounded PR identity listing for artifact
+resolution and review/check metadata for selected PRs. No global node lookup,
+arbitrary query or mutation is accepted. GitHub's review decision and head-commit
+check rollup are observations, not authorization to merge or approval of an action.
 
 | Identity                   | Responsibility                                                                                                                       |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |

@@ -110,3 +110,44 @@ Unknown final access stays explicitly partial. No durable state or credentials
 are added; synthetic SDK/CLI scenarios validate these boundaries without live
 collection. Operator admission and account qualification remain required for
 private use.
+
+## PR context extension — 2026-11-11
+
+Schema 4 adds one context record per selected PR and links its eligible Copilot
+task IDs. Keep task/session states separate from GitHub's review decision and
+head-commit check/status rollup. Null aggregate fields remain unknown; success
+does not establish merge readiness. Closed/merged PRs are discovered through
+an already selected task artifact; a selected open PR can also close before its
+context is read. This extends source admission to PR identity
+listing and review/check metadata, without activating a private source.
+
+Use two fixed GraphQL queries through the existing Octokit requester. Both select
+an explicitly admitted repository and verify its identity and visibility. The
+transport accepts only those exact queries and validated variables; arbitrary
+queries, mutations and global node lookups remain forbidden. The same request,
+time, response-size and authentication boundaries apply to REST and GraphQL.
+GraphQL errors discard that response's partial data and preserve a sanitized
+coverage reason. Confirmed repository access loss still removes all its evidence.
+
+The [PR schema](https://docs.github.com/en/graphql/reference/pulls#pullrequest)
+provides `fullDatabaseId`, PR number, review decision and head commit. Use its
+supported decimal-string ID, not deprecated `databaseId`, for PR identity.
+The [commit schema](https://docs.github.com/en/graphql/reference/commits#statuscheckrollup)
+provides GitHub's combined rollup without reimplementing check aggregation. An
+authenticated query against public engineering-office #30 verified these fields
+and string serialization; it did not qualify a private credential or Agent Tasks
+access. Synthetic SDK tests exercise failures and source isolation.
+
+Read context for relevant PR numbers first and match returned resource IDs.
+Resolve remaining artifacts through at most ten pages of repository-scoped PR
+identities, then read only matching PR context. An optional global node ID cannot
+constrain lookup to the admitted repository before reading it, so it is not used
+for lookup. Scanning bounded identities costs more requests but also works when
+the task omits its global ID. It retrieves no unrelated PR titles or bodies.
+Unresolved IDs remain explicit instead of guessing a URL or matching issue IDs.
+
+GitHub's aggregate states avoid custom review/check reduction and its edge cases.
+No check detail pagination or new dependency is needed. Unknown aggregate fields
+and head changes remain visible; no merge action or readiness verdict is added.
+Prioritization, delivery, account qualification and private activation remain
+separate gates.

@@ -202,13 +202,17 @@
       ansible.builtin.include_tasks: helpers/retention-fixture.yml
       vars:
         retention_fixture_days: "{{ range(1, 28) | list }}"
-    - name: Record the six most recent historical days
-      ansible.builtin.set_fact:
-        recent_daily_snapshots: >-
-          {{ retention_fixture_snapshots.results[:6] | map(attribute='stdout_lines') |
-             map('last') | map('from_json') | map(attribute='snapshot_id') | list }}
+    - name: Record the history before maintenance
+      ansible.builtin.command:
+        argv: [restic, --no-cache, snapshots, --json]
+      environment:
+        RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+        RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+      changed_when: false
+      no_log: true
+      register: daily_history
 
-# Act: repeat maintenance; the new snapshot replaces the previous same-day one.
+# Act: repeat maintenance, possibly on a new UTC day.
 - name: Enforce daily and weekly limits through the public entrypoint
   ansible.builtin.import_playbook: ../../ansible/hermes-backup-prune.yml
 
@@ -227,13 +231,25 @@
       changed_when: false
       no_log: true
       register: retained_snapshots
+    # Include the new backup: crossing midnight consumes another daily bucket.
+    - name: Select the newest snapshot for each observed UTC day
+      ansible.builtin.set_fact:
+        daily_snapshots: "{{ daily_snapshots | default({}) | combine({item.time[:10]: item.id}) }}"
+      loop: >-
+        {{ ((daily_history.stdout | from_json) +
+            (retained_snapshots.stdout | from_json | selectattr('id', 'equalto', hermes_backup_snapshot) | list)) |
+           selectattr('hostname', 'equalto', hermes_project_name) |
+           selectattr('paths', 'equalto', [fixture_state_volume.volume.Mountpoint]) |
+           selectattr('tags', 'contains', 'engineering-office-hermes-state') | sort(attribute='time') }}
+      no_log: true
     - name: Require daily points, bounded weekly history and the unrelated snapshot
       ansible.builtin.assert:
         that:
           - kept_ids | length >= 8
           - kept_ids | length <= 12
           - hermes_backup_snapshot in kept_ids
-          - recent_daily_snapshots | difference(kept_ids) | length == 0
+          - daily_snapshots | length >= 7
+          - (daily_snapshots | dictsort(reverse=true))[:7] | map('last') | difference(kept_ids) | length == 0
           - expired_snapshots | intersect(kept_ids) | length == 0
           - hermes_backup_retention_remove | intersect(kept_ids) | length == 0
           - (unrelated_backup.stdout_lines[-1] | from_json).snapshot_id in kept_ids
