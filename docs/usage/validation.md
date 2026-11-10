@@ -50,6 +50,11 @@ library with synthetic HTTP responses. Suites cover provenance, minimal data,
 account and repository identity, scope admission, public/private visibility, old
 unresolved work, relevance, pagination, partial coverage, request budgets, access
 revocation, malformed records, sanitized failures and protected CLI inputs.
+Copilot scenarios cover all task states, separate attempts, tasks without PRs,
+opaque artifact IDs, creator/source restrictions, pagination, request limits,
+missing permissions, incomplete or stale sessions and access loss. Raw prompt and
+error canaries must stay out of evidence. These tests do not qualify live Agent
+Tasks access, PR link resolution or tasks created by other accounts.
 
 Use the package's `.node-version` runtime:
 

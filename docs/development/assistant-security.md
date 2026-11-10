@@ -3,7 +3,7 @@
 The first MVP serves professional internal work. Its current runtime is qualified
 with public synthetic fixtures only. Personal and client sources remain disabled.
 
-The operator can separately collect relevant issue/PR metadata across repositories
+The operator can separately collect relevant issue/PR and creator-scoped Copilot task/session metadata across repositories
 with the [GitHub source command](../usage/github-briefing.md). Its
 [admission contract](adr/0006-account-github-briefing.md) requires an explicit
 account, one scope, approved repository identities/visibility and a protected
@@ -11,6 +11,10 @@ credential file. Discovery does not admit sources automatically. Account access
 does not authorize private processing: record source approval before invocation.
 Only the operator process reads the credential; neither it nor the source snapshot
 is connected to Hermes. Runtime tools remain disabled.
+Source admission must include task names and artifact identities before enabling
+Agent Tasks reads. Copilot access loss removes task metadata; confirmed repository
+access loss removes all of that repository's evidence. The command cannot execute
+or modify agent tasks. See the source guide for excluded data and partial coverage.
 
 | Identity                   | Responsibility                                                                                                                       |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |

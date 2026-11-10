@@ -69,3 +69,44 @@ arbitrary code. Runtime egress enforcement, authenticated assistant interaction,
 durable reconciliation and deletion propagation remain separate gates. Synthetic
 SDK/CLI tests cover this contract; no private credentials or live account contents
 are required by CI or activated by this change.
+
+## Copilot metadata extension — 2026-11-11
+
+Extend the accepted operator boundary with repository-scoped Agent Tasks list
+and detail reads, using the same Octokit transport and Zod validation. Schema 3
+adds separate task/session coverage and a final core repository access check.
+This extends the operations in the admission table; the original schema 2
+decision and its narrower qualification above remain historical evidence.
+
+The [documented API](https://docs.github.com/en/rest/agent-tasks/agent-tasks)
+and [official preview OpenAPI description](https://github.com/github/rest-api-description/blob/main/descriptions-next/api.github.com/api.github.com.json)
+were inspected. Listing and detail support user access tokens with Agent Tasks
+read permission, not installation tokens. The endpoints are public preview;
+live account access remains unqualified. Listing can filter by creator and
+archival status. The repository owner is not the task creator, and the preview
+schema marks `user_collaborators` deprecated. Use the supported creator filter,
+verify its numeric identity and explicitly exclude tasks created by other people.
+Broader relevance needs a separately qualified supported contract.
+
+Read non-archived tasks in all provider states without an age cutoff. Preserve
+task and session identities, including distinct attempts and tasks without PRs.
+Task artifacts contain resource IDs and optional GraphQL IDs, not PR numbers or
+issue IDs. Retain these identities and branch refs without fabricating URLs or
+joining unrelated identifier namespaces. PR resolution, relevance through a
+linked PR and prioritized grouping remain subsequent work. Do not infer review,
+CI or merge readiness from agent completion.
+
+Keep optional provider metadata optional and report missing, stale or incomplete
+session detail. Limit task pagination and reuse the global request/time/response
+budgets. Ignore unknown response fields and never emit prompts, transcripts,
+billing or raw errors. Task names remain untrusted, potentially sensitive evidence.
+The adapter does not start, steer, retry, stop or archive tasks.
+
+Agent Tasks permission failure does not by itself prove core repository access
+was revoked. Discard task metadata after task access loss, then recheck core
+repository identity/access; confirmed loss or changed admission discards all
+evidence from that repository. Authentication loss discards the whole snapshot.
+Unknown final access stays explicitly partial. No durable state or credentials
+are added; synthetic SDK/CLI scenarios validate these boundaries without live
+collection. Operator admission and account qualification remain required for
+private use.

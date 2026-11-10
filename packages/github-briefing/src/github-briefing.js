@@ -1,5 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { z } from "zod";
+import { CopilotTasks } from "./copilot-tasks.js";
 
 const identity = z.object({
 	id: z.int().positive(),
@@ -58,6 +59,7 @@ const limits = {
 	requests: 100,
 	discoveryPages: 10,
 	searchPages: 10,
+	copilotPages: 10,
 	durationMs: 120_000,
 };
 
@@ -112,7 +114,7 @@ export class GitHubBriefing {
 			);
 		}
 		return {
-			schemaVersion: 2,
+			schemaVersion: 3,
 			scope: policy.scope,
 			classification: "restricted",
 			source: { system: "github", account: viewer },
@@ -134,10 +136,12 @@ export class GitHubBriefing {
 				excluded: [
 					"mentions",
 					"team-review-requests",
-					"copilot-tasks",
+					"copilot-tasks-created-by-others",
+					"archived-copilot-tasks",
+					"local-agent-activity",
 					"review-decisions",
 					"ci-status",
-					"closed-work",
+					"closed-issues-and-pull-requests",
 				],
 			},
 			repositories,
@@ -153,7 +157,19 @@ export class GitHubBriefing {
 			"/user/repos",
 			"/search/issues",
 			...policy.repositories.map((repo) => `/repos/${repo.fullName}`),
+			...policy.repositories.map(
+				(repo) => `/agents/repos/${repo.fullName}/tasks`,
+			),
 		]);
+		const allowedTask = (pathname) => {
+			const separator = pathname.lastIndexOf("/");
+			const collection = pathname.slice(0, separator);
+			return (
+				collection.startsWith("/agents/repos/") &&
+				allowedPaths.has(collection) &&
+				/^[a-zA-Z0-9_-]{1,128}$/u.test(pathname.slice(separator + 1))
+			);
+		};
 		const client = new Octokit({
 			auth: token,
 			userAgent: "engineering-office-github-briefing",
@@ -165,7 +181,8 @@ export class GitHubBriefing {
 						target.origin !== "https://api.github.com" ||
 						target.username ||
 						target.password ||
-						!allowedPaths.has(target.pathname) ||
+						(!allowedPaths.has(target.pathname) &&
+							!allowedTask(target.pathname)) ||
 						options.method !== "GET"
 					) {
 						throw new BriefingUnavailableError(
@@ -314,9 +331,35 @@ export class GitHubBriefing {
 			}
 			result.items.push(...search.items);
 		}
-		result.status = result.searches.every(({ status }) => status === "complete")
-			? "complete"
-			: "partial";
+		result.copilot = await new CopilotTasks().collect(
+			request,
+			approved,
+			viewer,
+			limits.copilotPages,
+		);
+		// Agent Tasks permissions are independent; recheck core access before retaining evidence.
+		const verification = await request(`GET /repos/${approved.fullName}`);
+		if (
+			["http-403", "http-404"].includes(verification.failure) ||
+			(!verification.failure &&
+				!matches(repositorySchema.parse(verification.data)))
+		) {
+			return {
+				...approved,
+				status: "unavailable",
+				reason: verification.failure ?? "source-changed",
+				items: [],
+			};
+		}
+		result.access = verification.failure
+			? { status: "unavailable", reason: verification.failure }
+			: { status: "complete" };
+		result.status =
+			result.searches.every(({ status }) => status === "complete") &&
+			result.copilot.status === "complete" &&
+			result.access.status === "complete"
+				? "complete"
+				: "partial";
 		return result;
 	}
 
