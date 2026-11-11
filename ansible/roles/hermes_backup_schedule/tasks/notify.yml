@@ -1,0 +1,28 @@
+---
+- name: Validate and read the protected monitoring endpoint
+  ansible.builtin.include_tasks: monitoring.yml
+
+- name: Require a supported heartbeat signal
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_schedule_signal in ['start', 'success', 'fail']
+    quiet: true
+
+- name: Signal backup status without sending source data or logs
+  # checkov:skip=CKV2_ANSIBLE_1:Validation requires HTTPS except isolated loopback endpoints
+  ansible.builtin.uri:
+    url: "{{ monitor_url.rstrip('/') }}{{ '/' ~ hermes_backup_schedule_signal if hermes_backup_schedule_signal != 'success' else '' }}"
+    method: POST
+    body: ""
+    status_code: 200
+    follow_redirects: none
+    use_netrc: false
+    timeout: 10
+    return_content: true
+  vars:
+    monitor_url: "{{ hermes_backup_schedule_monitor.content | b64decode | trim }}"
+  register: hermes_backup_schedule_notification
+  failed_when: >-
+    hermes_backup_schedule_notification.status | default(-1) != 200 or
+    hermes_backup_schedule_notification.content | default('') | trim != 'OK'
+  no_log: true

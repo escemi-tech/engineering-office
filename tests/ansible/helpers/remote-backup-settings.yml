@@ -1,0 +1,27 @@
+---
+- name: Select the independent synthetic recovery destination
+  ansible.builtin.add_host:
+    name: "{{ lookup('ansible.builtin.env', 'VM_NAME') }}"
+    hermes_backup_repository: s3:http://127.0.0.1:18333/hermes-backup-test
+    hermes_backup_aws_credentials_file: /var/lib/hermes-backup-test/aws-credentials
+    hermes_backup_monitor_url_file: /var/lib/hermes-backup-test/monitor-url
+
+- name: Forward isolated runner services to the disposable guest loopback
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -F
+      - "{{ lookup('ansible.builtin.env', 'VM_SSH_CONFIG') }}"
+      - -o
+      - ControlMaster=no
+      - -o
+      - ControlPath=none
+      - -o
+      - ExitOnForwardFailure=yes
+      - -fN
+      - -R
+      - 127.0.0.1:18333:127.0.0.1:18333
+      - -R
+      - 127.0.0.1:18080:127.0.0.1:18080
+      - "{{ lookup('ansible.builtin.env', 'VM_NAME') }}"
+  changed_when: true

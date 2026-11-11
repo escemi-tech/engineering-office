@@ -1,0 +1,12 @@
+---
+- name: Inspect the service after automatic maintenance
+  community.docker.docker_container_info:
+    name: "{{ hermes_project_name }}-hermes-1"
+  register: cycle_container
+
+- name: Read only synthetic monitoring events
+  # checkov:skip=CKV2_ANSIBLE_1:Isolated synthetic loopback monitor
+  ansible.builtin.uri:
+    url: http://127.0.0.1:18080/events
+    use_proxy: false
+  register: cycle_events

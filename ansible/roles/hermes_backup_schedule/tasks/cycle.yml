@@ -1,0 +1,135 @@
+---
+- name: Identify the managed local cycle
+  ansible.builtin.set_fact:
+    hermes_backup_schedule_running: true
+
+- name: Announce the start of this backup cycle
+  ansible.builtin.include_tasks: notify.yml
+  vars:
+    hermes_backup_schedule_signal: start
+
+- name: Validate the recovery destination before stopping Hermes
+  ansible.builtin.include_role:
+    name: hermes_backup
+    tasks_from: preflight
+
+- name: Authenticate the existing repository before service interruption
+  ansible.builtin.command:
+    argv: [restic, --no-cache, cat, config]
+  environment: "{{ hermes_backup_environment }}"
+  changed_when: false
+  no_log: true
+
+- name: Inspect the exact managed container before maintenance
+  community.docker.docker_container_info:
+    name: "{{ hermes_project_name }}-hermes-1"
+  register: hermes_backup_schedule_before
+  no_log: true
+
+- name: Require the managed service and its supported restart policy
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_schedule_before.exists
+      - hermes_backup_schedule_before.container.Config.Labels['com.docker.compose.project'] == hermes_project_name
+      - hermes_backup_schedule_before.container.Config.Labels['com.docker.compose.service'] == 'hermes'
+      - hermes_backup_schedule_before.container.HostConfig.RestartPolicy.Name in ['no', 'unless-stopped']
+      - not hermes_backup_schedule_before.container.State.Paused
+      - not hermes_backup_schedule_before.container.State.Restarting
+    quiet: true
+  no_log: true
+
+- name: Back up one stopped state and preserve its prior operating state
+  block:
+    - name: Disable restart for the bounded backup window
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            container,
+            update,
+            --restart=no,
+            "{{ hermes_backup_schedule_before.container.Id }}",
+          ]
+      changed_when: hermes_backup_schedule_before.container.HostConfig.RestartPolicy.Name != 'no'
+    - name: Stop exactly the inspected container
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            container,
+            stop,
+            --timeout,
+            "60",
+            "{{ hermes_backup_schedule_before.container.Id }}",
+          ]
+      changed_when: hermes_backup_schedule_before.container.State.Running
+    - name: Create and verify the encrypted recovery point
+      ansible.builtin.include_role:
+        name: hermes_backup
+    - name: Apply the verified recovery-point retention policy
+      ansible.builtin.include_role:
+        name: hermes_backup
+        tasks_from: prune
+  rescue:
+    - name: Report a failed backup or retention cycle
+      ansible.builtin.fail:
+        msg: Backup or retention failed. Preserve recovery material and inspect the failed task before retrying.
+  always:
+    - name: Inspect the service before restoring its prior state
+      community.docker.docker_container_info:
+        name: "{{ hermes_project_name }}-hermes-1"
+      register: hermes_backup_schedule_after
+      no_log: true
+    - name: Refuse to resume a replaced container
+      ansible.builtin.assert:
+        that:
+          - hermes_backup_schedule_after.exists
+          - hermes_backup_schedule_after.container.Id == hermes_backup_schedule_before.container.Id
+        fail_msg: The container changed during backup. Preserve state and inspect the deployment before resuming.
+        quiet: true
+      no_log: true
+    - name: Restore the previous restart policy
+      ansible.builtin.command:
+        argv:
+          - docker
+          - container
+          - update
+          - "--restart={{ hermes_backup_schedule_before.container.HostConfig.RestartPolicy.Name }}"
+          - "{{ hermes_backup_schedule_before.container.Id }}"
+      changed_when: hermes_backup_schedule_after.container.HostConfig.RestartPolicy.Name != hermes_backup_schedule_before.container.HostConfig.RestartPolicy.Name
+    - name: Resume only a service that was running before backup
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            container,
+            start,
+            "{{ hermes_backup_schedule_before.container.Id }}",
+          ]
+      when: hermes_backup_schedule_before.container.State.Running
+      changed_when: true
+
+- name: Confirm a resumed service is healthy before reporting success
+  when: hermes_backup_schedule_before.container.State.Running
+  block:
+    - name: Wait for the native Docker health check
+      community.docker.docker_container_info:
+        name: "{{ hermes_backup_schedule_before.container.Id }}"
+      register: hermes_backup_schedule_resumed
+      until: hermes_backup_schedule_resumed.container.State.Health.Status | default('missing') == 'healthy'
+      retries: 36
+      delay: 5
+      no_log: true
+    - name: Check the recovered gateway through the existing health tasks
+      ansible.builtin.include_role:
+        name: hermes
+        tasks_from: health
+  rescue:
+    - name: Report unsuccessful service recovery
+      ansible.builtin.fail:
+        msg: Hermes did not recover its gateway health after backup. Inspect the service before retrying.
+
+- name: Report success only after verification, retention and service resumption
+  ansible.builtin.include_tasks: notify.yml
+  vars:
+    hermes_backup_schedule_signal: success

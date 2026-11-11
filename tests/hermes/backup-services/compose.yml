@@ -1,0 +1,47 @@
+services:
+  storage:
+    image: chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
+    user: seaweed
+    command: mini -dir=/data
+    environment:
+      AWS_ACCESS_KEY_ID: synthetic-backup-key
+      AWS_SECRET_ACCESS_KEY: synthetic-backup-secret-never-for-production # checkov:skip=CKV_SECRET_6:Public synthetic fixture credential
+      S3_BUCKET: hermes-backup-test
+    ports:
+      - "127.0.0.1:18333:8333"
+    volumes:
+      - repository:/data
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8333/status]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+  monitor:
+    image: node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216
+    user: node
+    command: node /fixture/monitor.mjs
+    ports:
+      - "127.0.0.1:18080:8080"
+    volumes:
+      - ./monitor.mjs:/fixture/monitor.mjs:ro
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          --input-type=module,
+          -e,
+          "const r = await fetch('http://127.0.0.1:8080/events'); if (!r.ok) process.exit(1);",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  repository:

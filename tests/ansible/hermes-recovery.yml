@@ -9,6 +9,8 @@
   tasks:
     - name: Select the synthetic recovery settings
       ansible.builtin.include_tasks: helpers/recovery-settings.yml
+    - name: Select the independent storage surviving host loss
+      ansible.builtin.include_tasks: helpers/remote-backup-settings.yml
     - name: Read the selected snapshot record
       ansible.builtin.include_vars:
         file: "{{ recovery_directory }}/snapshot.yml"
@@ -42,13 +44,8 @@
     # Arrange
     - name: Supply the fixture key independently of the lost host
       ansible.builtin.include_tasks: helpers/recovery-material.yml
-    - name: Transfer and unpack the preserved encrypted repository
-      ansible.builtin.unarchive:
-        src: "{{ hostvars.localhost.recovery_directory }}/repository.tar"
-        dest: "{{ hermes_backup_repository }}"
-        owner: root
-        group: root
-        mode: "u=rwX,go="
+    - name: Supply storage credentials independently of the lost host
+      ansible.builtin.include_tasks: helpers/remote-backup-material.yml
 
 # Act: full Restic integrity and file checks are owned by the production entrypoint.
 - name: Restore the selected snapshot through the public entrypoint

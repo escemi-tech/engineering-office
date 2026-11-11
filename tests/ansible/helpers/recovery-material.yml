@@ -8,7 +8,7 @@
     mode: "0700"
   loop:
     - /var/lib/hermes-backup-test
-    - "{{ hermes_backup_repository }}"
+    - /var/lib/hermes-backup-test/repository
 
 # Public fixture values are supplied independently to each host, never fetched.
 - name: Write public fixture passwords outside Hermes

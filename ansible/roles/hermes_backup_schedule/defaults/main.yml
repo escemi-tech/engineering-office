@@ -1,0 +1,4 @@
+---
+hermes_project_name: engineering-office-hermes # noqa var-naming[no-role-prefix] -- Shared deployment identity.
+hermes_backup_schedule_enabled: false
+hermes_backup_schedule_directory: "/opt/engineering-office-backup/{{ hermes_project_name }}"

@@ -1,4 +1,7 @@
 ---
+- name: Require exclusive deployment maintenance
+  ansible.builtin.include_tasks: "{{ role_path }}/../../helpers/hermes-backup-idle.yml"
+
 - name: Validate deployment inputs before changing the host
   block:
     - name: Validate the explicit runtime credential allowlist

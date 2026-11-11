@@ -1,0 +1,22 @@
+---
+- name: Inspect automatic backup ownership before manual maintenance
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - --property=ActiveState,UnitFileState
+      - --value
+      - "hermes-backup-{{ hermes_project_name }}.{{ item }}"
+  loop: [timer, service]
+  changed_when: false
+  failed_when: false
+  register: hermes_backup_automation_state
+
+- name: Require automatic backups to be disabled before manual maintenance
+  ansible.builtin.assert:
+    that:
+      - item.rc in [0, 1]
+      - item.stdout_lines | intersect(['active', 'activating', 'reloading', 'deactivating', 'enabled', 'enabled-runtime']) | length == 0
+    fail_msg: Disable automatic backups with make hermes-backup-disable on the target before manual deployment or backup maintenance.
+    quiet: true
+  loop: "{{ hermes_backup_automation_state.results }}"

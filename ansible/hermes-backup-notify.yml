@@ -1,0 +1,12 @@
+---
+- name: Report a failed automatic backup
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Send only the failed-run signal
+      ansible.builtin.include_role:
+        name: hermes_backup_schedule
+        tasks_from: notify
+      vars:
+        hermes_backup_schedule_signal: fail

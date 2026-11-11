@@ -14,9 +14,7 @@
   ansible.builtin.command:
     argv:
       [restic, --no-cache, snapshots, --json, "{{ hermes_restore_snapshot }}"]
-  environment:
-    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
-    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+  environment: "{{ hermes_backup_environment }}"
   changed_when: false
   no_log: true
   register: hermes_backup_restore_metadata
@@ -61,8 +59,6 @@
       - --target
       - "{{ hermes_backup_restore_volume.volume.Mountpoint }}"
       - --verify
-  environment:
-    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
-    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+  environment: "{{ hermes_backup_environment }}"
   changed_when: true
   no_log: true

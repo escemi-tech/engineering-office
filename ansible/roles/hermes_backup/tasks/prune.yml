@@ -23,10 +23,7 @@
       - "7"
       - --keep-weekly
       - "4"
-  environment: &restic-environment
-    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
-    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
-    TZ: UTC
+  environment: "{{ hermes_backup_environment }}"
   changed_when: false
   no_log: true
   register: hermes_backup_retention_policy
@@ -79,7 +76,7 @@
 - name: Remove only the selected snapshot identities
   ansible.builtin.command:
     argv: "{{ ['restic', '--no-cache', 'forget'] + hermes_backup_retention_remove }}"
-  environment: *restic-environment
+  environment: "{{ hermes_backup_environment }}"
   when: hermes_backup_retention_remove | length > 0
   changed_when: true
   no_log: true
@@ -87,7 +84,7 @@
 - name: Reclaim all data no longer referenced by retained snapshots
   ansible.builtin.command:
     argv: [restic, --no-cache, prune, --max-unused, "0"]
-  environment: *restic-environment
+  environment: "{{ hermes_backup_environment }}"
   changed_when: true
   no_log: true
 

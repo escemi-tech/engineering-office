@@ -164,6 +164,7 @@ A stopped service remains stopped, including when the kill switch disabled resta
 This is a point-in-time liveness check, not proof of working model credentials,
 provider availability, private-source freshness or backup recoverability. Use
 [`make hermes-backup-check`](hermes-backup.md#check-backup-integrity-and-age)
-for backup verification. There is no scheduler or notification delivery yet.
+for manual backup verification. Use the [automatic backup guide](hermes-backup.md#enable-automatic-backups)
+for scheduled verification and independent failure/missing-run notifications.
 For failures, inspect restricted host logs using the [runtime runbook](hermes.md#stop-and-revoke-access);
 do not publish logs or full container inspection output in shared diagnostics.

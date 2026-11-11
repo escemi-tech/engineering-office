@@ -43,7 +43,9 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: docker-compose
-    directory: /services/hermes
+    directories:
+      - /services/hermes
+      - /tests/hermes/backup-services
     groups:
       docker-compose-dependencies:
         patterns:

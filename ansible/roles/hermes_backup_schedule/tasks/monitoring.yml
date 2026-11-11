@@ -1,0 +1,54 @@
+---
+- name: Inspect the protected monitoring URL file
+  ansible.builtin.stat:
+    path: "{{ hermes_backup_monitor_url_file }}"
+    follow: false
+    get_checksum: false
+    get_mime: false
+  register: hermes_backup_schedule_monitor_file
+
+- name: Resolve the monitoring file without reading its secret URL
+  ansible.builtin.command:
+    argv:
+      [
+        readlink,
+        --canonicalize-existing,
+        "{{ hermes_backup_monitor_url_file }}",
+      ]
+  changed_when: false
+  register: hermes_backup_schedule_monitor_path
+
+- name: Require a private monitoring endpoint outside the runtime
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_schedule_monitor_file.stat.isreg | default(false)
+      - hermes_backup_schedule_monitor_file.stat.uid == 0
+      - hermes_backup_schedule_monitor_file.stat.mode == '0600'
+      - hermes_backup_schedule_monitor_file.stat.size > 0
+      - hermes_backup_schedule_monitor_path.stdout == hermes_backup_monitor_url_file
+      - not hermes_backup_monitor_url_file.startswith('/var/lib/docker/')
+    quiet: true
+
+- name: Read the protected monitoring endpoint
+  ansible.builtin.slurp:
+    src: "{{ hermes_backup_monitor_url_file }}"
+  register: hermes_backup_schedule_monitor
+  no_log: true
+
+- name: Validate the selected heartbeat endpoint
+  ansible.builtin.assert:
+    that:
+      - monitor_url is not search('[\x00-\x20\x7f]')
+      - monitor_url | urlsplit('hostname') | default('', true) | length > 0
+      - not monitor_url | urlsplit('username')
+      - not monitor_url | urlsplit('password')
+      - not monitor_url | urlsplit('query')
+      - not monitor_url | urlsplit('fragment')
+      - >-
+        monitor_url | urlsplit('scheme') == 'https' or
+        (monitor_url | urlsplit('scheme') == 'http' and
+        monitor_url | urlsplit('hostname') in ['localhost', '127.0.0.1', '::1'])
+    quiet: true
+  vars:
+    monitor_url: "{{ hermes_backup_schedule_monitor.content | b64decode | trim }}"
+  no_log: true
