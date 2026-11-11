@@ -1,0 +1,327 @@
+---
+# Arrange
+- name: Read the configured protection controls
+  amazon.aws.s3_bucket_info:
+    name: "{{ infrastructure_state_bucket }}"
+    bucket_facts:
+      bucket_acl: true
+      bucket_versioning: true
+      bucket_logging: true
+      public_access_block: true
+  register: protected_bucket
+  no_log: true
+# Assert
+- name: Require private versioned storage
+  ansible.builtin.assert:
+    that:
+      - protected_bucket.buckets[0].bucket_versioning.Status == 'Enabled'
+      - protected_bucket.buckets[0].bucket_logging.LoggingEnabled.TargetBucket == infrastructure_state_log_bucket
+      - protected_bucket.buckets[0].bucket_logging.LoggingEnabled.TargetPrefix == infrastructure_state_bucket + '/'
+      - protected_bucket.buckets[0].public_access_block.values() | select('equalto', true) | list | length == 4
+      - protected_bucket.buckets[0].bucket_acl.Grants | selectattr('Grantee.Type', 'equalto', 'Group') | list | length == 0
+    quiet: true
+# Act
+- name: Save an encrypted native plan
+  ansible.builtin.command:
+    argv: [tofu, plan, -input=false, -out=.local/recovery.tfplan]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  changed_when: false
+  no_log: true
+- name: Apply the saved fixture plan
+  ansible.builtin.command:
+    argv: [tofu, apply, -input=false, .local/recovery.tfplan]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  changed_when: true
+  no_log: true
+- name: Retain the encrypted plan independently for decryption checks
+  ansible.builtin.copy:
+    src: "{{ infrastructure_state_stack_directory }}/.local/recovery.tfplan"
+    dest: "{{ state_fixture.path }}/saved.tfplan"
+    remote_src: true
+    mode: "0600"
+- name: Read the durable synthetic resource identity
+  ansible.builtin.command:
+    argv: [tofu, output, -json]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  changed_when: false
+  register: original_state
+  no_log: true
+- name: Retrieve the actual stored ciphertext
+  amazon.aws.s3_object:
+    bucket: "{{ infrastructure_state_bucket }}"
+    object: professional-host.tfstate
+    mode: get
+    dest: "{{ state_fixture.path }}/encrypted-state"
+  no_log: true
+# Assert
+- name: Probe the saved plan and remote state for plaintext disclosure
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -a
+      - -F
+      - -e
+      - synthetic-professional-state-recovery-canary
+      - -e
+      - "{{ fixture_password }}"
+      - -e
+      - synthetic-backup-key
+      - -e
+      - '"test"'
+      - "{{ item }}"
+  loop:
+    - "{{ state_fixture.path }}/encrypted-state"
+    - "{{ infrastructure_state_stack_directory }}/.local/recovery.tfplan"
+    - "{{ infrastructure_state_stack_directory }}/.terraform/terraform.tfstate"
+  changed_when: false
+  failed_when: false
+  register: plaintext_probes
+  no_log: true
+- name: Require encrypted state and plan contents
+  ansible.builtin.assert:
+    that: plaintext_probes.results | map(attribute='rc') | unique | list == [1]
+    quiet: true
+- name: Require anonymous state access to be denied
+  # checkov:skip=CKV2_ANSIBLE_1:Public synthetic loopback S3 fixture
+  ansible.builtin.uri:
+    url: "{{ infrastructure_state_endpoint }}/{{ infrastructure_state_bucket }}/professional-host.tfstate"
+    status_code: [403]
+    use_proxy: false
+# Act: hold a real lock, then attempt a second writer in the same backend.
+- name: Begin a bounded asynchronous state update
+  ansible.builtin.command:
+    argv: [tofu, apply, -input=false, -auto-approve, -var=hold_lock=true]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  async: 60
+  poll: 0
+  changed_when: true
+  register: locking_writer
+  no_log: true
+- name: Wait until the first writer owns the lock
+  ansible.builtin.wait_for:
+    path: "{{ infrastructure_state_stack_directory }}/.local/lock-held"
+    timeout: 30
+- name: Attempt a concurrent plan
+  ansible.builtin.command:
+    argv: [tofu, plan, -input=false, -lock-timeout=1s]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  changed_when: false
+  failed_when: false
+  register: second_writer
+  no_log: true
+# Assert
+- name: Require native conditional-write locking to reject the peer
+  ansible.builtin.assert:
+    that:
+      - second_writer.rc != 0
+      - "'Error acquiring the state lock' in second_writer.stderr"
+    quiet: true
+- name: Wait for the original writer to complete
+  ansible.builtin.async_status:
+    jid: "{{ locking_writer.ansible_job_id }}"
+  register: completed_writer
+  until: completed_writer.finished
+  retries: 30
+  delay: 1
+  no_log: true
+- name: Require the original write to succeed
+  ansible.builtin.assert:
+    that: completed_writer.rc == 0
+    quiet: true
+- name: Remove the fixture-only locking resource
+  ansible.builtin.command:
+    argv: [tofu, apply, -input=false, -auto-approve]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  changed_when: true
+  no_log: true
+# Arrange: lose the complete local working directory and supply recovery material afresh.
+- name: Remove the original checkout and its backend cache
+  ansible.builtin.file:
+    path: "{{ infrastructure_state_stack_directory }}"
+    state: absent
+- name: Remove the source checkout's encryption key
+  ansible.builtin.file:
+    path: "{{ infrastructure_state_password_file }}"
+    state: absent
+- name: Select a new recovery checkout and independent key file
+  ansible.builtin.set_fact:
+    infrastructure_state_stack_directory: "{{ state_fixture.path }}/replacement"
+    infrastructure_state_password_file: "{{ state_fixture.path }}/recovered-password"
+- name: Recreate only reviewed configuration
+  ansible.builtin.file:
+    path: "{{ infrastructure_state_stack_directory }}"
+    state: directory
+    mode: "0700"
+- name: Supply reviewed source to the fresh checkout
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ infrastructure_state_stack_directory }}/{{ item | basename }}"
+    mode: "0600"
+  loop:
+    - "{{ playbook_dir }}/../../tofu/professional-host/state.tofu"
+    - "{{ playbook_dir }}/../infrastructure-state/contract.tofu"
+- name: Restore the independent fixture key
+  ansible.builtin.copy:
+    dest: "{{ infrastructure_state_password_file }}"
+    content: "{{ fixture_password }}"
+    mode: "0600"
+  no_log: true
+# Act
+- name: Reconnect through the production bootstrap
+  ansible.builtin.include_role:
+    name: infrastructure_state
+- name: Read recovered state using the independently recovered key
+  ansible.builtin.command:
+    argv: [tofu, output, -json]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  environment: "{{ infrastructure_state_environment }}"
+  changed_when: false
+  register: recovered_state
+  no_log: true
+# Assert
+- name: Require the original identity and data to survive checkout loss
+  ansible.builtin.assert:
+    that: recovered_state.stdout | from_json == original_state.stdout | from_json
+    quiet: true
+# Arrange
+- name: Replace the key with a separately supplied wrong key
+  ansible.builtin.copy:
+    dest: "{{ infrastructure_state_password_file }}"
+    content: synthetic-wrong-state-password-with-enough-length
+    mode: "0600"
+  no_log: true
+# Act
+- name: Attempt to read encrypted state with the wrong key
+  ansible.builtin.command:
+    argv: [tofu, plan, -input=false]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  environment: "{{ infrastructure_state_environment }}"
+  changed_when: false
+  failed_when: false
+  register: wrong_state_key
+  no_log: true
+# Assert
+- name: Require wrong-key recovery to fail
+  ansible.builtin.assert:
+    that:
+      - wrong_state_key.rc != 0
+      - "'decrypt' in wrong_state_key.stderr | lower"
+    quiet: true
+- name: Attempt to read the separately retained encrypted plan
+  ansible.builtin.command:
+    argv: [tofu, show, -json, "{{ state_fixture.path }}/saved.tfplan"]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  environment: "{{ infrastructure_state_environment }}"
+  changed_when: false
+  failed_when: false
+  register: wrong_plan_key
+  no_log: true
+- name: Require the plan to reject the wrong key
+  ansible.builtin.assert:
+    that: wrong_plan_key.rc != 0
+    quiet: true
+# Arrange
+- name: Restore the correct recovery key after the rejected attempt
+  ansible.builtin.copy:
+    dest: "{{ infrastructure_state_password_file }}"
+    content: "{{ fixture_password }}"
+    mode: "0600"
+  no_log: true
+# Act
+- name: Verify the rejected read left remote state unchanged
+  ansible.builtin.command:
+    argv: [tofu, output, -json]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  environment: "{{ infrastructure_state_environment }}"
+  changed_when: false
+  register: state_after_rejection
+  no_log: true
+# Assert
+- name: Require preserved state after failed decryption
+  ansible.builtin.assert:
+    that: state_after_rejection.stdout | from_json == original_state.stdout | from_json
+    quiet: true
+- name: Read the saved plan with the recovered correct key
+  ansible.builtin.command:
+    argv: [tofu, show, -json, "{{ state_fixture.path }}/saved.tfplan"]
+    chdir: "{{ infrastructure_state_stack_directory }}"
+  environment: "{{ infrastructure_state_environment }}"
+  changed_when: false
+  register: recovered_plan
+  no_log: true
+- name: Require the saved plan to remain usable with the correct key
+  ansible.builtin.assert:
+    that:
+      - "'synthetic-professional-state-recovery-canary' in recovered_plan.stdout"
+      - (recovered_plan.stdout | from_json).resource_changes | selectattr('address', 'equalto', 'terraform_data.recovery') | list | length == 1
+    quiet: true
+# Arrange: an unrelated bucket must never be adopted or retagged.
+# The unrelated fixture uses the same isolated audit destination.
+- name: Create an unmanaged fixture bucket
+  amazon.aws.s3_bucket:
+    name: engineering-office-state-unmanaged
+    state: present
+    versioning: true
+    acl: private
+    logging:
+      target_bucket: "{{ infrastructure_state_log_bucket }}"
+      target_prefix: unmanaged/
+    public_access:
+      block_public_acls: true
+      block_public_policy: true
+      ignore_public_acls: true
+      restrict_public_buckets: true
+    tags:
+      managed-by: synthetic-other-owner
+  no_log: true
+# Act: isolate the intentional rejection from the parent JUnit callback.
+- name: Attempt unsafe destinations through the public entrypoint
+  ansible.builtin.command:
+    argv:
+      - env
+      - -u
+      - ANSIBLE_CALLBACKS_ENABLED
+      - "{{ ansible_playbook_python | dirname }}/ansible-playbook"
+      - "{{ playbook_dir }}/../../ansible/infrastructure-state.yml"
+      - --extra-vars
+      - >-
+        {{ {'infrastructure_state_bucket': item.bucket,
+            'infrastructure_state_log_bucket': item.audit,
+            'infrastructure_state_endpoint': infrastructure_state_endpoint,
+            'infrastructure_state_region': infrastructure_state_region,
+            'infrastructure_state_stack_directory': infrastructure_state_stack_directory,
+            'infrastructure_state_credentials_file': infrastructure_state_credentials_file,
+            'infrastructure_state_password_file': infrastructure_state_password_file} | to_json }}
+  changed_when: false
+  failed_when: false
+  loop:
+    - bucket: engineering-office-state-unmanaged
+      audit: "{{ infrastructure_state_log_bucket }}"
+      rejection: Refuse to adopt an unmanaged bucket
+    - bucket: "{{ infrastructure_state_bucket }}"
+      audit: engineering-office-audit-absent
+      rejection: Require protected nonrecursive audit delivery before state changes
+  register: unmanaged_rejection
+  no_log: true
+# Assert
+- name: Require rejection before any bucket mutation
+  ansible.builtin.assert:
+    that:
+      - item.rc == 2
+      - item.item.rejection in item.stdout
+      - "'Create or converge private versioned state storage' not in item.stdout"
+      - fixture_password not in item.stdout
+    quiet: true
+  loop: "{{ unmanaged_rejection.results }}"
+  no_log: true
+- name: Read the unrelated bucket after rejection
+  amazon.aws.s3_bucket_info:
+    name: engineering-office-state-unmanaged
+    bucket_facts:
+      bucket_tagging: true
+  register: unchanged_bucket
+  no_log: true
+- name: Require the unrelated owner to be preserved
+  ansible.builtin.assert:
+    that: unchanged_bucket.buckets[0].bucket_tagging['managed-by'] == 'synthetic-other-owner'
+    quiet: true

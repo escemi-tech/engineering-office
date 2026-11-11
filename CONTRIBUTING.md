@@ -64,6 +64,14 @@ security checks remain enabled. Remove the matching exclusions from `Makefile`
 and `shared-ci.yml` once the bundled zizmor accepts APM. For this file, check
 formatting directly with the repository image's `prettier --check` command.
 
+Trivy temporarily ignores only `AVD-AWS-0089` in the two Ansible paths listed in
+[its exception file](.github/linters/trivy-ignore.yaml). Logging is configured and
+tested; the bundled adapter does not read it. Engineering-office maintainers must
+remove the exception and custom Trivy configuration once
+[Trivy #11624](https://github.com/aquasecurity/trivy/pull/11624) is merged, released
+and included in the shared linter. The exception expires automatically; all other
+findings remain blocking.
+
 Declare APM Git dependencies as strings pinned to full commit SHAs, followed by
 the matching release tag as an inline comment: `owner/repo#<40-character SHA> # vX.Y.Z`.
 Dependabot updates both the SHA and tag comment to the latest eligible annotated
@@ -110,10 +118,38 @@ and cleanup in `tests/hermes/helpers/`.
 
 ## Ansible validation
 
+The independent infrastructure-state scenario runs native Ansible and OpenTofu
+against a pinned Moto S3 fixture, without a VM. The shared OpenTofu test action
+executes native tests and owns runtime setup and reports; the Ansible test action
+executes the consumer-specific backend and recovery lifecycle. Both feed the
+common report publisher. Assertions stay in
+`tests/ansible/infrastructure-state.yml` and its explicit helper. The synthetic
+Terraform resource exists only under `tests/infrastructure-state`; production
+bootstrap manages the backend bucket with the maintained S3 collection.
+
+Renovate updates `tofu/.opentofu-version` from OpenTofu releases and the
+`amazon.aws` collection through its existing Galaxy manager. Dependabot owns
+the SDK pin in `ansible/requirements.txt` and the setup Action. The native state
+lifecycle must pass when any of these change. Dependabot also maintains the Moto and official AWS CLI images in the fixture
+Compose manifest. The CLI prepares the independently managed audit destination.
+
+Run `tofu fmt -check -recursive tofu tests/infrastructure-state` with the pinned
+binary, then the isolated Ansible scenario. Its fixture requires a disposable S3
+service; do not point it at an operational bucket. Bootstrap check mode is tested
+to make no bucket changes. Wrong-key recovery, actual concurrent locking,
+encrypted state/plans, checkout loss and unmanaged-bucket refusal are acceptance
+contracts. Do not replace these with mocked SDK results.
+Use native `.tofu` files for OpenTofu's encryption syntax. The dedicated workflow
+checks formatting with the pinned OpenTofu binary; native initialization and the
+state lifecycle validate the configuration. Terraform-specific parsers do not
+own this source.
+
 The Hermes workflow uses the released `ci-github-iac/actions/ansible/test` action
-for its native host preparation, deployment, reboot and recovery tests. Host preparation
-runs on the fresh Ubuntu VM before the Compose lifecycle. Runtime deployment
-reuses that VM after the demo's synthetic state has been removed. The
+in three parallel scenarios: runtime/deployment, manual backup/retention and
+scheduled backup/host-loss recovery. Each owns a fresh Ubuntu VM and prepares
+its own source state; the recovery scenario destroys that source before creating
+its replacement. Runtime deployment reuses its VM after the Compose demo's
+synthetic state has been removed. The
 shared action installs the pinned controller runtime and Galaxy requirements,
 executes the test playbook and publishes native JUnit reports. Goss separately
 checks the deployed service and filesystem boundaries. Assertions stay in these
@@ -124,7 +160,11 @@ with their respective roles in `ansible/roles/hermes_host` and `ansible/roles/he
 The tests exercise those entrypoints and repeat each role to verify convergence.
 Keep the Lima fixture free of runtime installation logic. Reboot the deployed
 guest through Ansible, then assert persistent state in Goss without redeploying.
-Shared test inventory setup belongs in `tests/ansible/helpers/`.
+Shared test inventory setup belongs in `tests/ansible/helpers/`. The test-only
+Ansible configuration enables SSH pipelining and uses native connection reuse.
+Reset the connection after fixture group changes; keep the independent reverse
+SSH tunnel separate so resets cannot disconnect storage. Use distinct matrix
+report names, let all scenarios finish after a failure and always clean up.
 The backup and host-loss recovery scenarios use the production backup/restore
 entrypoints and the distribution's Restic package. Retention tests
 cover sparse expired history, daily/weekly limits, unrelated snapshots, future

@@ -4,6 +4,7 @@
 - [Run Hermes](usage/hermes.md)
 - [Read GitHub work for a private briefing](usage/github-briefing.md)
 - [Qualify the OVHcloud host](usage/ovh-qualification.md)
+- [Prepare and recover infrastructure state](usage/infrastructure-state.md)
 - [Deploy Hermes to an approved host](usage/hermes-deployment.md)
 - [Back up and recover Hermes state](usage/hermes-backup.md)
 - [Review drafts with the shared writing policy](usage/writing-policy.md)
@@ -17,3 +18,4 @@
 - [ADR 0004: Local normalization of classified draft prose](development/adr/0004-local-writing-normalization.md)
 - [ADR 0005: Bounded public GitHub evidence](development/adr/0005-github-briefing-source.md)
 - [ADR 0006: Account-wide scoped GitHub evidence](development/adr/0006-account-github-briefing.md)
+- [ADR 0007: Independently recoverable infrastructure state](development/adr/0007-recoverable-infrastructure-state.md)

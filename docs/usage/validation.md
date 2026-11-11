@@ -1,5 +1,27 @@
 # Validate the repository
 
+## Infrastructure state
+
+The dedicated `test-infrastructure-state.yml` workflow tests the production
+bootstrap against a pinned Moto S3 service, with a separate audit destination
+prepared by the official AWS CLI fixture. Shared `opentofu/test` runs native
+module assertions before the consumer-specific Ansible recovery lifecycle.
+OpenTofu creates only synthetic `terraform_data` resources; no provider account
+or paid resource is used.
+
+The scenario verifies a read-only preview, repeatable private/versioned bucket
+setup, mandatory access logging, encrypted state and saved plans, anonymous-access rejection, real
+concurrent-lock exclusion, wrong-key rejection and recovery of the original
+resource identity after deleting the local checkout and key. An unmanaged bucket
+must remain unmodified. The shared Ansible action publishes native JUnit results;
+the common publisher consolidates them with the other test reports. Cleanup
+removes the fixture volumes and every object version after success or failure.
+
+These checks establish the implementation's S3 contract. They do not establish
+the operational provider's permissions or capabilities. Qualify the selected
+endpoint and independently recovered keys before managing cloud resources, as
+described in the [state guide](infrastructure-state.md).
+
 CI publishes three persistent PR comments: tests, coverage and lint. Each shows
 a short summary with report and job details collapsed by default. Failures and
 missing reports remain visible. Each producer retains its job summary and native
@@ -94,8 +116,17 @@ an assistant's interpretation. Keep raw response/error canaries out of reports.
 The [dedicated workflow](../../.github/workflows/test-hermes.yml) runs on pull
 requests and main pushes through shared CI. It composes the pinned
 `ci-github-iac` VM creation, Goss testing and destruction actions. A disposable
-Ubuntu VM receives Docker through the production Ansible host playbook, then
-deployment assets and synthetic fixtures. No checkout or Docker socket is mounted inside Hermes.
+Ubuntu VM per scenario receives Docker through the production Ansible host
+playbook, then deployment assets and synthetic fixtures. Three scenarios run in
+parallel, each with a 25-minute timeout:
+
+- `runtime`: policy build, Compose lifecycle, deployment, health and host reboot.
+- `backup`: encrypted manual backups, retention and rejected recovery operations.
+- `recovery`: scheduled backups, failure boundaries and recovery on a replacement host.
+
+Every scenario prepares its own state and reports separately. A failing scenario
+does not cancel the others; all scenarios must pass. Cleanup runs after success
+or failure. No checkout or Docker socket is mounted inside Hermes.
 
 The pinned upstream APM Action sets up the CLI version declared in
 `services/hermes/.apm-version`. The workflow copies that complete distribution

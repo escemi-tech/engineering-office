@@ -1,0 +1,14 @@
+---
+# Arrange: recover this exact content and ownership after losing the source host.
+- name: Inspect the source state volume
+  community.docker.docker_volume_info:
+    name: "{{ hermes_project_name }}_state"
+  register: fixture_state_volume
+
+- name: Add a synthetic ownership and encryption canary
+  ansible.builtin.copy:
+    dest: "{{ fixture_state_volume.volume.Mountpoint }}/recovery-canary"
+    content: synthetic-restic-plaintext-canary
+    owner: "10000"
+    group: "10000"
+    mode: "0600"

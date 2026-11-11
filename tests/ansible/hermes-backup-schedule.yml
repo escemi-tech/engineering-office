@@ -1,5 +1,5 @@
 ---
-# Arrange: the preceding manual backup scenario left Hermes intentionally stopped.
+# Arrange: this scenario owns its source state and maintenance window.
 - name: Select the disposable host
   ansible.builtin.import_playbook: helpers/inventory.yml
 
@@ -9,6 +9,11 @@
   tasks:
     - name: Select the synthetic recovery settings
       ansible.builtin.include_tasks: helpers/recovery-settings.yml
+    - name: Protect the runner handoff directory
+      ansible.builtin.file:
+        path: "{{ recovery_directory }}"
+        state: directory
+        mode: "0700"
     - name: Connect the independent storage and heartbeat recorder
       ansible.builtin.include_tasks: helpers/remote-backup-settings.yml
 
@@ -21,6 +26,21 @@
     fixture_compose: "{{ playbook_dir }}/../hermes/backup-services/compose.yml"
   tasks:
     # Arrange
+    - name: Prepare independent fixture passwords
+      ansible.builtin.include_tasks: helpers/recovery-material.yml
+    - name: Prepare the synthetic state canary
+      ansible.builtin.include_tasks: helpers/backup-canary.yml
+    - name: Stop the source through the production shutdown command
+      ansible.builtin.command:
+        argv:
+          [
+            make,
+            -C,
+            /srv/engineering-office,
+            "HERMES_PROJECT={{ hermes_project_name }}",
+            hermes-stop,
+          ]
+      changed_when: true
     - name: Supply independent public fixture credentials
       ansible.builtin.include_tasks: helpers/remote-backup-material.yml
     - name: Validate the selected remote repository paths

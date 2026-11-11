@@ -1,0 +1,209 @@
+---
+- name: Validate the dedicated state destination
+  ansible.builtin.assert:
+    that:
+      - infrastructure_state_bucket is match('^engineering-office-state-[a-z0-9][a-z0-9-]{0,36}[a-z0-9]$')
+      - infrastructure_state_log_bucket is match('^engineering-office-audit-[a-z0-9][a-z0-9-]{0,36}[a-z0-9]$')
+      - infrastructure_state_bucket != infrastructure_state_log_bucket
+      - infrastructure_state_region is match('^[a-z0-9-]+$')
+      - infrastructure_state_endpoint is match('^https://[a-zA-Z0-9.-]+(:[0-9]+)?/?$') or infrastructure_state_endpoint is match('^http://127\.0\.0\.1:[0-9]+$')
+      - infrastructure_state_credentials_file != infrastructure_state_password_file
+    fail_msg: Use a dedicated professional state bucket, an HTTPS endpoint and separate credential/key files.
+    quiet: true
+
+- name: Inspect independently supplied credentials and recovery key
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ infrastructure_state_credentials_file }}"
+    - "{{ infrastructure_state_password_file }}"
+  register: infrastructure_state_files
+  no_log: true
+
+- name: Require canonical private files owned by this operator
+  ansible.builtin.assert:
+    that:
+      - item.item is match('^/')
+      - item.item == item.item | realpath
+      - item.stat.isreg | default(false)
+      - not item.stat.islnk | default(true)
+      - item.stat.mode | default('') == '0600'
+      - item.stat.uid | default(-1) == lookup('ansible.builtin.pipe', 'id -u') | int
+      - item.stat.size | default(0) > 0
+    fail_msg: Credentials and the recovery key must be separate, nonempty, operator-owned mode-0600 files.
+    quiet: true
+  loop: "{{ infrastructure_state_files.results }}"
+  no_log: true
+
+- name: Validate the independently held encryption password
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.file', infrastructure_state_password_file) | trim | length >= 32
+    fail_msg: Supply a separately recovered password of at least 32 characters.
+    quiet: true
+  no_log: true
+
+- name: Check the installed OpenTofu version
+  ansible.builtin.command:
+    argv: [tofu, version, -json]
+  changed_when: false
+  check_mode: false
+  register: infrastructure_state_tofu
+
+- name: Require the maintained OpenTofu release
+  ansible.builtin.assert:
+    that:
+      - (infrastructure_state_tofu.stdout | from_json).terraform_version == lookup('ansible.builtin.file', role_path + '/../../../tofu/.opentofu-version') | trim
+    fail_msg: Install the OpenTofu release pinned in tofu/.opentofu-version.
+    quiet: true
+
+- name: Select native credentials without inheriting ambient identities
+  ansible.builtin.set_fact:
+    infrastructure_state_environment:
+      AWS_SHARED_CREDENTIALS_FILE: "{{ infrastructure_state_credentials_file }}"
+      AWS_CONFIG_FILE: /dev/null
+      AWS_SHARED_CONFIG_FILE: /dev/null
+      AWS_PROFILE: default
+      AWS_ACCESS_KEY_ID: ""
+      AWS_SECRET_ACCESS_KEY: ""
+      AWS_SESSION_TOKEN: ""
+      AWS_WEB_IDENTITY_TOKEN_FILE: ""
+      AWS_ROLE_ARN: ""
+      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: ""
+      AWS_CONTAINER_CREDENTIALS_FULL_URI: ""
+      AWS_CONTAINER_AUTHORIZATION_TOKEN: ""
+      AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE: ""
+      AWS_EC2_METADATA_DISABLED: "true"
+      TF_VAR_state_password_file: "{{ infrastructure_state_password_file }}"
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+
+- name: Inspect the approved checkout and local backend paths before cloud changes
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ infrastructure_state_stack_directory }}"
+    - "{{ infrastructure_state_stack_directory }}/.local"
+    - "{{ infrastructure_state_stack_directory }}/.local/backend.hcl"
+    - "{{ infrastructure_state_stack_directory }}/.terraform"
+    - "{{ infrastructure_state_stack_directory }}/.terraform/terraform.tfstate"
+  register: infrastructure_state_workspace
+
+- name: Refuse indirect or foreign-owned backend paths
+  ansible.builtin.assert:
+    that:
+      - item.item == item.item | realpath
+      - not item.stat.islnk | default(false)
+      - not item.stat.exists or item.stat.uid == lookup('ansible.builtin.pipe', 'id -u') | int
+    fail_msg: Use an operator-owned checkout with canonical backend paths and no symlinks.
+    quiet: true
+  loop: "{{ infrastructure_state_workspace.results }}"
+
+- name: Require the selected checkout to exist
+  ansible.builtin.assert:
+    that: infrastructure_state_workspace.results[0].stat.isdir | default(false)
+    quiet: true
+
+- name: Inspect ownership before changing an existing bucket
+  amazon.aws.s3_bucket_info:
+    name: "{{ infrastructure_state_bucket }}"
+    endpoint_url: "{{ infrastructure_state_endpoint }}"
+    region: "{{ infrastructure_state_region }}"
+    profile: default
+    bucket_facts:
+      bucket_tagging: true
+  environment: "{{ infrastructure_state_environment }}"
+  register: infrastructure_state_existing
+  no_log: true
+
+- name: Refuse to adopt an unmanaged bucket
+  ansible.builtin.assert:
+    that:
+      - infrastructure_state_existing.buckets | length == 0 or (infrastructure_state_existing.buckets[0].bucket_tagging | default({})).get('managed-by') == 'engineering-office'
+      - infrastructure_state_existing.buckets | length == 0 or (infrastructure_state_existing.buckets[0].bucket_tagging | default({})).get('purpose') == 'infrastructure-state'
+    fail_msg: The existing bucket is not owned by this state bootstrap. No changes were made.
+    quiet: true
+
+- name: Inspect the independently prepared audit destination
+  amazon.aws.s3_bucket_info:
+    name: "{{ infrastructure_state_log_bucket }}"
+    endpoint_url: "{{ infrastructure_state_endpoint }}"
+    region: "{{ infrastructure_state_region }}"
+    profile: default
+    bucket_facts:
+      bucket_acl: true
+      bucket_versioning: true
+      bucket_logging: true
+      public_access_block: true
+  environment: "{{ infrastructure_state_environment }}"
+  register: infrastructure_state_audit
+  no_log: true
+
+- name: Require protected nonrecursive audit delivery before state changes
+  ansible.builtin.assert:
+    that:
+      - infrastructure_state_audit.buckets | length == 1
+      - infrastructure_state_audit.buckets[0].bucket_versioning.Status == 'Enabled'
+      - infrastructure_state_audit.buckets[0].public_access_block.values() | select('equalto', true) | list | length == 4
+      - not infrastructure_state_audit.buckets[0].bucket_logging.get('LoggingEnabled')
+      - infrastructure_state_audit.buckets[0].bucket_acl.Grants | selectattr('Grantee.Type', 'equalto', 'Group') | map(attribute='Grantee.URI') | unique | list == ['http://acs.amazonaws.com/groups/s3/LogDelivery']
+      - infrastructure_state_audit.buckets[0].bucket_acl.Grants | selectattr('Grantee.Type', 'equalto', 'Group') | map(attribute='Permission') | sort | list == ['READ_ACP', 'WRITE']
+    fail_msg: Prepare a separate private versioned audit bucket with only the LogDelivery group grants, public-access blocking and no recursive logging.
+    quiet: true
+  no_log: true
+
+- name: Create or converge private versioned state storage
+  amazon.aws.s3_bucket:
+    name: "{{ infrastructure_state_bucket }}"
+    endpoint_url: "{{ infrastructure_state_endpoint }}"
+    region: "{{ infrastructure_state_region }}"
+    profile: default
+    state: present
+    versioning: true
+    acl: private
+    logging:
+      target_bucket: "{{ infrastructure_state_log_bucket }}"
+      target_prefix: "{{ infrastructure_state_bucket }}/"
+    public_access:
+      block_public_acls: true
+      block_public_policy: true
+      ignore_public_acls: true
+      restrict_public_buckets: true
+    tags:
+      managed-by: engineering-office
+      purpose: infrastructure-state
+    purge_tags: false
+  environment: "{{ infrastructure_state_environment }}"
+  register: infrastructure_state_storage
+  no_log: true
+
+- name: Create protected backend configuration and cache directories
+  ansible.builtin.file:
+    path: "{{ infrastructure_state_stack_directory }}/{{ item }}"
+    state: directory
+    mode: "0700"
+  loop: [.local, .terraform]
+
+- name: Write only endpoint and location metadata to the backend configuration
+  ansible.builtin.copy:
+    dest: "{{ infrastructure_state_stack_directory }}/.local/backend.hcl"
+    mode: "0600"
+    content: |
+      bucket = {{ infrastructure_state_bucket | to_json }}
+      region = {{ infrastructure_state_region | to_json }}
+      endpoints = { s3 = {{ infrastructure_state_endpoint | to_json }} }
+  no_log: true
+
+- name: Initialize the encrypted remote state workspace
+  ansible.builtin.command:
+    argv:
+      - tofu
+      - "-chdir={{ infrastructure_state_stack_directory }}"
+      - init
+      - -input=false
+      - -backend-config=.local/backend.hcl
+  environment: "{{ infrastructure_state_environment }}"
+  changed_when: false
+  no_log: true

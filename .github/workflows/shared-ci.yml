@@ -36,9 +36,20 @@ jobs:
     uses: $/.github/workflows/test-github-briefing.yml
     permissions:
       contents: read
+  test-infrastructure-state:
+    uses: $/.github/workflows/test-infrastructure-state.yml
+    permissions:
+      contents: read
 
   reports:
-    needs: [lint, test-hermes, test-writing-normalizer, test-github-briefing]
+    needs:
+      [
+        lint,
+        test-hermes,
+        test-writing-normalizer,
+        test-github-briefing,
+        test-infrastructure-state,
+      ]
     if: always()
     uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
     permissions:
