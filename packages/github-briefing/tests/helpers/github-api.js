@@ -200,6 +200,7 @@ export class GitHubApiFixture {
 		mode = 0o600,
 		symbolic = false,
 		malformed = false,
+		format,
 		args,
 	} = {}) {
 		const directory = mkdtempSync(join(tmpdir(), "github-briefing-"));
@@ -222,7 +223,7 @@ export class GitHubApiFixture {
 					if (new Headers(options.headers).get('authorization') !== 'token synthetic-token-canary') throw new Error('Unexpected credential');
 					return fixture.fetch(url, options);
 				};
-				process.argv = ['node', 'cli.js', ...${JSON.stringify(args ?? ["--source", source, "--token-file", symbolic ? join(directory, "token-link") : token])}];
+				process.argv = ['node', 'cli.js', ...${JSON.stringify(args ?? ["--source", source, "--token-file", symbolic ? join(directory, "token-link") : token, ...(format ? ["--format", format] : [])])}];
 				await import(${JSON.stringify(new URL("../../src/cli.js", import.meta.url).href)});
 			`;
 			return spawnSync(

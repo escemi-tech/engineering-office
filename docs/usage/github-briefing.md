@@ -8,7 +8,7 @@ Also collect non-archived Copilot cloud-agent tasks created by your authenticate
 account, with their session attempts and supplied PR/branch identities. Resolve
 linked PRs and read GitHub's review decision and head-commit check rollup separately.
 
-The command produces scoped JSON evidence, not a prioritized assistant briefing.
+The command produces a concise local briefing or the complete scoped JSON evidence.
 Mentions, team review requests, tasks created by other accounts, archived tasks,
 local IDE/CLI agent activity and closed issues are not collected. Closed or merged
 PRs are not independently searched; eligible Copilot artifacts can resolve to
@@ -86,12 +86,62 @@ For another already approved scope, provide its separate protected files:
 ```sh
 node packages/github-briefing/src/cli.js \
   --source /absolute/path/source.json \
-  --token-file /absolute/path/token
+  --token-file /absolute/path/token --format text
 ```
 
 Both files must belong to the invoking user, be regular files with no group/other
 permissions, and not be symlinks. Source policy size is limited to 1 MiB; token
 files to 16 KiB. Up to 1,000 repository admissions are supported per policy.
+
+## Read the concise briefing
+
+`make github-briefing` displays plain text: account and scope, observation time,
+coverage warnings and up to five grouped work items with source links. The
+underlying CLI accepts `--format text` or `--format json`; JSON is its default
+and includes all collected records and coverage detail. Both formats perform the
+same bounded collection and retain the same protected input requirements.
+
+Items are ordered by explicit signals:
+
+1. **Needs attention:** waiting, failed or timed-out Copilot work; requested PR
+   changes; failed/error CI; or a direct review request from search results.
+2. **In progress:** queued or running tasks or their newest attempts.
+3. **Open or unresolved work:** open issues/PRs and unavailable PR context.
+4. **Completed or inactive:** completed, idle or cancelled tasks and closed/merged PRs.
+
+Within each category, the oldest observed update in a group comes first, falling
+back to a task's creation time when its update time is absent. That source
+timestamp is shown separately from collection time; missing times are explicit.
+Ties have a deterministic repository/record order. This ordering does not infer
+business urgency, deadlines, approval or merge readiness. Review requests from
+the search index are labelled as such. Historical CI/review failures on a merged
+or closed PR do not create an attention signal, while an active linked task
+remains visible independently.
+
+Verified PR/task relationships form one group within a repository. A task can
+link several PRs, and several tasks can link one PR. Issues, unrelated tasks and
+unresolved artifact IDs remain separate. Each group shows up to three records
+of each kind and up to three latest attempts per task; omitted details are
+counted and remain in JSON. Task and attempt states are shown separately. Only
+the newest attempt's state affects ordering; equal-time newest attempts all
+contribute. Older attempts remain in the evidence without overriding a newer
+one. PR state, review and head-commit CI also remain separate, including unknowns.
+
+Coverage warnings appear before the selected items, with up to five affected
+repositories and a count of further affected sources. An empty partial result
+never claims there is no outstanding work. Check observation time and source
+coverage before acting; rerun collection to refresh it. Plain-text titles have
+terminal controls removed, whitespace collapsed and a 280-character limit;
+JSON retains the original titles. Titles are still untrusted evidence.
+
+There is no model-generated synthesis, external delivery or saved briefing.
+Choose JSON when five items or the abbreviated detail are insufficient:
+
+```sh
+node packages/github-briefing/src/cli.js \
+  --source .local/github-briefing/source.json \
+  --token-file .local/github-briefing/token --format json
+```
 
 ## Read coverage before using the evidence
 
@@ -153,7 +203,7 @@ and task paths are constructed locally. Response-provided URLs are never followe
 
 A valid partial snapshot is emitted with exit status zero and explicit coverage.
 Invalid credentials, the wrong account, malformed policy or inconsistent evidence
-produce a sanitized error and no JSON. No raw provider error bodies are logged.
+produce a sanitized error and no briefing output. No raw provider error bodies are logged.
 
 ### Interpret Copilot tasks and attempts
 

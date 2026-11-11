@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { GitHubBriefingText } from "./briefing-text.js";
 import { BriefingUnavailableError, GitHubBriefing } from "./github-briefing.js";
 
 async function readProtectedFile(filename, maxBytes) {
@@ -30,11 +31,19 @@ async function readProtectedFile(filename, maxBytes) {
 try {
 	const { values } = parseArgs({
 		args: process.argv.slice(2),
-		options: { source: { type: "string" }, "token-file": { type: "string" } },
+		options: {
+			source: { type: "string" },
+			"token-file": { type: "string" },
+			format: { type: "string", default: "json" },
+		},
 	});
-	if (!values.source || !values["token-file"]) {
+	if (
+		!values.source ||
+		!values["token-file"] ||
+		!["json", "text"].includes(values.format)
+	) {
 		throw new BriefingUnavailableError(
-			"Usage: briefing --source <policy.json> --token-file <token-file>",
+			"Usage: briefing --source <policy.json> --token-file <token-file> [--format json|text]",
 		);
 	}
 	const policy = JSON.parse(
@@ -42,7 +51,11 @@ try {
 	);
 	const token = (await readProtectedFile(values["token-file"], 16384)).trim();
 	const snapshot = await new GitHubBriefing().collect({ policy, token });
-	process.stdout.write(`${JSON.stringify(snapshot, null, 2)}\n`);
+	process.stdout.write(
+		values.format === "text"
+			? new GitHubBriefingText().render(snapshot)
+			: `${JSON.stringify(snapshot, null, 2)}\n`,
+	);
 } catch (error) {
 	process.stderr.write(
 		`${error instanceof BriefingUnavailableError ? error.message : "GitHub briefing unavailable. Check arguments and protected local input files."}\n`,

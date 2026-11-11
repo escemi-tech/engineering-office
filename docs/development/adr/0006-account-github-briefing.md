@@ -151,3 +151,25 @@ No check detail pagination or new dependency is needed. Unknown aggregate fields
 and head changes remain visible; no merge action or readiness verdict is added.
 Prioritization, delivery, account qualification and private activation remain
 separate gates.
+
+## Local presentation extension — 2026-11-11
+
+Add deterministic text presentation over the existing schema 4 snapshot. The
+operator's Make command shows five grouped work items; the CLI retains JSON as
+its default and offers explicit text output. No collection contract, dependency,
+source admission, external processor or storage changes.
+
+Group only verified repository-local task/PR relationships, preserving all
+attempts in JSON. Order explicit attention signals before running work, open or
+unresolved work and completed/inactive work, then older updates within each
+category. Display task, attempt, review and check states independently. An older
+failed attempt must not hide a newer active one; a closed PR's historical failure
+must not imply current action. Missing evidence and truncated presentation remain
+visible. Source titles cannot emit terminal controls in text output.
+
+A deterministic presentation is sufficient for this bounded operator slice and
+avoids adding a model call or a ranking dependency before live qualification.
+Its trade-off is fixed signal-based ordering rather than business prioritization.
+Synthetic presentation and CLI tests qualify the local format; private source
+activation, account API eligibility, assistant delivery and operational usefulness
+remain unqualified.
