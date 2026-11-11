@@ -53,6 +53,10 @@ revocation, malformed records, sanitized failures and protected CLI inputs.
 Mention scenarios cover both work types, query attribution, overlapping relevance,
 revision changes, identity mismatches, inaccessible sources, partial results and
 rate limits. A mention alone must not become a reply obligation or attention signal.
+Review scenarios preserve the review signal alongside authorship, assignment or
+mentions, reject unrelated authored/assigned results, and cover independent
+pagination, incomplete results and access failures. Presentation must describe
+requests to the account or its teams without inferring which target matched.
 Copilot scenarios cover all task states, separate attempts, tasks without PRs,
 opaque artifact IDs, creator/source restrictions, pagination, request limits,
 missing permissions, incomplete or stale sessions and access loss. Raw prompt and

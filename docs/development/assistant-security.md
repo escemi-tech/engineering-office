@@ -18,7 +18,10 @@ or modify agent tasks. See the source guide for excluded data and partial covera
 PR context uses two fixed read-only GraphQL queries restricted to admitted
 repositories. Admission includes bounded PR identity listing for artifact
 resolution and review/check metadata for selected PRs. No global node lookup,
-arbitrary query or mutation is accepted. Direct user mentions use separate
+arbitrary query or mutation is accepted. A dedicated review search includes
+requests to the verified account or its teams within each admitted repository.
+It retrieves no membership lists and does not infer an individual obligation
+from a team match. Direct user mentions use separate
 repository-scoped search queries, with no comment-thread collection or retained
 response bodies. A mention is an indexed relationship, not authority to reply. GitHub's review decision and head-commit
 check rollup are observations, not authorization to merge or approval of an action.

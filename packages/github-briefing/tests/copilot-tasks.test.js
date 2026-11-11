@@ -259,7 +259,7 @@ suite("Copilot coverage and bounded reads", () => {
 			assert.equal(snapshot.repositories[0].items.length, 2);
 			assert.equal(snapshot.coverage.status, "partial");
 			assert.doesNotMatch(JSON.stringify(snapshot), /canary/u);
-			if (problem === "rate-limit") assert.equal(api.requests.length, 8);
+			if (problem === "rate-limit") assert.equal(api.requests.length, 9);
 		});
 	}
 

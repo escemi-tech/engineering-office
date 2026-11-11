@@ -171,7 +171,7 @@ export class GitHubBriefingText {
 		if (["ERROR", "FAILURE"].includes(context?.checks?.state))
 			reasons.push(`CI reports ${context.checks.state.toLowerCase()}`);
 		if (work?.reasons.includes("review-requested"))
-			reasons.push("Review requested (search result)");
+			reasons.push("Review requested from you or a team (search result)");
 		const priority = reasons.length ? 0 : 2;
 		if (work?.reasons.includes("mentioned"))
 			reasons.push("Mentioned (search result)");

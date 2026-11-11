@@ -159,12 +159,16 @@ export class GitHubApiFixture {
 				query.startsWith(`repo:${repo.full_name} `),
 			);
 			const kind = query.includes("is:pull-request") ? "pull-request" : "issue";
-			const mentions = query.includes("mentions:");
-			key = `${repository.full_name}/${kind}/${mentions ? "mentions/" : ""}${target.searchParams.get("page")}`;
+			const relationship = query.includes("mentions:")
+				? "mentions/"
+				: query.includes("review-requested:")
+					? "reviews/"
+					: "";
+			key = `${repository.full_name}/${kind}/${relationship}${target.searchParams.get("page")}`;
 			payload = {
-				total_count: mentions ? 0 : 1,
+				total_count: relationship ? 0 : 1,
 				incomplete_results: false,
-				items: mentions ? [] : [this.item(repository, kind)],
+				items: relationship ? [] : [this.item(repository, kind)],
 			};
 		} else if (key.startsWith("/agents/repos/")) {
 			const repository = this.repositories.find((repo) =>
