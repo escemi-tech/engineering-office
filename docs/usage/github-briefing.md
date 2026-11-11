@@ -1,7 +1,7 @@
 # Read GitHub work for a private briefing
 
-Collect your authored or assigned open issues and pull requests, plus pull
-requests with a direct review request for you. Discover repositories across
+Collect open issues and pull requests that you authored, are assigned to or are
+mentioned in, plus pull requests with a direct review request for you. Discover repositories across
 ownership, collaboration and organization membership. Collection has no age cutoff;
 older unresolved work remains eligible and is retrieved first.
 Also collect non-archived Copilot cloud-agent tasks created by your authenticated
@@ -9,7 +9,7 @@ account, with their session attempts and supplied PR/branch identities. Resolve
 linked PRs and read GitHub's review decision and head-commit check rollup separately.
 
 The command produces a concise local briefing or the complete scoped JSON evidence.
-Mentions, team review requests, tasks created by other accounts, archived tasks,
+Team mentions, team review requests, tasks created by other accounts, archived tasks,
 local IDE/CLI agent activity and closed issues are not collected. Closed or merged
 PRs are not independently searched; eligible Copilot artifacts can resolve to
 them, and an open search result can close before its context is read. Merge
@@ -145,14 +145,16 @@ node packages/github-briefing/src/cli.js \
 
 ## Read coverage before using the evidence
 
-The snapshot uses `schemaVersion: 4`, the selected `scope` and conservative
+The snapshot uses `schemaVersion: 5`, the selected `scope` and conservative
 `classification: restricted`, including when some source repositories are public.
 `source.account` identifies the authenticated owner. Each admitted repository
 carries its identity, visibility, collection status and items. Items retain their
 issue ID, number, kind, verbatim title, source URL, revision time and matching
 relevance reasons. Reasons are evidence of selection, not an exhaustive account
-of every relationship or a claim of urgency. Review-request-only matches rely on
-GitHub's search index; they do not establish review completion or merge readiness.
+of every relationship or a claim of urgency. Mention and review-request matches rely on GitHub's search index. A mention
+establishes relevance, not an unanswered request, urgency or an obligation to reply;
+it stays in the open/unresolved category unless a separate attention signal exists.
+Review requests do not establish review completion or merge readiness.
 
 `observedAt` records collection time, not the age of the underlying work. Search
 indexing and changes during pagination can affect results. This is an independent
@@ -167,7 +169,10 @@ Check these fields before interpreting an empty list:
 - `coverage.unadmittedRepositories` counts discovered sources outside this policy.
   Their identities and work are omitted; review admission separately when needed.
 - `repositories[].status` and `searches[]` distinguish complete collection from
-  unavailable sources or partial searches. Missing repositories, changed identity,
+  unavailable sources or partial searches. Each entry identifies its `kind` and
+  `selection`: `work` for authored/assigned work and direct review requests, or
+  `mentions` for the dedicated user-mention search. Per-query totals overlap and
+  must not be added to count unique work. Missing repositories, changed identity,
   incomplete search, rate limits and exhausted budgets remain visible.
 - `repositories[].copilot` reports task coverage separately. Its boundary is
   `created-by-authenticated-user`; it never establishes coverage of tasks started
@@ -185,14 +190,28 @@ Check these fields before interpreting an empty list:
   completed within this credential's boundary. It does not include unadmitted
   sources or the capabilities listed in `coverage.excluded`.
 
-Each repository is rechecked before separate issue/PR searches. Each search reads
+Each repository is rechecked before collection. Separate issue/PR searches query
+existing work and direct user mentions: four searches per admitted repository,
+before pagination. Each search reads
 at most 10 pages of 100 results, matching GitHub's 1,000-result search limit.
 An invocation allows at most 100 HTTP requests and a two-minute request window;
 each request has a maximum ten-second timeout and 4 MiB response body. No redirects
 or retries are allowed. Recognized rate limiting stops further requests. Large
 scopes can therefore produce partial coverage; a later invocation starts fresh
 and does not resume a cursor. Do not treat repeated partial snapshots as complete
-coverage or enable a scheduled briefing on that assumption.
+coverage or enable a scheduled briefing on that assumption. GitHub also applies
+[a search-specific rate limit](https://docs.github.com/en/rest/search/search#rate-limit);
+mention queries use that same allowance and can reduce the number of repositories
+covered in a single run. The collector does not add retries or increase its budget.
+
+The dedicated `mentions:<login>` query identifies mention matches independently
+of direct review requests. It retrieves no comment threads or text-match fragments;
+response bodies remain excluded from evidence. Stable overlaps become one item
+with combined relevance reasons, and each selected PR's context is read once.
+If title or revision time changes between searches, retain the newer observation
+(the later response when times tie), keep only its relevance reasons and mark
+coverage `changing-results`. Conflicting immutable identities reject the snapshot.
+Results remain observations of a changing search index, not durable reconciliation.
 
 Copilot listing reads at most ten pages of 100 non-archived tasks per admitted
 repository, most recently updated first, with no date or task-state cutoff.

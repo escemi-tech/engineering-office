@@ -50,6 +50,9 @@ library with synthetic HTTP responses. Suites cover provenance, minimal data,
 account and repository identity, scope admission, public/private visibility, old
 unresolved work, relevance, pagination, partial coverage, request budgets, access
 revocation, malformed records, sanitized failures and protected CLI inputs.
+Mention scenarios cover both work types, query attribution, overlapping relevance,
+revision changes, identity mismatches, inaccessible sources, partial results and
+rate limits. A mention alone must not become a reply obligation or attention signal.
 Copilot scenarios cover all task states, separate attempts, tasks without PRs,
 opaque artifact IDs, creator/source restrictions, pagination, request limits,
 missing permissions, incomplete or stale sessions and access loss. Raw prompt and

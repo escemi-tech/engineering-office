@@ -116,7 +116,7 @@ export class GitHubBriefing {
 			);
 		}
 		return {
-			schemaVersion: 4,
+			schemaVersion: 5,
 			scope: policy.scope,
 			classification: "restricted",
 			source: { system: "github", account: viewer },
@@ -136,7 +136,7 @@ export class GitHubBriefing {
 				requests: requestCount(),
 				limits: { ...limits },
 				excluded: [
-					"mentions",
+					"team-mentions",
 					"team-review-requests",
 					"copilot-tasks-created-by-others",
 					"archived-copilot-tasks",
@@ -333,21 +333,69 @@ export class GitHubBriefing {
 			return result;
 		}
 		result.searches = [];
+		const items = new Map();
 		for (const kind of ["issue", "pull-request"]) {
-			const search = await this.#search(request, approved, viewer, kind);
-			result.searches.push(search.coverage);
-			if (
-				["http-403", "http-404", "http-422"].includes(search.coverage.reason)
-			) {
-				return {
-					...approved,
-					status: "unavailable",
-					reason: search.coverage.reason,
-					items: [],
-				};
+			for (const selection of ["work", "mentions"]) {
+				const search = await this.#search(
+					request,
+					approved,
+					viewer,
+					kind,
+					selection,
+				);
+				result.searches.push(search.coverage);
+				if (
+					["http-403", "http-404", "http-422"].includes(search.coverage.reason)
+				) {
+					return {
+						...approved,
+						status: "unavailable",
+						reason: search.coverage.reason,
+						items: [],
+					};
+				}
+				for (const item of search.items) {
+					const previous = items.get(item.issueId);
+					if (
+						previous &&
+						(previous.kind !== item.kind || previous.number !== item.number)
+					)
+						throw new BriefingUnavailableError(
+							"Inconsistent GitHub work identity. No snapshot produced.",
+						);
+					if (
+						previous &&
+						(previous.updatedAt !== item.updatedAt ||
+							previous.title !== item.title)
+					) {
+						search.coverage.status = "partial";
+						search.coverage.reason = "changing-results";
+						// Do not attach an older query's relevance to a different revision.
+						items.set(
+							item.issueId,
+							Date.parse(previous.updatedAt) > Date.parse(item.updatedAt)
+								? previous
+								: item,
+						);
+					} else {
+						items.set(item.issueId, {
+							...item,
+							reasons: [
+								...new Set([...(previous?.reasons ?? []), ...item.reasons]),
+							],
+						});
+					}
+				}
 			}
-			result.items.push(...search.items);
 		}
+		result.items = [...items.values()];
+		if (
+			new Set(result.items.map(({ kind, number }) => `${kind}:${number}`))
+				.size !== items.size
+		)
+			throw new BriefingUnavailableError(
+				"Inconsistent GitHub work identity. No snapshot produced.",
+			);
 		result.copilot = await new CopilotTasks().collect(
 			request,
 			approved,
@@ -388,12 +436,17 @@ export class GitHubBriefing {
 		return result;
 	}
 
-	async #search(request, approved, viewer, kind) {
+	async #search(request, approved, viewer, kind, selection) {
 		const criteria = [`author:${viewer.login}`, `assignee:${viewer.login}`];
 		if (kind === "pull-request")
 			criteria.push(`review-requested:${viewer.login}`);
-		const query = `repo:${approved.fullName} is:open is:${kind} (${criteria.join(" OR ")})`;
-		const coverage = { kind, status: "partial", reason: "page-limit" };
+		const query = `repo:${approved.fullName} is:open is:${kind} ${selection === "mentions" ? `mentions:${viewer.login}` : `(${criteria.join(" OR ")})`}`;
+		const coverage = {
+			kind,
+			selection,
+			status: "partial",
+			reason: "page-limit",
+		};
 		const items = new Map();
 		for (let page = 1; page <= limits.searchPages; page++) {
 			const response = await request("GET /search/issues", {
@@ -422,14 +475,15 @@ export class GitHubBriefing {
 					Boolean(item.pull_request) !== (kind === "pull-request") ||
 					(item.pull_request && item.pull_request.html_url !== url) ||
 					Date.parse(item.updated_at) > Date.now() ||
-					(kind === "issue" && !reasons.length)
+					(selection === "work" && kind === "issue" && !reasons.length)
 				) {
 					throw new BriefingUnavailableError(
 						"Inconsistent GitHub work evidence. No snapshot produced.",
 					);
 				}
-				// Search confirms a review request only when neither other OR branch matches.
-				if (!reasons.length) reasons.push("review-requested");
+				// Dedicated mentions queries avoid confusing mentions with review requests.
+				if (selection === "mentions") reasons.push("mentioned");
+				else if (!reasons.length) reasons.push("review-requested");
 				if (items.has(item.id)) coverage.reason = "changing-results";
 				items.set(item.id, {
 					issueId: item.id,

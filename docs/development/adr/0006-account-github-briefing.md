@@ -173,3 +173,33 @@ Its trade-off is fixed signal-based ordering rather than business prioritization
 Synthetic presentation and CLI tests qualify the local format; private source
 activation, account API eligibility, assistant delivery and operational usefulness
 remain unqualified.
+
+## Direct mention extension — 2026-11-11
+
+Schema 5 adds user mentions to open issue/PR selection within the existing
+operator-approved repositories. Keep mention queries separate from the authored,
+assigned and review-request OR query so a mention-only PR is never labelled as a
+review request. Search coverage now names both work kind and selection. Merge
+stable overlapping identities once, preserving observed relevance reasons, and
+read PR context once. Changing revisions remain partial and cannot transfer an
+older observation's relevance onto a different revision.
+
+The [search qualifier documentation](https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests#search-by-mention)
+and [REST endpoint](https://docs.github.com/en/rest/search/search#search-issues-and-pull-requests)
+confirm the supported user-mention filter and separate issue/PR queries.
+Authenticated queries with both forms against the public engineering-office
+repository were accepted and returned empty complete results. This verifies
+query acceptance, not positive live mention coverage or private account eligibility.
+Synthetic SDK tests cover positive matches, overlaps, changes and failures.
+
+The trade-off is two additional first-page search requests per repository, under
+the unchanged global budget and GitHub's search-specific rate limit. Larger
+scopes can therefore reach partial coverage sooner. Combining all qualifiers
+would save requests but make review and mention attribution ambiguous; fetching
+comment threads would add unnecessary source text and requests. Use GitHub's
+index and existing SDK rather than introduce parsing or another dependency.
+
+A mention can be old or already answered. Label it as search-derived relevance
+without claiming urgency, a pending reply or permission to act. Team mentions and
+team review requests remain excluded; this extension grants no new private-source
+admission, assistant access, write operation or storage.
