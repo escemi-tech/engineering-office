@@ -394,14 +394,16 @@
           - playbook: hermes-backup-prune
             variables:
               hermes_backup_repository: /var/lib/hermes-backup-test/corrupt-repository
-            message: Authenticate and verify the encrypted repository
+            # Restic may reject corruption during backup or its subsequent check.
+            # Require the backup attempt, failed operation and no deletion in either case.
+            message: Encrypt a consistent snapshot using native Restic
             forbidden_task: Remove only the selected snapshot identities
     - name: Remove the temporary inventory
       ansible.builtin.file:
         path: "{{ backup_test_inventory.path }}"
         state: absent
 
-- name: Verify checks preserve state and export the verified original repository
+- name: Verify checks preserve state and recovery points
   hosts: hermes
   become: true
   gather_facts: false
@@ -416,7 +418,7 @@
       changed_when: false
       no_log: true
       register: damaged_repository_snapshots
-    - name: Require failed verification to preserve every previous recovery point
+    - name: Require rejected retention to preserve every previous recovery point
       ansible.builtin.assert:
         that:
           - existing_ids | difference(damaged_ids) | length == 0
@@ -450,49 +452,19 @@
       vars:
         checked_ids: "{{ checked_snapshots.stdout | from_json | map(attribute='id') | list }}"
         expected_ids: "{{ preserved_snapshots.stdout | from_json | map(attribute='id') | reject('equalto', future_snapshot) | list }}"
-    # Arrange
-    - name: Allocate a protected encrypted-repository transport file
-      ansible.builtin.file:
-        path: /var/lib/hermes-backup-test/repository.tar
-        state: touch
-        owner: root
-        group: root
-        mode: "0600"
-    - name: Pack only the quiescent encrypted repository
+    - name: Require encrypted storage not to contain the plaintext state canary
       ansible.builtin.command:
         argv:
           [
-            tar,
-            --create,
-            --file,
-            /var/lib/hermes-backup-test/repository.tar,
-            --directory,
+            grep,
+            -R,
+            -a,
+            -F,
+            -q,
+            synthetic-restic-plaintext-canary,
             "{{ hermes_backup_repository }}",
-            .,
           ]
-      changed_when: true
-    - name: Fetch the encrypted copy with checksum verification
-      ansible.builtin.fetch:
-        src: /var/lib/hermes-backup-test/repository.tar
-        dest: "{{ hostvars.localhost.recovery_directory }}/repository.tar"
-        flat: true
-    - name: Restrict the runner copy
-      ansible.builtin.file:
-        path: "{{ hostvars.localhost.recovery_directory }}/repository.tar"
-        mode: "0600"
-      delegate_to: localhost
-      become: false
-    - name: Read the source host identity
-      ansible.builtin.slurp:
-        src: /etc/machine-id
-      register: source_machine_id
-    - name: Record the selected snapshot and source host identity separately
-      ansible.builtin.copy:
-        dest: "{{ hostvars.localhost.recovery_directory }}/snapshot.yml"
-        mode: "0600"
-        content: >-
-          {{ {'hermes_restore_snapshot': hermes_backup_snapshot,
-              'source_machine_id': source_machine_id.content | b64decode | trim} | to_nice_yaml }}
-      delegate_to: localhost
-      become: false
-# Act: the workflow destroys the entire source VM before creating a recovery host.
+      changed_when: false
+      register: encrypted_canary
+      failed_when: encrypted_canary.rc != 1
+      no_log: true

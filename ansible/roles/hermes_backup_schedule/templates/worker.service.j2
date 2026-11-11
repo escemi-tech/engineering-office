@@ -1,0 +1,22 @@
+[Unit]
+Description=Hermes backup {{ 'cycle' if item.notify else 'failure notification' }} ({{ hermes_project_name }})
+Wants=network-online.target
+After=network-online.target docker.service
+{% if item.notify %}
+OnFailure=hermes-backup-failure-{{ hermes_project_name }}.service
+{% endif %}
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+PrivateTmp=true
+NoNewPrivileges=true
+WorkingDirectory={{ hermes_backup_schedule_directory }}
+Environment=ANSIBLE_COLLECTIONS_PATH={{ hermes_backup_schedule_directory }}/collections
+Environment=ANSIBLE_ROLES_PATH={{ hermes_backup_schedule_directory }}/roles
+Environment=ANSIBLE_NOCOLOR=true
+ExecStart={{ hermes_backup_schedule_directory }}/venv/bin/ansible-playbook --inventory inventory.yml --extra-vars @settings.yml {{ item.playbook }}
+TimeoutStartSec={{ item.timeout }}
+TimeoutStopSec=30
+KillMode=control-group

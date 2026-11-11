@@ -264,3 +264,48 @@ despite passing native health. The recovered runtime also passes without an
 inference sidecar: liveness deliberately does not claim model readiness. Source
 freshness, correlated request telemetry, scheduled checks, notifications and
 private operational qualification remain open under OPS-002.
+
+### Automatic independent backups (2026-11-11)
+
+Extend the existing backup role with native Restic S3 credentials-file support.
+Keep filesystem repositories for manual maintenance. Use the host's systemd
+timer and a bounded oneshot worker to execute the same Ansible backup, full
+verification and strict retention policy. Install its existing pinned Core and
+collections in a private virtual environment; updates remain owned by the same
+pip/Galaxy manifests. Do not create another implementation of backup selection,
+retention, encryption or runtime health.
+
+Evaluated [resticprofile](https://creativeprojects.github.io/resticprofile/), an
+actively maintained scheduling and monitoring wrapper. Its hooks and timers
+are useful, but adopting its profile as another policy owner would duplicate or
+replace this repository's already qualified hard-expiry and recovery contracts.
+Native systemd plus the existing role is the smaller current integration. Keep
+this decision open if managing several independent backup policies makes that
+wrapper materially simpler.
+
+A Healthchecks-compatible independent endpoint receives only empty-body start,
+success and failure pings through the existing Ansible HTTP module. Its external
+scheduler owns missing/overlong-run detection. Success follows verified retention
+and restored gateway health. Failure notification has a separate bounded systemd
+unit so worker timeouts can signal failure. Host loss or monitoring outage cannot
+send a ping; the independently configured missing-success alert is mandatory.
+Provider selection, payment, actual credentials, alert delivery and real-key
+recovery are deployment acceptance gates, not synthetic CI claims.
+
+Capture the container identity and original state before stopping it. Restore
+ordinary failed/successful runs to that state, never resume an intentionally
+stopped service, and refuse to resume a replaced container. An operator shutdown
+stops the worker process group before stopping Hermes. Abrupt process/host loss
+may leave restart disabled; prefer explicit recovery to guessing the operator's
+intent. Manual deployment/backup operations require an inactive worker and
+disabled timer. Restic locks remain enabled; direct administrator commands still
+require coordination.
+
+Replace CI's filesystem archive handoff with a real S3 fixture outside both
+sequential guests. [SeaweedFS](https://github.com/seaweedfs/seaweedfs) is actively
+maintained and supplies an authenticated small S3 deployment; MinIO's community
+repository was archived when evaluated. Pin fixture images and let Dependabot
+maintain them. A small HTTP recorder tests only the Healthchecks wire contract,
+without reimplementing a monitoring service. Destroy the first VM and restore
+directly from S3 using independently delivered fixture credentials. Preserve
+existing filesystem corruption/retention tests alongside this automatic journey.

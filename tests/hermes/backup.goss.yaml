@@ -21,19 +21,17 @@ command:
         test ! -e /var/lib/hermes-backup-test
         test -z "${RESTIC_PASSWORD_FILE+x}"
         test -z "${RESTIC_PASSWORD+x}"
+        test -z "${AWS_SHARED_CREDENTIALS_FILE+x}"
+        test -z "${AWS_ACCESS_KEY_ID+x}"
+        test -z "${AWS_SECRET_ACCESS_KEY+x}"
       '
       # Assert: neither recovery files nor credentials enter the runtime.
     exit-status: 0
   encrypted-repository-rejects-an-unrelated-key:
     exec: |
       # Act
-      sudo -n restic --no-cache --repo /var/lib/hermes-backup-test/repository \
+      sudo -n env AWS_SHARED_CREDENTIALS_FILE=/var/lib/hermes-backup-test/aws-credentials \
+        restic --no-cache --repo s3:http://127.0.0.1:18333/hermes-backup-test \
         --password-file /var/lib/hermes-backup-test/wrong-password snapshots
       # Assert: Restic's native wrong-password exit status.
     exit-status: 12
-  encrypted-repository-does-not-contain-plaintext-state:
-    exec: |
-      # Act
-      sudo -n grep -R -a -F -q synthetic-restic-plaintext-canary /var/lib/hermes-backup-test/repository
-      # Assert: grep returns 1 only when the plaintext marker is absent.
-    exit-status: 1

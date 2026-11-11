@@ -131,12 +131,12 @@ cover sparse expired history, daily/weekly limits, unrelated snapshots, future
 timestamps, failed backup/verification preventing deletion and preserved recovery
 after pruning. Keep encryption,
 snapshot selection and integrity checking in native Restic. Never run its
-destructive fixture against an operational inventory. The workflow retains only
-the encrypted repository and snapshot/host identity record in a private runner
-directory, destroys the source VM, then creates a fresh recovery VM. Require a
+destructive fixture against an operational inventory. The workflow keeps the encrypted repository in an independent runner-side S3
+fixture and only the snapshot/host identity record in a private runner directory.
+It destroys the source VM, then creates a fresh recovery VM. Require a
 different machine identity, absent deployment files and an independently supplied
 synthetic key before restoring. Goss must read the original conversation without
-new inference. Always schedule cleanup of both guests and the runner copy; never
+new inference. Always schedule cleanup of both guests, the independent fixture services and the runner record; never
 upload the repository or keys as artifacts. Shared synthetic runtime/recovery
 settings and expected-rejection probes stay in the explicit helpers directory.
 The backup-check entrypoint verifies integrity and the daily freshness objective
@@ -167,12 +167,14 @@ ansible-playbook --syntax-check ansible/hermes-backup.yml
 ansible-playbook --syntax-check ansible/hermes-backup-check.yml
 ansible-playbook --syntax-check ansible/hermes-backup-prune.yml
 ansible-playbook --syntax-check ansible/hermes-restore.yml
+ansible-playbook --syntax-check ansible/hermes-backup-schedule.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-host.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-health.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-reboot.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-backup.yml
 ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-recovery.yml
+ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-backup-schedule.yml
 ```
 
 The actual deployment scenarios require the disposable VM and run in hosted CI.

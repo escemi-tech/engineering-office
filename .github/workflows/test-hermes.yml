@@ -229,6 +229,27 @@ jobs:
           test-playbook: tests/ansible/hermes-backup.yml
           comment: "false"
           report-name: engineering-office - Hermes backup retention
+      # Arrange: storage and monitoring are outside both disposable guests.
+      - name: Start independent backup fixtures
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await exec.exec('docker', ['compose', '-p', 'hermes-backup-fixture', '-f',
+              'tests/hermes/backup-services/compose.yml', 'up', '-d', '--wait', '--wait-timeout', '180']);
+      # Act and Assert
+      - name: Test scheduled backups and failure boundaries
+        # The lifecycle repeats the same released action with a separate scenario.
+        # jscpd:ignore-start
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@31c11f71d41684e55ae044d8ca114f31e90fcfda # 1.1.1
+        env: *vm-connection
+        with:
+          ansible-requirements: ansible/requirements.txt
+          galaxy-requirements: ansible/collections/requirements.yml
+          ansible-config: tests/ansible/ansible.cfg
+          test-playbook: tests/ansible/hermes-backup-schedule.yml
+          comment: "false"
+          report-name: engineering-office - Hermes automatic backups
+        # jscpd:ignore-end
       # Act: verify source removal before allocating the recovery host.
       - name: Destroy the original host and its disks
         uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@31c11f71d41684e55ae044d8ca114f31e90fcfda # 1.1.1
@@ -240,7 +261,7 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/create@31c11f71d41684e55ae044d8ca114f31e90fcfda # 1.1.1
         with:
           vm-config: tests/lima.yml
-      # Act and Assert: use the runner copy, an independent key and production playbooks.
+      # Act and Assert: restore directly from S3 with an independently supplied key.
       - name: Test recovery after complete host loss
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@31c11f71d41684e55ae044d8ca114f31e90fcfda # 1.1.1
         env:
@@ -278,7 +299,14 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@31c11f71d41684e55ae044d8ca114f31e90fcfda # 1.1.1
         with:
           vm: ${{ steps.recovery.outputs.vm }}
-      - name: Remove the runner recovery copy
+      - name: Remove independent synthetic storage and monitoring
+        if: ${{ always() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await exec.exec('docker', ['compose', '-p', 'hermes-backup-fixture', '-f',
+              'tests/hermes/backup-services/compose.yml', 'down', '--volumes']);
+      - name: Remove the runner recovery record
         if: ${{ always() }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:

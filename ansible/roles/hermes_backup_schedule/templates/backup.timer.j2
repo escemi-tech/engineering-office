@@ -1,0 +1,10 @@
+[Unit]
+Description=Scheduled verified Hermes backups ({{ hermes_project_name }})
+
+[Timer]
+OnCalendar={{ hermes_backup_schedule_calendar }}
+Persistent=true
+Unit=hermes-backup-{{ hermes_project_name }}.service
+
+[Install]
+WantedBy=timers.target

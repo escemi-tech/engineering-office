@@ -15,6 +15,8 @@
       - not hermes_backup_check_volume.volume.Options
       - not hermes_backup_repository.startswith(hermes_backup_check_volume.volume.Mountpoint)
       - not hermes_backup_password_file.startswith(hermes_backup_check_volume.volume.Mountpoint)
+      - not (hermes_backup_aws_credentials_file | default('')).startswith(hermes_backup_check_volume.volume.Mountpoint)
+      - not (hermes_backup_monitor_url_file | default('')).startswith(hermes_backup_check_volume.volume.Mountpoint)
     fail_msg: Backup check requires the deployment's existing dedicated local state volume and recovery material outside it.
     quiet: true
 
@@ -31,9 +33,7 @@
       - "{{ hermes_backup_check_volume.volume.Mountpoint }}"
       - --tag
       - engineering-office-hermes-state
-  environment:
-    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
-    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+  environment: "{{ hermes_backup_environment }}"
   changed_when: false
   no_log: true
   register: hermes_backup_check_snapshots

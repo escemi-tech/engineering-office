@@ -1,0 +1,23 @@
+---
+- name: Wait for the bounded worker to exit
+  ansible.builtin.command:
+    argv:
+      [
+        systemctl,
+        show,
+        --property=ActiveState,
+        --value,
+        "{{ backup_unit }}.service",
+      ]
+  register: worker_active_state
+  changed_when: false
+  until: worker_active_state.stdout in ['inactive', 'failed']
+  retries: 180
+  delay: 2
+
+- name: Read the completed worker result
+  ansible.builtin.command:
+    argv:
+      [systemctl, show, --property=Result, --value, "{{ backup_unit }}.service"]
+  register: worker_state
+  changed_when: false

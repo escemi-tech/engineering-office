@@ -1,51 +1,92 @@
 ---
-- name: Require explicit local repository and password file paths
+- name: Require exclusive manual maintenance
+  ansible.builtin.include_tasks: "{{ role_path }}/../../helpers/hermes-backup-idle.yml"
+  when: not (hermes_backup_schedule_running | default(false))
+
+- name: Require an explicit repository and separate credential files
   ansible.builtin.assert:
     that:
       - hermes_project_name is match('^[a-z0-9][a-z0-9_-]+$')
       - hermes_backup_repository is defined
       - hermes_backup_password_file is defined
-      - hermes_backup_repository is match('^/[^\x00-\x1f\x7f]+$')
+      - hermes_backup_repository is match('^(s3:https?://|/)[^\x00-\x1f\x7f]+$')
       - hermes_backup_password_file is match('^/[^\x00-\x1f\x7f]+$')
-    fail_msg: Supply an approved absolute repository path and a separate password file on the target.
+    fail_msg: Supply an approved filesystem or S3 repository and a separate absolute password-file path on the target.
     quiet: true
+
+- name: Validate the S3 endpoint and credential file
+  ansible.builtin.assert:
+    that:
+      - endpoint | urlsplit('hostname') | default('', true) | length > 0
+      - not endpoint | urlsplit('username')
+      - not endpoint | urlsplit('password')
+      - not endpoint | urlsplit('query')
+      - not endpoint | urlsplit('fragment')
+      - endpoint | urlsplit('path') is match('^/[a-z0-9][a-z0-9.-]+[a-z0-9](/[^\x00-\x1f\x7f]*)?$')
+      - >-
+        endpoint | urlsplit('scheme') == 'https' or
+        (endpoint | urlsplit('scheme') == 'http' and
+        endpoint | urlsplit('hostname') in ['localhost', '127.0.0.1', '::1'])
+      - hermes_backup_aws_credentials_file | default('') is match('^/[^\x00-\x1f\x7f]+$')
+      - hermes_backup_aws_credentials_file != hermes_backup_password_file
+    fail_msg: Use an HTTPS S3 endpoint with a bucket path and a separate AWS credentials file. HTTP is limited to loopback.
+    quiet: true
+  vars:
+    endpoint: "{{ hermes_backup_repository[3:] }}"
+  when: hermes_backup_repository.startswith('s3:')
+
+- name: Select protected recovery paths
+  ansible.builtin.set_fact:
+    hermes_backup_protected_paths: >-
+      {{ [{'path': hermes_backup_password_file, 'kind': 'isreg', 'mode': '0600'}] +
+         ([{'path': hermes_backup_aws_credentials_file, 'kind': 'isreg', 'mode': '0600'}]
+          if hermes_backup_repository.startswith('s3:') else
+          [{'path': hermes_backup_repository, 'kind': 'isdir', 'mode': '0700'}]) }}
+    hermes_backup_environment: >-
+      {{ {'RESTIC_REPOSITORY': hermes_backup_repository,
+          'RESTIC_PASSWORD_FILE': hermes_backup_password_file, 'TZ': 'UTC'} |
+         combine({'AWS_SHARED_CREDENTIALS_FILE': hermes_backup_aws_credentials_file,
+                  'AWS_ACCESS_KEY_ID': '', 'AWS_SECRET_ACCESS_KEY': '', 'AWS_SESSION_TOKEN': '',
+                  'AWS_PROFILE': 'default'} if hermes_backup_repository.startswith('s3:') else {}) }}
 
 - name: Resolve the existing recovery paths on the target
   ansible.builtin.command:
-    argv: [readlink, --canonicalize-existing, "{{ item }}"]
-  loop:
-    - "{{ hermes_backup_repository }}"
-    - "{{ hermes_backup_password_file }}"
+    argv: [readlink, --canonicalize-existing, "{{ item.path }}"]
+  loop: "{{ hermes_backup_protected_paths }}"
   changed_when: false
   register: hermes_backup_canonical_paths
 
 - name: Require canonical paths without parent symlinks or traversal
   ansible.builtin.assert:
     that:
-      - hermes_backup_canonical_paths.results[0].stdout == hermes_backup_repository
-      - hermes_backup_canonical_paths.results[1].stdout == hermes_backup_password_file
+      - item.stdout == item.item.path
     quiet: true
+  loop: "{{ hermes_backup_canonical_paths.results }}"
 
 - name: Inspect the repository and password file without reading credentials
   ansible.builtin.stat:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
     get_checksum: false
     get_mime: false
-  loop:
-    - "{{ hermes_backup_repository }}"
-    - "{{ hermes_backup_password_file }}"
+  loop: "{{ hermes_backup_protected_paths }}"
   register: hermes_backup_paths
 
 - name: Require protected recovery material outside the runtime
   ansible.builtin.assert:
     that:
-      - hermes_backup_paths.results[0].stat.isdir | default(false)
-      - hermes_backup_paths.results[0].stat.uid == 0
-      - hermes_backup_paths.results[0].stat.mode == '0700'
-      - hermes_backup_paths.results[1].stat.isreg | default(false)
-      - hermes_backup_paths.results[1].stat.uid == 0
-      - hermes_backup_paths.results[1].stat.mode == '0600'
-      - hermes_backup_paths.results[1].stat.size > 0
+      - item.stat[item.item.kind] | default(false)
+      - item.stat.uid == 0
+      - item.stat.mode == item.item.mode
+      - item.item.kind != 'isreg' or item.stat.size > 0
       - not hermes_backup_password_file.startswith(hermes_backup_repository.rstrip('/') ~ '/')
     fail_msg: Use a root-owned mode-0700 repository and a separate nonempty mode-0600 password file, without symlinks.
     quiet: true
+  loop: "{{ hermes_backup_paths.results }}"
+
+- name: Keep all backup credentials outside Docker state
+  ansible.builtin.assert:
+    that:
+      - not item.path.startswith('/var/lib/docker/')
+    fail_msg: Keep backup credentials outside Docker state and the assistant container.
+    quiet: true
+  loop: "{{ hermes_backup_protected_paths | selectattr('kind', 'equalto', 'isreg') | list }}"

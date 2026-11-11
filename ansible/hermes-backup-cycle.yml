@@ -1,0 +1,10 @@
+---
+- name: Run the installed local backup cycle
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Execute the complete backup operating cycle
+      ansible.builtin.include_role:
+        name: hermes_backup_schedule
+        tasks_from: cycle

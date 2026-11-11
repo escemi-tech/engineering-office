@@ -1,0 +1,9 @@
+---
+# Enable only after reviewing the independent destination, keys and alert routing.
+hermes_backup_schedule_enabled: false
+hermes_backup_schedule_calendar: "*-*-* 03,15:00:00 UTC"
+hermes_backup_repository: s3:https://s3.example.com/engineering-office-backups/hermes
+# Existing root-owned mode-0600 files on the approved host, outside Hermes state.
+hermes_backup_password_file: /etc/engineering-office/restic-password
+hermes_backup_aws_credentials_file: /etc/engineering-office/backup-s3-credentials
+hermes_backup_monitor_url_file: /etc/engineering-office/backup-monitor-url

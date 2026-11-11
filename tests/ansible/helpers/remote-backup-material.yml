@@ -1,0 +1,20 @@
+---
+- name: Supply independent public fixture storage credentials
+  ansible.builtin.copy:
+    dest: "{{ hermes_backup_aws_credentials_file }}"
+    content: |
+      [default]
+      aws_access_key_id = synthetic-backup-key
+      aws_secret_access_key = synthetic-backup-secret-never-for-production
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Supply the synthetic monitoring endpoint
+  ansible.builtin.copy:
+    dest: "{{ hermes_backup_monitor_url_file }}"
+    content: http://127.0.0.1:18080/ping/fixture
+    owner: root
+    group: root
+    mode: "0600"

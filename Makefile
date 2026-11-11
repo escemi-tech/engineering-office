@@ -6,7 +6,7 @@ HOST_GID := $(shell id -g)
 HERMES_PROJECT := engineering-office-hermes
 HERMES_COMPOSE := docker compose --env-file .local/hermes.env --project-name $(HERMES_PROJECT) -f services/hermes/compose.yml
 
-.PHONY: help lint-fix ci lint github-briefing hermes-policy hermes-start hermes-stop hermes-logs hermes-host hermes-deploy hermes-health hermes-backup hermes-backup-check hermes-backup-prune hermes-restore plan provision configure deploy verify backup
+.PHONY: help lint-fix ci lint github-briefing hermes-policy hermes-start hermes-stop hermes-logs hermes-host hermes-deploy hermes-health hermes-backup hermes-backup-check hermes-backup-prune hermes-backup-schedule hermes-backup-disable hermes-restore plan provision configure deploy verify backup
 help: ## Display help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
@@ -55,10 +55,23 @@ hermes-backup-check: ## Verify backup integrity and a matching recovery point wi
 hermes-backup-prune: ## Create a verified backup, then enforce recovery-point retention
 	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-backup-prune.yml --extra-vars @.local/hermes-backup.yml
 
+hermes-backup-schedule: ## Configure or remove automatic backups on the explicitly approved host
+	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-backup-schedule.yml --extra-vars @.local/hermes-backup-schedule.yml
+
+hermes-backup-disable: ## On the target host, stop automatic backups without loading credentials
+	@set -euo pipefail; \
+	unit='hermes-backup-$(HERMES_PROJECT)'; \
+	if [[ -f "/etc/systemd/system/$$unit.timer" ]]; then \
+		systemctl disable --now "$$unit.timer"; \
+	fi; \
+	if [[ -f "/etc/systemd/system/$$unit.service" ]]; then \
+		systemctl stop "$$unit.service"; \
+	fi
+
 hermes-restore: ## Restore the selected snapshot into a new volume without starting Hermes
 	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-restore.yml --extra-vars @.local/hermes-backup.yml
 
-hermes-stop: ## Disable Hermes restart and stop it without loading configuration
+hermes-stop: hermes-backup-disable ## Disable backup automation and Hermes restart, then stop without credentials
 	@set -euo pipefail; \
 	containers="$$(docker container ls --all --quiet \
 		--filter 'label=com.docker.compose.project=$(HERMES_PROJECT)' \

@@ -1,0 +1,193 @@
+---
+- name: Require an inactive worker before changing its configuration
+  ansible.builtin.include_tasks: "{{ role_path }}/../../helpers/hermes-backup-idle.yml"
+
+- name: Require an independent S3 destination and explicit schedule
+  ansible.builtin.assert:
+    that:
+      - hermes_backup_repository | default('') is match('^s3:https?://')
+      - hermes_backup_schedule_calendar | default('') is match('^[ -~]+ (UTC|Europe/Paris)$')
+      - hermes_backup_monitor_url_file | default('') is match('^/[^\x00-\x1f\x7f]+$')
+      - not hermes_backup_monitor_url_file.startswith(hermes_backup_schedule_directory ~ '/')
+      - hermes_backup_monitor_url_file != hermes_backup_password_file | default('')
+      - hermes_backup_monitor_url_file != hermes_backup_aws_credentials_file | default('')
+    fail_msg: Supply the approved S3 repository, credential paths, monitoring URL file and an explicit UTC or Europe/Paris calendar.
+    quiet: true
+
+- name: Validate the existing repository and credential paths
+  ansible.builtin.include_role:
+    name: hermes_backup
+    tasks_from: preflight
+
+- name: Validate the native systemd calendar without enabling it
+  ansible.builtin.command:
+    argv: [systemd-analyze, calendar, "{{ hermes_backup_schedule_calendar }}"]
+  changed_when: false
+
+- name: Validate monitoring before enabling automation
+  ansible.builtin.include_tasks: monitoring.yml
+
+- name: Keep recovery credentials outside the removable controller
+  ansible.builtin.assert:
+    that:
+      - not item.startswith(hermes_backup_schedule_directory ~ '/')
+    quiet: true
+  loop:
+    - "{{ hermes_backup_password_file }}"
+    - "{{ hermes_backup_aws_credentials_file }}"
+
+- name: Authenticate the initialized independent repository
+  ansible.builtin.command:
+    argv: [restic, --no-cache, cat, config]
+  environment: "{{ hermes_backup_environment }}"
+  changed_when: false
+  no_log: true
+
+- name: Install native Python virtual-environment support
+  ansible.builtin.apt:
+    name: [python3-venv, python3-packaging]
+    state: present
+    cache_valid_time: 3600
+    install_recommends: false
+    fail_on_autoremove: true
+
+- name: Create the private installed controller directories
+  ansible.builtin.file:
+    path: "{{ hermes_backup_schedule_directory }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop: ["", roles, roles/hermes/tasks, helpers, collections]
+
+- name: Mark this private directory as owned by the backup deployment
+  ansible.builtin.copy:
+    dest: "{{ hermes_backup_schedule_directory }}/.managed-by-engineering-office"
+    content: "{{ hermes_project_name }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Install the existing production backup roles
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../{{ item }}/"
+    dest: "{{ hermes_backup_schedule_directory }}/roles/{{ item }}/"
+    owner: root
+    group: root
+    mode: "u=rwX,go="
+  loop: [hermes_backup, hermes_backup_schedule]
+
+- name: Install the existing runtime health check
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../hermes/tasks/health.yml"
+    dest: "{{ hermes_backup_schedule_directory }}/roles/hermes/tasks/health.yml"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Install the cycle, failure handler and dependency manifests
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../{{ item }}"
+    dest: "{{ hermes_backup_schedule_directory }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - hermes-backup-cycle.yml
+    - hermes-backup-notify.yml
+    - helpers/hermes-backup-idle.yml
+    - requirements.txt
+    - collections/requirements.yml
+  register: hermes_backup_schedule_manifests
+
+- name: Install the same pinned Ansible Core in an isolated host environment
+  ansible.builtin.pip:
+    requirements: "{{ hermes_backup_schedule_directory }}/requirements.txt"
+    virtualenv: "{{ hermes_backup_schedule_directory }}/venv"
+    virtualenv_command: /usr/bin/python3 -m venv
+
+- name: Inspect the installed collection set
+  ansible.builtin.stat:
+    path: "{{ hermes_backup_schedule_directory }}/collections/ansible_collections/community/docker/MANIFEST.json"
+  register: hermes_backup_schedule_collection
+
+- name: Install the existing pinned collection requirements
+  ansible.builtin.command:
+    argv:
+      - "{{ hermes_backup_schedule_directory }}/venv/bin/ansible-galaxy"
+      - collection
+      - install
+      - --requirements-file
+      - "{{ hermes_backup_schedule_directory }}/collections/requirements.yml"
+      - --collections-path
+      - "{{ hermes_backup_schedule_directory }}/collections"
+  when: hermes_backup_schedule_manifests.changed or not hermes_backup_schedule_collection.stat.exists
+  changed_when: true
+
+- name: Write the local-only controller inventory
+  ansible.builtin.copy:
+    dest: "{{ hermes_backup_schedule_directory }}/inventory.yml"
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      hermes:
+        hosts:
+          localhost:
+            ansible_connection: local
+            ansible_python_interpreter: /usr/bin/python3
+
+- name: Deliver only non-secret references to approved recovery material
+  ansible.builtin.copy:
+    dest: "{{ hermes_backup_schedule_directory }}/settings.yml"
+    owner: root
+    group: root
+    mode: "0600"
+    content: >-
+      {{ {'hermes_project_name': hermes_project_name,
+          'hermes_backup_repository': hermes_backup_repository,
+          'hermes_backup_password_file': hermes_backup_password_file,
+          'hermes_backup_aws_credentials_file': hermes_backup_aws_credentials_file,
+          'hermes_backup_monitor_url_file': hermes_backup_monitor_url_file} | to_nice_yaml }}
+  no_log: true
+  diff: false
+
+- name: Install the bounded worker and separate failure notification unit
+  ansible.builtin.template:
+    src: worker.service.j2
+    dest: "/etc/systemd/system/{{ item.name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - name: "hermes-backup-{{ hermes_project_name }}"
+      playbook: hermes-backup-cycle.yml
+      timeout: 3600
+      notify: true
+    - name: "hermes-backup-failure-{{ hermes_project_name }}"
+      playbook: hermes-backup-notify.yml
+      timeout: 60
+      notify: false
+
+- name: Install the selected persistent timer
+  ansible.builtin.template:
+    src: backup.timer.j2
+    dest: "/etc/systemd/system/hermes-backup-{{ hermes_project_name }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deliver the independent shutdown and automation-disable commands
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../../Makefile"
+    dest: /srv/engineering-office/Makefile
+    owner: root
+    group: root
+    mode: "0444"
+
+- name: Enable the reviewed backup schedule
+  ansible.builtin.systemd_service:
+    name: "hermes-backup-{{ hermes_project_name }}.timer"
+    daemon_reload: true
+    enabled: true
+    state: started

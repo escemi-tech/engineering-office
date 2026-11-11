@@ -1,0 +1,76 @@
+---
+- name: Validate the automation identity and explicit enablement
+  ansible.builtin.assert:
+    that:
+      - hermes_project_name is match('^[a-z0-9][a-z0-9_-]{1,62}$')
+      - hermes_backup_schedule_enabled is boolean
+      - hermes_backup_schedule_directory == '/opt/engineering-office-backup/' ~ hermes_project_name
+    quiet: true
+
+- name: Inspect installed controller ownership before modifying assets
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ hermes_backup_schedule_directory }}"
+    - "{{ hermes_backup_schedule_directory }}/.managed-by-engineering-office"
+  register: hermes_backup_schedule_ownership
+
+- name: Preserve unmanaged controller paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        not hermes_backup_schedule_ownership.results[0].stat.exists or
+        (hermes_backup_schedule_ownership.results[0].stat.isdir | default(false) and
+         hermes_backup_schedule_ownership.results[0].stat.uid == 0 and
+         hermes_backup_schedule_ownership.results[1].stat.isreg | default(false) and
+         hermes_backup_schedule_ownership.results[1].stat.uid == 0)
+    fail_msg: The installed controller path exists without its ownership marker. Inspect it before configuring or removing automation.
+    quiet: true
+
+- name: Inspect managed unit files
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/hermes-backup-{{ hermes_project_name }}.{{ item }}"
+  loop: [timer, service]
+  register: hermes_backup_schedule_units
+
+- name: Suspend the timer before configuring or removing automation
+  ansible.builtin.systemd_service:
+    name: "hermes-backup-{{ hermes_project_name }}.timer"
+    state: stopped
+    enabled: false
+  when: hermes_backup_schedule_units.results[0].stat.exists
+
+- name: Configure the complete backup operating cycle
+  ansible.builtin.include_tasks: configure.yml
+  when: hermes_backup_schedule_enabled
+
+- name: Remove backup automation without deleting recovery material
+  when: not hermes_backup_schedule_enabled
+  block:
+    - name: Stop in-flight work before removing its implementation
+      ansible.builtin.systemd_service:
+        name: "hermes-backup-{{ hermes_project_name }}.service"
+        state: stopped
+      when: hermes_backup_schedule_units.results[1].stat.exists
+    - name: Stop the failure handler before removing its implementation
+      ansible.builtin.systemd_service:
+        name: "hermes-backup-failure-{{ hermes_project_name }}.service"
+        state: stopped
+      when: hermes_backup_schedule_units.results[1].stat.exists
+    - name: Remove the managed units and installed controller
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/etc/systemd/system/hermes-backup-{{ hermes_project_name }}.timer"
+        - "/etc/systemd/system/hermes-backup-{{ hermes_project_name }}.service"
+        - "/etc/systemd/system/hermes-backup-failure-{{ hermes_project_name }}.service"
+        - "{{ hermes_backup_schedule_directory }}"
+    - name: Reload systemd after automation removal
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+  rescue:
+    - name: Report incomplete automation removal
+      ansible.builtin.fail:
+        msg: Automation removal failed. Inspect systemd and stop the worker before changing or removing installed assets.

@@ -6,14 +6,14 @@ state, checks repository integrity and verifies restored files. Ansible invokes
 its CLI and manages the Docker volume; there is no custom archive format or
 backup service inside Hermes.
 
-The supported destination is an existing filesystem repository visible on the
-target host. Before private use, qualify an independent backup filesystem and
-recoverable key, retention, access controls and a recovery drill after losing the
-original host. A repository on the runtime host's own disk does not meet that
-requirement. The [synthetic CI scenario](validation.md#host-preparation-and-deployment)
-retains an encrypted copy outside the guest, destroys that guest, and recovers the
-original conversation on a fresh host with an independently supplied fixture key.
-It does not qualify an operational storage destination or recovery of real keys.
+Use an existing filesystem repository for manual maintenance or an independent
+S3-compatible repository for automatic backups. A repository on the runtime
+host's own disk does not protect against host loss. Qualify the storage account,
+recoverable key, access controls and alert recipient before enabling automation.
+The [synthetic CI scenario](validation.md#host-preparation-and-deployment)
+backs up to an S3 service outside the guest, destroys that guest, and restores
+the original conversation with independently supplied fixture credentials.
+It does not qualify operational storage or recovery of real keys.
 
 ## Prepare recovery material
 
@@ -57,6 +57,125 @@ require a root-owned mode-`0700` repository and a separate nonempty mode-`0600`
 key file. They reject symlinks and noncanonical paths. They do not create a
 repository, mount storage or retrieve a key from the vault.
 
+### Independent S3 storage
+
+Choose a bucket outside the Hermes host and its failure domain. Use a dedicated
+professional storage identity restricted to that repository: list, read, write
+and delete objects are required by Restic, including its locks and retention.
+Account for full verification traffic, storage and request costs in the hosting
+budget. Do not enable a provider lifecycle rule that deletes live Restic objects;
+object expiry and copies must be aligned with the retention policy separately.
+
+Keep the storage credentials in Bitwarden with independent recovery access.
+Deliver a root-owned mode-`0600` AWS shared credentials file outside Docker state
+and `/opt/engineering-office-backup/`. Its native format is:
+
+```ini
+[default]
+aws_access_key_id = <dedicated access key>
+aws_secret_access_key = <dedicated secret key>
+```
+
+Use an HTTPS endpoint and bucket path, with no embedded credentials or URL query.
+Only loopback endpoints may use HTTP, for isolated tests or an authenticated
+local tunnel. Credentials, keys and endpoint files must use canonical paths
+without symlinks. On the approved target, initialize once using the protected
+files, replacing the example endpoint:
+
+```sh
+sudo env AWS_SHARED_CREDENTIALS_FILE=/etc/engineering-office/backup-aws-credentials \
+  restic --no-cache --repo s3:https://storage.example.invalid/hermes-backups \
+  --password-file /etc/engineering-office/restic-password init
+```
+
+Set `hermes_backup_repository` to that S3 URL and add
+`hermes_backup_aws_credentials_file` to the private recovery settings. The same
+backup, check, retention and restore commands support this backend. Initialization
+is explicit; no schedule creates a bucket, repository or replacement key.
+
+## Enable automatic backups
+
+Configure an independent [Healthchecks-compatible check](https://healthchecks.io/docs/http_api/)
+and an alert recipient outside Hermes. Store its secret ping URL in a separate
+root-owned mode-`0600` file, outside Docker state and the installed controller.
+The check must alert on failure, missing execution and an overlong run. For the
+example twice-daily schedule, use the matching UTC cron schedule and a 70-minute
+grace period: the local worker times out after one hour. Test a failure and a
+missed heartbeat with the real recipient before activation. A successful HTTP
+response alone does not prove alert delivery or correct check configuration.
+
+On the controller, prepare the approved inventory and schedule settings:
+
+```sh
+install -m 0600 ansible/hermes-backup-schedule.example.yml .local/hermes-backup-schedule.yml
+```
+
+Edit the endpoint, three protected file paths and explicit calendar. Set
+`hermes_backup_schedule_enabled: true` only after storage, key recovery and
+alert routing are accepted, then run:
+
+```sh
+make hermes-backup-schedule
+```
+
+The host needs the supported Python supplied by the deployment's Ubuntu release
+and network access to install the repository's pinned Ansible/collection
+requirements. Setup installs a private controller under
+`/opt/engineering-office-backup/<project>` and a persistent systemd timer. The
+example runs at 03:00 and 15:00 UTC. Systemd catches a missed tick after reboot
+and allows only one active worker per project. Reapplying configuration suspends
+the timer first and refuses to replace an active worker; resolve the failure and
+reapply explicitly. Only this command enables the timer.
+
+Each cycle authenticates the repository before interruption, records the exact
+container and prior restart policy, stops it, creates and verifies a backup,
+applies retention and verifies again. A previously running service resumes and
+must pass the existing gateway health check before success is reported. An
+intentionally stopped service stays stopped. Ordinary backup failures restore
+the prior operating state and trigger the separate failure notification unit.
+No data, logs, snapshot metadata or credentials are sent to monitoring: only
+start, success and failure pings.
+
+The worker has a one-hour limit, including verification and retention. Size the
+repository and schedule so two complete scans fit that window. If the process
+is killed or the host loses power while restart is disabled, Hermes stays
+stopped; a later cycle does not infer that it should resume. Missing-success
+monitoring is essential, especially when the host or notification endpoint is
+unreachable. After an interrupted run, inspect the repository and service before
+resuming; remove a stale Restic lock only after proving no writer remains.
+
+On the target, inspect the schedule and bounded worker:
+
+```sh
+sudo systemctl status hermes-backup-engineering-office-hermes.timer
+sudo journalctl -u hermes-backup-engineering-office-hermes.service
+```
+
+Keep journal access restricted. Detailed Restic, credential and container results
+are suppressed; failure messages identify the failed operation for investigation.
+Retain the successful snapshot ID with the deployment revision in the private
+recovery record. Run the replacement-host restore drill before private use.
+
+### Disable and maintain
+
+On the target, stop the timer and any in-flight worker without credentials:
+
+```sh
+sudo make -C /srv/engineering-office hermes-backup-disable
+```
+
+`hermes-stop` performs this disable step before stopping the container and
+removing its restart policy. It therefore prevents a backup worker from undoing
+an operator shutdown. Manual backup, integrity, restore and deployment commands
+require automation to be disabled; keep other operators out of the same
+maintenance window. Direct Docker or Restic commands bypass this coordination.
+
+For complete removal, set `hermes_backup_schedule_enabled: false` and rerun
+`make hermes-backup-schedule`. This removes the managed units and private
+controller, preserving recovery credentials, repository and Hermes state. It
+does not delete provider accounts or the remote monitoring check. Pause that
+check deliberately when decommissioning, rather than leaving unexplained alerts.
+
 ## Check backup integrity and age
 
 With the same approved inventory and recovery settings, run from the controller:
@@ -84,8 +203,8 @@ repository while another operation owns its lock.
 Hermes can be running or stopped. The check leaves its container, restart policy,
 state and snapshots untouched; native Restic uses temporary repository locks.
 Full verification reads all encrypted data and needs exclusive repository access,
-so reserve a suitable window and account for storage I/O. Scheduling and remote
-notifications are not enabled. A successful check describes that moment; it does
+so disable automation, reserve a suitable window and account for storage I/O.
+A successful check describes that moment; it does
 not replace a restore drill, independent storage/key recovery or ongoing monitoring.
 Restic can retain a partial snapshot after a failed backup. Integrity and age
 alone cannot establish that all intended source files were captured; always
@@ -125,8 +244,8 @@ A nonzero Restic exit, including an incomplete backup, fails the operation.
 Hermes stays stopped on both success and failure. Inspect any failure before
 ending maintenance; use `make hermes-deploy` from the controller to restart it.
 
-Scheduling is not enabled. Restic's repository locks remain enabled, but these
-commands do not coordinate concurrent deployment or maintenance operators.
+Restic's repository locks remain enabled. These manual commands require the
+automatic worker to be disabled; operators must still coordinate their own work.
 
 ## Expire recovery points
 
@@ -173,9 +292,10 @@ before retrying; a retry requires another successful new backup. Do not manually
 delete the last recovery point to make space. Once accepted, explicitly restart
 with `make hermes-deploy`.
 
-The policy runs only when invoked. Daily execution, failure notification,
-independent storage expiry and private recovery remain activation requirements;
-this manual command does not enforce a continuously running retention deadline.
+The policy runs during each scheduled cycle or this manual command. Failed or
+disabled cycles do not enforce a continuous expiry deadline; monitoring must
+raise the resulting gap. Provider-side copies and private recovery still require
+operational qualification.
 
 ## Restore without overwriting existing state
 

@@ -214,31 +214,41 @@ despite fresh snapshots with another host/path/tag, wrong keys, future timestamp
 and a separately corrupted repository copy. A successful check preserves the
 stopped container, disabled restart policy and every existing snapshot. Failure
 reports must exclude the synthetic password and plaintext state canary.
-After verified backup and pruning, it copies only the encrypted Restic repository
-to a private runner directory, alongside the full snapshot ID and source machine
-identity. The workflow destroys the entire source VM and its disks before
-creating a fresh Ubuntu VM.
+The [automatic backup scenario](../../tests/ansible/hermes-backup-schedule.yml)
+uses a real SeaweedFS S3 service outside the guest and a synthetic heartbeat
+recorder. It exercises a native systemd calendar tick, stopped/running state
+preservation, verification and retention, rejected credentials, unavailable
+monitoring, overlapping starts and the kill switch during storage interruption.
+Removing automation must preserve the independently stored recovery point and
+credentials. Dependabot updates both fixture images through their Compose pins.
+
+The runner retains only the chosen snapshot ID and source machine identity in a
+private directory. The workflow destroys the entire source VM and its disks
+before creating a fresh Ubuntu VM; its S3 storage remains available. The monitor
+fixture checks the HTTP contract and failure propagation, not real notification
+routing or the upstream service's missed-run scheduler. Those require live
+acceptance with the chosen monitoring service and recipient.
 
 The [host-loss recovery scenario](../../tests/ansible/hermes-recovery.yml) repeats
 production host preparation and convergence checks. It requires a different
 machine identity and no inherited deployment or recovery files. The public
 fixture supplies its synthetic key independently of the lost host. Native
-Ansible transfers the retained repository, then the production restore entrypoint
-verifies integrity and restores the exact snapshot. Recovery must remain inactive
+Restic reads the independent S3 repository through the production restore
+entrypoint, verifies integrity and restores the exact snapshot. Recovery must remain inactive
 until the scenario explicitly deploys reviewed assets and synthetic credentials.
 The public backup check then runs against the restored repository while Hermes
 is live; the running container identity and restart policy must remain unchanged.
 [Goss](../../tests/hermes/backup.goss.yaml) reads the original session, checks a
-restored file's content/ownership/mode, rejects an unrelated key, checks for a
-plaintext canary in the encrypted repository, and verifies recovery credentials
-stay outside Hermes. There is no inference fixture on the recovery host to
-recreate the conversation. CI always schedules cleanup of both VMs and the runner
-copy. Neither repository contents nor keys are uploaded as artifacts.
+restored file's content/ownership/mode, rejects an unrelated key, and verifies
+recovery credentials stay outside Hermes. The manual filesystem scenario also
+rejects plaintext canary leakage into encrypted storage. There is no inference fixture on the recovery host to
+recreate the conversation. CI always schedules cleanup of both VMs, fixture services and the runner
+record. Neither repository contents nor keys are uploaded as artifacts.
 
 The job allows 60 minutes for the two sequential host preparations and runtime
 downloads, with at most one VM active at a time. This qualifies recovery after
 loss of the source guest. It does not establish an operational backup destination,
-recovery after runner/provider loss, Bitwarden key recovery, automated retention
+recovery after runner/provider loss, Bitwarden key recovery, real alert delivery
 or a private operational disaster drill.
 
 `make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail explicitly

@@ -1,0 +1,350 @@
+---
+# Arrange: the preceding manual backup scenario left Hermes intentionally stopped.
+- name: Select the disposable host
+  ansible.builtin.import_playbook: helpers/inventory.yml
+
+- name: Connect independent fixture services
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Select the synthetic recovery settings
+      ansible.builtin.include_tasks: helpers/recovery-settings.yml
+    - name: Connect the independent storage and heartbeat recorder
+      ansible.builtin.include_tasks: helpers/remote-backup-settings.yml
+
+- name: Exercise the complete automatic backup lifecycle
+  hosts: hermes
+  become: true
+  gather_facts: false
+  vars:
+    backup_unit: "hermes-backup-{{ hermes_project_name }}"
+    fixture_compose: "{{ playbook_dir }}/../hermes/backup-services/compose.yml"
+  tasks:
+    # Arrange
+    - name: Supply independent public fixture credentials
+      ansible.builtin.include_tasks: helpers/remote-backup-material.yml
+    - name: Validate the selected remote repository paths
+      ansible.builtin.include_role:
+        name: hermes_backup
+        tasks_from: preflight
+    - name: Initialize the independent fixture repository
+      ansible.builtin.command:
+        argv: [restic, --no-cache, init]
+      environment: "{{ hermes_backup_environment }}"
+      changed_when: true
+      no_log: true
+    # Act: a real calendar tick starts the first cycle.
+    - name: Enable the production schedule
+      ansible.builtin.include_role:
+        name: hermes_backup_schedule
+      vars:
+        hermes_backup_schedule_enabled: true
+        hermes_backup_schedule_calendar: "*-*-* *:*:00 UTC"
+    - name: Wait for the scheduled worker to announce itself
+      # checkov:skip=CKV2_ANSIBLE_1:Isolated synthetic loopback monitor
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/events
+        use_proxy: false
+      register: first_start
+      until: first_start.json | default([]) | length > 0
+      retries: 45
+      delay: 2
+    - name: Suspend further ticks while allowing the first cycle to finish
+      ansible.builtin.systemd_service:
+        name: "{{ backup_unit }}.timer"
+        state: stopped
+        enabled: false
+    - name: Wait for the first cycle to complete
+      ansible.builtin.include_tasks: helpers/backup-worker-idle.yml
+    # Assert
+    - name: Read the stopped service and monitoring evidence
+      ansible.builtin.include_tasks: helpers/backup-cycle-state.yml
+    - name: Require a verified cycle without resuming an intentional stop
+      ansible.builtin.assert:
+        that:
+          - cycle_events.json == ['start', 'success']
+          - not cycle_container.container.State.Running
+          - cycle_container.container.HostConfig.RestartPolicy.Name == 'no'
+          - worker_state.stdout == 'success'
+        quiet: true
+    # Arrange
+    - name: Resume the synthetic service for availability tests
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      loop:
+        - [
+            docker,
+            container,
+            update,
+            --restart=unless-stopped,
+            "{{ cycle_container.container.Id }}",
+          ]
+        - [docker, container, start, "{{ cycle_container.container.Id }}"]
+      changed_when: true
+    - name: Wait for the resumed fixture to become healthy
+      community.docker.docker_container_info:
+        name: "{{ hermes_project_name }}-hermes-1"
+      register: running_fixture
+      until: running_fixture.container.State.Health.Status == 'healthy'
+      retries: 36
+      delay: 5
+    # Act
+    - name: Run another cycle through the installed production unit
+      ansible.builtin.systemd_service:
+        name: "{{ backup_unit }}.service"
+        state: started
+    # Assert
+    - name: Read the resumed service and monitoring evidence
+      ansible.builtin.include_tasks: helpers/backup-cycle-state.yml
+    - name: Require exact-container resumption and success only after health recovery
+      ansible.builtin.assert:
+        that:
+          - cycle_events.json == ['start', 'success', 'start', 'success']
+          - cycle_container.container.Id == running_fixture.container.Id
+          - cycle_container.container.State.Running
+          - cycle_container.container.State.Health.Status == 'healthy'
+          - cycle_container.container.HostConfig.RestartPolicy.Name == 'unless-stopped'
+        quiet: true
+    - name: Read the successful recovery points
+      ansible.builtin.command:
+        argv: [restic, --no-cache, snapshots, --json]
+      environment: "{{ hermes_backup_environment }}"
+      changed_when: false
+      register: automatic_snapshots
+      no_log: true
+    - name: Read the source host identity
+      ansible.builtin.slurp:
+        src: /etc/machine-id
+      register: source_machine_id
+    - name: Record the remote recovery point and source identity without copying storage
+      ansible.builtin.copy:
+        dest: "{{ hostvars.localhost.recovery_directory }}/snapshot.yml"
+        mode: "0600"
+        content: >-
+          {{ {'hermes_restore_snapshot': (automatic_snapshots.stdout | from_json | last).id,
+              'source_machine_id': source_machine_id.content | b64decode | trim} | to_nice_yaml }}
+      delegate_to: localhost
+      become: false
+    # Arrange
+    - name: Replace the key with a public wrong-password fixture
+      ansible.builtin.copy:
+        dest: "{{ hermes_backup_password_file }}"
+        content: synthetic-wrong-key
+        mode: "0600"
+      no_log: true
+    # Act
+    - name: Attempt the automatic cycle with an unusable key
+      ansible.builtin.command:
+        argv: [systemctl, start, "{{ backup_unit }}.service"]
+      changed_when: false
+      failed_when: false
+      register: wrong_key_run
+    - name: Wait for the independent failure handler
+      # checkov:skip=CKV2_ANSIBLE_1:Isolated synthetic loopback monitor
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/events
+        use_proxy: false
+      register: failed_events
+      until: failed_events.json | default([]) | last == 'fail'
+      retries: 30
+      delay: 2
+    # Assert
+    - name: Inspect the service after rejected credentials
+      community.docker.docker_container_info:
+        name: "{{ hermes_project_name }}-hermes-1"
+      register: rejected_container
+    - name: Require failure notification without service interruption
+      ansible.builtin.assert:
+        that:
+          - wrong_key_run.rc != 0
+          - failed_events.json == ['start', 'success', 'start', 'success', 'start', 'fail']
+          - rejected_container.container.State.StartedAt == cycle_container.container.State.StartedAt
+          - rejected_container.container.State.Running
+        quiet: true
+    # Arrange
+    - name: Recover the independent fixture key
+      ansible.builtin.include_tasks: helpers/recovery-material.yml
+    - name: Make the monitoring fixture unavailable
+      # checkov:skip=CKV2_ANSIBLE_1:Isolated synthetic loopback monitor
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/unavailable
+        method: PUT
+        use_proxy: false
+    # Act
+    - name: Attempt a cycle while heartbeat delivery fails
+      ansible.builtin.command:
+        argv: [systemctl, start, "{{ backup_unit }}.service"]
+      changed_when: false
+      failed_when: false
+      register: unavailable_monitor_run
+    - name: Require the failure handler to fail when monitoring is unavailable
+      ansible.builtin.command:
+        argv:
+          [
+            systemctl,
+            show,
+            --property=Result,
+            --value,
+            "hermes-backup-failure-{{ hermes_project_name }}.service",
+          ]
+      register: notification_failure
+      changed_when: false
+      until: notification_failure.stdout == 'exit-code'
+      retries: 30
+      delay: 2
+    # Assert
+    - name: Read the service and unsuccessful notification evidence
+      ansible.builtin.include_tasks: helpers/backup-cycle-state.yml
+    - name: Require missing monitoring to fail before stopping Hermes
+      ansible.builtin.assert:
+        that:
+          - unavailable_monitor_run.rc != 0
+          - cycle_events.json == failed_events.json
+          - cycle_container.container.State.StartedAt == rejected_container.container.State.StartedAt
+          - cycle_container.container.State.Running
+        quiet: true
+    # Arrange
+    - name: Restore monitoring availability
+      # checkov:skip=CKV2_ANSIBLE_1:Isolated synthetic loopback monitor
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/available
+        method: PUT
+        use_proxy: false
+    # Act
+    - name: Begin a cycle without waiting for completion
+      ansible.builtin.command:
+        argv: [systemctl, start, --no-block, "{{ backup_unit }}.service"]
+      changed_when: true
+    - name: Wait until maintenance has stopped the container
+      community.docker.docker_container_info:
+        name: "{{ hermes_project_name }}-hermes-1"
+      register: interrupted_container
+      until: not interrupted_container.container.State.Running
+      retries: 120
+      delay: 1
+    - name: Pause independent storage to hold the maintenance window open
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            compose,
+            -p,
+            hermes-backup-fixture,
+            -f,
+            "{{ fixture_compose }}",
+            pause,
+            storage,
+          ]
+      delegate_to: localhost
+      become: false
+      changed_when: true
+    - name: Record the in-flight worker identity
+      ansible.builtin.command:
+        argv:
+          [
+            systemctl,
+            show,
+            --property=MainPID,
+            --value,
+            "{{ backup_unit }}.service",
+          ]
+      register: worker_before_overlap
+      changed_when: false
+    - name: Attempt an overlapping start
+      ansible.builtin.command:
+        argv: [systemctl, start, --no-block, "{{ backup_unit }}.service"]
+      changed_when: false
+    - name: Read the worker identity after the overlapping start
+      ansible.builtin.command:
+        argv:
+          [
+            systemctl,
+            show,
+            --property=MainPID,
+            --value,
+            "{{ backup_unit }}.service",
+          ]
+      register: worker_after_overlap
+      changed_when: false
+    # Assert
+    - name: Require systemd to keep exactly the original worker
+      ansible.builtin.assert:
+        that:
+          - worker_before_overlap.stdout | int > 0
+          - worker_before_overlap.stdout == worker_after_overlap.stdout
+        quiet: true
+    # Act
+    - name: Invoke the independent operator kill switch during maintenance
+      ansible.builtin.command:
+        argv:
+          [
+            make,
+            -C,
+            /srv/engineering-office,
+            hermes-stop,
+            "HERMES_PROJECT={{ hermes_project_name }}",
+          ]
+      changed_when: true
+    - name: Resume the independent fixture storage
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            compose,
+            -p,
+            hermes-backup-fixture,
+            -f,
+            "{{ fixture_compose }}",
+            unpause,
+            storage,
+          ]
+      delegate_to: localhost
+      become: false
+      changed_when: true
+    # Assert
+    - name: Require the worker and timer to be inactive
+      ansible.builtin.include_tasks: ../../ansible/helpers/hermes-backup-idle.yml
+    - name: Read the state after stopping the entire worker process group
+      ansible.builtin.include_tasks: helpers/backup-cycle-state.yml
+    - name: Require the kill switch to prevent resumption
+      ansible.builtin.assert:
+        that:
+          - not cycle_container.container.State.Running
+          - cycle_container.container.HostConfig.RestartPolicy.Name == 'no'
+          - cycle_events.json | select('equalto', 'success') | length == 2
+        quiet: true
+    # Arrange: all writers are now stopped; remove only their abandoned Restic locks.
+    - name: Release the interrupted fixture worker's stale lock
+      ansible.builtin.command:
+        argv: [restic, --no-cache, unlock, --remove-all]
+      environment: "{{ hermes_backup_environment }}"
+      changed_when: true
+      no_log: true
+    # Act
+    - name: Remove automation through the production role
+      ansible.builtin.include_role:
+        name: hermes_backup_schedule
+      vars:
+        hermes_backup_schedule_enabled: false
+    - name: Repeat removal to verify convergence
+      ansible.builtin.include_role:
+        name: hermes_backup_schedule
+      vars:
+        hermes_backup_schedule_enabled: false
+    # Assert: the same production check verifies surviving S3 state and freshness.
+    - name: Check the retained independent repository
+      ansible.builtin.include_role:
+        name: hermes_backup
+        tasks_from: check
+    - name: Inspect the removed timer and installed controller
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "/etc/systemd/system/{{ backup_unit }}.timer"
+        - "/opt/engineering-office-backup/{{ hermes_project_name }}"
+      register: removed_automation
+    - name: Require disablement to remove automation without deleting recovery material
+      ansible.builtin.assert:
+        that:
+          - removed_automation.results | selectattr('stat.exists') | list | length == 0
+        quiet: true
