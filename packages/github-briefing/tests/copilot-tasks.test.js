@@ -62,6 +62,7 @@ suite("Scoped Copilot work", () => {
 			api.session(repo, tasks[1].id, "new", "in_progress"),
 		];
 		tasks[1].session_count = 2;
+		tasks[1].html_url = `${repo.html_url}/tasks/${tasks[1].id}`;
 		tasks[1].artifacts = [
 			{
 				provider: "github",
@@ -200,7 +201,7 @@ suite("Copilot coverage and bounded reads", () => {
 		});
 	}
 
-	test("shares the global request budget and exposes uncollected session detail", async (t) => {
+	test("bounds busy repository details while preserving access verification and later sources", async (t) => {
 		// Arrange
 		const api = new GitHubApiFixture();
 		api.tasks.set(
@@ -219,15 +220,14 @@ suite("Copilot coverage and bounded reads", () => {
 
 		// Assert
 		const { copilot, access } = snapshot.repositories[0];
-		assert.equal(access.reason, "request-budget");
-		assert.equal(api.requests.length, 100);
+		assert.equal(access.status, "complete");
 		assert.equal(snapshot.coverage.status, "partial");
-		assert.equal(copilot.reason, "request-budget");
+		assert.equal(copilot.reason, "repository-budget");
 		assert.equal(
 			snapshot.repositories[0].copilot.tasks.at(-1).sessionCoverage.reason,
-			"request-budget",
+			"repository-budget",
 		);
-		assert.equal(snapshot.repositories[1].reason, "request-budget");
+		assert.equal(snapshot.repositories[1].status, "complete");
 	});
 
 	for (const problem of [
@@ -259,7 +259,7 @@ suite("Copilot coverage and bounded reads", () => {
 			assert.equal(snapshot.repositories[0].items.length, 2);
 			assert.equal(snapshot.coverage.status, "partial");
 			assert.doesNotMatch(JSON.stringify(snapshot), /canary/u);
-			if (problem === "rate-limit") assert.equal(api.requests.length, 9);
+			if (problem === "rate-limit") assert.equal(api.requests.length, 10);
 		});
 	}
 
@@ -297,6 +297,40 @@ suite("Copilot coverage and bounded reads", () => {
 		assert.equal(evidence.updatedAt, current.updated_at);
 		assert.equal(evidence.sessions.length, 2);
 	});
+
+	for (const field of ["created_at", "updated_at", "completed_at"]) {
+		test(`omits a session with inconsistent ${field} while retaining other work`, async (t) => {
+			// Arrange
+			const api = new GitHubApiFixture();
+			const repo = api.repositories[0];
+			const current = api.task(repo);
+			current.sessions[0][field] = "2019-01-01T00:00:00Z";
+			current.sessions.push(api.session(repo, current.id, "valid"));
+			current.session_count = 2;
+			api.tasks.set(repo.full_name, [current]);
+			t.mock.method(globalThis, "fetch", api.fetch);
+
+			// Act
+			const snapshot = await api.collect(new GitHubBriefing());
+
+			// Assert
+			const repository = snapshot.repositories[0];
+			const evidence = repository.copilot.tasks[0];
+			assert.deepEqual(evidence.sessionCoverage, {
+				status: "partial",
+				reason: "inconsistent-session-time",
+				expected: 2,
+			});
+			assert.deepEqual(
+				evidence.sessions.map(({ id }) => id),
+				["valid"],
+			);
+			assert.equal(evidence.state, current.state);
+			assert.equal(repository.items.length, 2);
+			assert.equal(snapshot.coverage.status, "partial");
+			assert.equal(snapshot.repositories[1].status, "complete");
+		});
+	}
 
 	for (const problem of [
 		"missing-sessions",
@@ -439,9 +473,12 @@ suite("Copilot identity and access changes", () => {
 			t.mock.method(globalThis, "fetch", async (url, options) => {
 				const response = await api.fetch(url, options);
 				if (new URL(url).pathname.endsWith("/tasks/task-1"))
-					api.overrides.set("/repos/work/project", {
+					api.overrides.set("work/project/access", {
 						status: problem === "revoked" ? 404 : 200,
-						data: { ...api.repositories[0], private: true },
+						data: api.graphql(
+							{ ...api.repositories[0], private: true },
+							{ issues: { totalCount: 1 }, pullRequests: { totalCount: 1 } },
+						),
 					});
 				return response;
 			});

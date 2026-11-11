@@ -1,6 +1,6 @@
 # Read GitHub work for a private briefing
 
-Collect open issues and pull requests that you authored, are assigned to or are
+Collect open issues and pull requests that you authored, delegated, are assigned to or are
 mentioned in, plus pull requests with a review request for you or a team you belong
 to. Discover repositories across ownership, collaboration and organization
 membership. Collection has no age cutoff;
@@ -37,15 +37,16 @@ owner-only regular files. From the repository root:
 ```sh
 npm ci --ignore-scripts --prefix packages/github-briefing
 install -d -m 700 .local/github-briefing
-install -m 600 packages/github-briefing/source.example.json .local/github-briefing/source.json
 ```
 
-Edit the local policy with your GitHub account's numeric ID and login, and each
-approved repository's numeric ID, full name and expected `public` or `private`
-visibility. The example contains synthetic values. Add approved sources from any
-owner or organization; there is no fixed repository or organization boundary.
-Unlisted repositories are discovered but their work is not queried, and their
-names are not emitted. A changed name, ID or visibility requires policy review.
+For a selected subset, copy `packages/github-briefing/source.example.json` with
+`install -m 600` to `.local/github-briefing/source.json` and replace its synthetic
+values with the approved account and repository IDs, names and visibility.
+
+If all credential-visible repositories belong to this context, the setup command
+below discovers their identities for you. Exclude repositories belonging to other
+contexts. This explicitly admits the current set; later collection never adds newly
+discovered repositories. An identity, name or visibility change requires review.
 
 Supply a user credential that can read the selected repositories' metadata,
 issues and pull requests. Prefer read-only fine-grained permissions where the
@@ -74,15 +75,36 @@ Missing task access produces explicit unavailable coverage while accessible
 issue/PR evidence remains usable.
 
 Keep the credential in Bitwarden and place only its value in
-`.local/github-briefing/token`, an owner-only file (`chmod 600`). Do not put it in
-command arguments, Git or CI secrets. The command does not read ambient `GH_TOKEN`
-or `GITHUB_TOKEN` variables or obtain a credential from the GitHub CLI.
+`.local/github-briefing/token`, an owner-only file (`chmod 600`). An operator who
+chooses to reuse their authenticated GitHub CLI credential can copy it with
+`(umask 077; set -C; gh auth token > .local/github-briefing/token)`. This refuses
+to replace an existing file. Its permissions may be broader than the collector's
+fixed reads. The collector itself never reads ambient token variables, discovers
+credentials or requests additional permissions.
+
+To admit the account's current repository set into one context:
+
+```sh
+node packages/github-briefing/src/cli.js \
+  --init-policy --scope professional-internal \
+  --exclude example-user/household \
+  --source .local/github-briefing/source.json \
+  --token-file .local/github-briefing/token
+```
+
+Replace the exclusion with an actual repository name; repeat `--exclude` as needed
+or omit it when all sources belong to this context. Setup reads account/repository
+metadata only, requires complete discovery and creates the policy with owner-only
+permissions. It refuses to overwrite any existing file or symlink. Review the
+result locally before collection. For a scope change, generate a separate policy,
+review its additions/removals and replace the active file deliberately. Remove
+revoked repositories immediately; there is no automatic admission refresh.
 
 ```sh
 make github-briefing
 ```
 
-For another already approved scope, provide its separate protected files:
+For another already approved context, provide its separate protected files:
 
 ```sh
 node packages/github-briefing/src/cli.js \
@@ -90,14 +112,17 @@ node packages/github-briefing/src/cli.js \
   --token-file /absolute/path/token --format text
 ```
 
-Both files must belong to the invoking user, be regular files with no group/other
+Both inputs must belong to the invoking user, be regular files with no group/other
 permissions, and not be symlinks. Source policy size is limited to 1 MiB; token
-files to 16 KiB. Up to 1,000 repository admissions are supported per policy.
+files to 16 KiB. Policies accept up to 1,000 admissions; the refresh budget can
+leave large or busy sets partial. Check actual coverage before operational use.
+Remove temporary token copies after qualification. Deleting the copy does not
+revoke the credential stored by GitHub CLI or Bitwarden.
 
 ## Read the concise briefing
 
 `make github-briefing` displays plain text: account and scope, observation time,
-coverage warnings and up to five grouped work items with source links. The
+coverage warnings, totals by category and up to five grouped work items with source links. The
 underlying CLI accepts `--format text` or `--format json`; JSON is its default
 and includes all collected records and coverage detail. Both formats perform the
 same bounded collection and retain the same protected input requirements.
@@ -110,6 +135,11 @@ Items are ordered by explicit signals:
 2. **In progress:** queued or running tasks or their newest attempts.
 3. **Open or unresolved work:** open issues/PRs and unavailable PR context.
 4. **Completed or inactive:** completed, idle or cancelled tasks and closed/merged PRs.
+
+When in-progress work exists, one of the five places is reserved for it, even
+when attention items fill the briefing. The remaining places follow the priority
+order above. Category totals count all collected groups, including those omitted
+from the concise output; they do not imply complete source coverage.
 
 Within each category, the oldest observed update in a group comes first, falling
 back to a task's creation time when its update time is absent. That source
@@ -149,7 +179,7 @@ node packages/github-briefing/src/cli.js \
 
 ## Read coverage before using the evidence
 
-The snapshot uses `schemaVersion: 6`, the selected `scope` and conservative
+The snapshot uses `schemaVersion: 8`, the selected `scope` and conservative
 `classification: restricted`, including when some source repositories are public.
 `source.account` identifies the authenticated owner. Each admitted repository
 carries its identity, visibility, collection status and items. Items retain their
@@ -159,6 +189,14 @@ of every relationship or a claim of urgency. Mention and review-request matches 
 establishes relevance, not an unanswered request, urgency or an obligation to reply;
 it stays in the open/unresolved category unless a separate attention signal exists.
 Review requests do not establish review completion or merge readiness.
+
+GitHub's [author filter includes delegated agent PRs](https://github.blog/changelog/2026-07-09-new-pull-requests-dashboard-is-now-generally-available/).
+When an authored/assigned PR search matches without literal authorship or current
+assignment, `author-search` records that indexed relationship. Text labels it
+"Authored or delegated (search result)"; it does not claim that you are the PR's
+literal author or infer which agent created it. Repository admission, URL, record
+identity and final access checks still apply. Issues require direct authorship or
+assignment for this search; mention and review searches retain their own reasons.
 
 `observedAt` records collection time, not the age of the underlying work. Search
 indexing and changes during pagination can affect results. This is an independent
@@ -174,9 +212,11 @@ Check these fields before interpreting an empty list:
   Their identities and work are omitted; review admission separately when needed.
 - `repositories[].status` and `searches[]` distinguish complete collection from
   unavailable sources or partial searches. Each entry identifies its `kind` and
-  `selection`: `work` for authored/assigned work, `mentions` for direct user
+  `selection`: `work` for authored/delegated/assigned work, `mentions` for direct user
   mentions, or `reviews` for review requests to you or your teams (PRs only).
-  Per-query totals overlap and must not be added to count unique work.
+  `matched` counts records retrieved for that repository/query. `batchTotal` is
+  GitHub's total for the shared query across its batch; it is not a per-repository
+  total. These counts overlap and must not be added to count unique work.
   Missing repositories, changed identity,
   incomplete search, rate limits and exhausted budgets remain visible.
 - `repositories[].copilot` reports task coverage separately. Its boundary is
@@ -195,21 +235,40 @@ Check these fields before interpreting an empty list:
   completed within this credential's boundary. It does not include unadmitted
   sources or the capabilities listed in `coverage.excluded`.
 
-Each repository is rechecked before collection. Separate issue/PR searches query
-authored/assigned work and direct user mentions; a separate PR search finds review
-requests to you or your teams. This uses five searches per admitted repository,
-before pagination. Each search reads
-at most 10 pages of 100 results, matching GitHub's 1,000-result search limit.
-An invocation allows at most 100 HTTP requests and a two-minute request window;
-each request has a maximum ten-second timeout and 4 MiB response body. No redirects
-or retries are allowed. Recognized rate limiting stops further requests. Large
-scopes can therefore produce partial coverage; a later invocation starts fresh
-and does not resume a cursor. Do not treat repeated partial snapshots as complete
-coverage or enable a scheduled briefing on that assumption. GitHub also applies
-[a search-specific rate limit](https://docs.github.com/en/rest/search/search#rate-limit);
-mention and review queries use that same allowance and can reduce the number of
-repositories covered in a single run. The collector does not add retries or
-increase its budget.
+Repository identity and issue/PR read access are checked individually before
+search and again before returning evidence. A fixed GraphQL query requests only
+identity, visibility and issue/PR counts; unrelated titles or bodies are not
+requested. This avoids treating a repository silently omitted from a multi-source
+search as an empty backlog. Missing read permission makes the source unavailable.
+Confirmed loss at the final check removes its work and task evidence.
+
+Searches batch at most 20 explicitly admitted repositories. Each batch has five
+independent queries: authored/assigned issues, mentioned issues, authored/assigned
+PRs, mentioned PRs and review requests. Queries group repository names with explicit Boolean `OR`; no owner-wide wildcard
+is used. Returned work must belong to that exact batch. Each
+query reads at most ten pages of 100 results. Partial pagination applies to all
+repositories in the batch. A rejected batch is checked individually to identify
+inaccessible sources; inaccessible repositories are excluded from subsequent work
+queries. No broader search is used as a fallback.
+
+All admitted repositories are checked and searched before task/PR enrichment.
+Enrichment allows at most 100 requests per repository and reserves a task-list
+read and final access check for later repositories when the global budget permits.
+A busy source reports `repository-budget` instead of consuming every remaining
+request. This bound can leave some task details or PR context incomplete.
+
+One invocation allows at most 2,000 HTTP requests and 15 minutes, with a ten-second
+maximum request timeout and a 4 MiB response-body limit. After a successful read
+exhausts its quota, the next read in that API family waits for GitHub's published
+reset, provided it
+fits within the invocation deadline. Missing/invalid reset information, an actual
+rate-limit error or a reset beyond the deadline stops further requests. No failed
+request is retried and no redirect is followed. The
+[search-specific quota](https://docs.github.com/en/rest/search/search#rate-limit)
+and the separate Copilot task quota are shared with other clients using the credential; concurrent usage can still
+cause a partial run. A later invocation starts fresh; there is no stored cursor,
+cache or stale-success fallback. Check the full admitted set's measured coverage
+before scheduling or relying on a briefing.
 
 The dedicated `mentions:<login>` query identifies mention matches independently
 of review requests. It retrieves no comment threads or text-match fragments;
@@ -248,6 +307,10 @@ PR. `sessions[]` preserves each attempt's own ID, state and timestamps; a previo
 completed attempt cannot hide a later running one. `sessionCoverage` is complete
 only when the detail response includes sessions matching its reported count.
 Missing, stale or failed detail is explicit and does not invent session results.
+An attempt whose timestamps contradict their ordering is omitted and reported as
+`inconsistent-session-time`. Other verified attempts and work remain available;
+this warning makes source coverage partial. Mismatched repository/task identities
+still reject the snapshot.
 
 `artifacts[]` preserves PR resource IDs and optional GraphQL IDs, or branch refs.
 GitHub's PR resource ID is not the issue ID or PR number; do not turn it into a
@@ -281,7 +344,7 @@ review decision and checks can legitimately disagree. Raw reviews, check logs
 and individual check details are not collected. A PR may have changed since its
 search-index entry; the context record supplies the later observation.
 
-The collector uses two fixed repository-scoped GraphQL queries through the same
+PR context uses two fixed repository-scoped GraphQL queries through the same
 Octokit transport. It first reads context for relevant PR numbers. For remaining
 task artifacts it scans at most ten pages of 100 PR identities, including closed
 and merged PRs, ordered by most recent update. Only matching identities are kept;
@@ -290,6 +353,51 @@ IDs to another repository or guesses PR numbers from resource IDs. Context needs
 one query per selected PR; all requests share the global budget. Unresolved IDs,
 pagination changes and inaccessible context stay explicit. GraphQL errors discard
 that response's partial data; raw errors are not emitted. No mutation is allowed.
+
+## Qualify the complete local journey
+
+Identify existing authored/assigned work, a mention, a direct or team review
+request and a Copilot task with sessions before the run. Do not create work merely
+to populate this check. An empty successful endpoint establishes access, not a
+positive match. Compare the result with GitHub, including older unresolved items,
+the latest task attempt, PR head commit, review state and checks independently.
+
+To inspect one observation in both formats without recollecting, run in Bash
+from the repository root:
+
+```bash
+set -euo pipefail
+umask 077
+qualification_dir=$(mktemp -d "$PWD/.local/github-briefing/qualification.XXXXXX")
+node packages/github-briefing/src/cli.js \
+  --source .local/github-briefing/source.json \
+  --token-file .local/github-briefing/token > "$qualification_dir/snapshot.json"
+node --input-type=module - "$qualification_dir/snapshot.json" \
+  > "$qualification_dir/briefing.txt" <<'JS'
+import { readFile } from "node:fs/promises";
+import { GitHubBriefingText } from "./packages/github-briefing/src/briefing-text.js";
+const snapshot = JSON.parse(await readFile(process.argv[2], "utf8"));
+process.stdout.write(new GitHubBriefingText().render(snapshot));
+JS
+printf 'Private results: %s\n' "$qualification_dir"
+```
+
+Inspect `coverage`, each repository's searches, task/session coverage, PR context
+and final access check in the JSON. Exit status zero can still mean partial
+coverage. The text displays only five groups and explicitly reports omissions.
+For partial results, check the stated reason and scope before rerunning. Repeated
+partial runs do not establish complete account coverage.
+
+Remove an admitted source from a copy of the policy and verify the next run
+omits its identity and work. Removing the token must make invocation fail without
+output. Credential invalidation and permission loss are covered by synthetic tests;
+revoke a disposable credential separately when qualifying provider-side revocation,
+without revoking an operational GitHub CLI credential merely for a test.
+
+Keep the reviewed policy, collector revision, observation time and capability
+outcomes privately. Delete qualification output when review is finished. Record
+only sanitized, dated evidence in the source ADR; never publish work titles,
+private repository names, tokens, prompts or raw responses in PRs or CI artifacts.
 
 ## Data handling and revocation
 

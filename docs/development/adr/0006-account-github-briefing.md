@@ -231,3 +231,153 @@ pagination, partial search and access failures, and rejection of unrelated PRs
 in authored/assigned results. They do not establish positive live team matching
 for the owner's credential. The official contract is documented in
 [GitHub review search](https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests#search-by-pull-request-review-status-and-reviewer).
+
+## Public operator qualification (2026-11-11)
+
+The owner explicitly authorized a temporary copy of the existing GitHub CLI
+credential for collection from public `escemi-tech/engineering-office` only.
+The source policy admitted that repository to `professional-internal`; other
+credential-visible repositories were discovered as metadata but their work was
+not queried or their names emitted. This probe grants no private admission or
+Hermes/model access and does not select the operational credential.
+
+Collector commit `22ba1f95450b6d294eff968c78789020bdba22f7` produced a schema 6
+snapshot at `2026-11-11T08:59:21.117Z`, before PR #34 merged. All 13 requests
+completed within the existing limits. Discovery, five scoped searches, Agent
+Tasks listing, selected PR context and the final access check were complete.
+The authored PR match was #34, with the expected head commit, `OPEN` state,
+`REVIEW_REQUIRED` review decision and `SUCCESS` head-commit checks. The local text
+rendered those independent observations from the same snapshot without another
+API call. PR #34 subsequently merged at `2026-11-11T08:59:23Z`; this is dated
+observation evidence, not a statement of its current state.
+
+Issue, mention and review searches and Copilot task listing returned no matches.
+This establishes those reads were accepted for this credential and repository;
+positive mention/review matching, task detail, session reads and live task/PR
+grouping remain unqualified. One admitted repository's complete result does not
+establish full-account coverage or business usefulness.
+
+The temporary token file was deleted after collection, including a cleanup trap
+for failure. Policy, snapshot and text files were verified as owner-owned mode
+0600 within a private temporary directory. Raw output was kept local and excluded
+from Git and CI artifacts. Use the maintained
+[qualification procedure](../../usage/github-briefing.md#qualify-the-complete-local-journey) for later
+credentials and approved scopes; this historical result is not their validation.
+
+## Operational account refresh — 2026-11-11
+
+The owner classified account-visible repositories as professional, except personal
+repositories created for this ecosystem, and authorized local qualification using
+the existing GitHub CLI credential. This does not approve a model processor,
+Hermes ingestion, hosted activation or external writes. Temporary token copies
+are deleted after each probe. Private records and source policies stay outside Git.
+
+The previous sequential collector used five searches per repository and stopped
+at a shared quota or request budget. A live baseline reached seven repositories
+before rate limiting. Repeating it would revisit the same prefix. Synthetic
+coverage of a small scope did not establish the intended account journey.
+
+Schema 7 batches up to twenty explicit repository qualifiers per query and
+separates repository admission, work search and enrichment. Individual identity
+and issue/PR capability checks bracket collection: multi-repository search can
+silently omit inaccessible resources. Fixed GraphQL count queries establish the
+read boundary without collecting unrelated issue/PR content. Denied sources lose
+all retained evidence; authentication loss still rejects the entire snapshot.
+
+Bound refreshes to 2,000 requests and fifteen minutes, with at most 100 enrichment
+requests per source and capacity reserved for later source checks. Keep existing
+page, body and per-request timeout limits. Respect successful responses' quota-reset headers independently for search,
+Copilot tasks, GraphQL and core REST reads, within the deadline. A failed request
+is never retried. This small sequential wait uses native timers; a retry/queue
+plugin, cache, cursor store and scheduler are unnecessary for this operating scope.
+A future scope exceeding these bounds remains explicitly partial and must be
+measured before changing this contract.
+
+The explicit policy initialization command captures current identities and
+visibility, requires complete discovery, validates exclusions, and creates a new
+owner-only file without overwrite. Policy regeneration requires review; discovering
+new sources during collection does not admit them. Setup, qualification and
+revocation share the existing usage guide and feature PR. No new implementation
+tracker or separate evidence PR is needed.
+
+Live task qualification also identified a provider discrepancy: the response
+used `/<owner>/<repo>/tasks/<id>`, while the documented example uses
+`/<owner>/<repo>/copilot/tasks/<id>`. Accept both supplied forms only for the
+exact admitted repository and task ID on `github.com`; never invent a link or
+follow the response URL for API reads. A bounded rerun positively matched the
+task and its session with complete coverage. The existing state/session test
+covers both forms alongside foreign-link rejection.
+
+The advanced-search live probe required an explicit parenthesized `OR` between
+repository qualifiers; whitespace alone returned an empty intersection. A query
+with twenty admitted repositories and known open work verified the supported
+Boolean form. Copilot responses advertise their own `mission_control` quota
+(60 reads per minute during qualification), independent of core/search/GraphQL.
+Use reported reset times rather than assuming one shared REST quota or hardcoding
+that preview-specific allowance. Synthetic cases cover separate task/search waits
+and reject adjacent batch qualifiers without an explicit union.
+
+A later live response supplied an attempt with completion before creation while
+its task/repository identities matched. Rejecting the entire account snapshot
+for that temporal defect prevented useful work from being shown. Omit that
+attempt, retain verified task/work evidence and mark session/source coverage
+partial with `inconsistent-session-time`. Do not repair or guess the timestamps.
+Foreign identities and duplicate attempts still reject the snapshot. Three
+synthetic ordering cases and an isolated live rerun verify the degraded result.
+
+The full approved-source run completed at `2026-11-11T12:21:42.294Z` in
+769 seconds using 1,181 requests. All 259 admissions received five complete work
+search results and a successful final access check. Discovery was complete;
+the personal household repository remained unadmitted. The snapshot contained
+132 unique issue/PR work items, including 41 last updated more than a year ago.
+Overlapping relevance counts were 76 authored, 64 assigned, 28 mentioned and
+8 review-requested records. These counts are observations, not additive totals
+or an exhaustive account of human access beyond the credential.
+
+Copilot supplied 243 eligible tasks and 281 retained attempts. All 71 selected PR
+contexts completed, including 21 linked to task artifacts; no artifact remained
+unresolved. Repository coverage was complete for 256 sources and partial for
+three: two attempts had contradictory timestamps and two had incomplete session
+metadata. The snapshot and text both reported partial coverage. These upstream
+omissions do not establish complete session history and must remain visible.
+No source was starved by the request or time bounds in this run.
+
+Protected setup reproduced the approved policy and excluded the personal source.
+A subsequent reduced-policy run retained one public source and removed the other
+258; it completed in 13 requests, made no work reads outside that policy and
+emitted no removed source identities. Removing the temporary credential copy
+made CLI invocation fail without stdout. This verifies local disable behavior;
+provider-side credential revocation and mid-run access loss remain synthetic
+checks, and the operational GitHub CLI credential was not revoked.
+
+Private policy, JSON and text are retained in owner-only local files for owner
+review, outside Git and CI artifacts. Temporary token copies were deleted.
+The owner must still accept the briefing against known work. This qualification
+approves neither a model processor nor hosted activation, and is dated evidence
+rather than a promise that a future refresh will have identical coverage.
+
+A bounded independent read of the eight matched PRs' requested reviewers confirmed
+all eight as direct requests to the authenticated account. No team-only request
+was present in this approved set. Team-review matching retains synthetic and
+provider-contract coverage; its positive live qualification remains open until
+an existing example is available. Do not create external work for this purpose.
+
+## Operational review corrections — 2026-11-11
+
+GitHub's current author filter includes PRs delegated to agents. Schema 8 records
+`author-search` when an authored/assigned PR search matches without literal
+authorship or current assignment. This supersedes the earlier rejection of such
+PRs: indexed relevance cannot be reconstructed from those two response fields.
+Keep the existing Octokit query and explicit search attribution rather than
+adding a second collector or guessing an agent identity. Admission, URLs, record
+identity and final access checks remain enforced; issue selection is unchanged.
+The provider contract is documented in the
+[GitHub changelog](https://github.blog/changelog/2026-07-09-new-pull-requests-dashboard-is-now-generally-available/).
+
+The concise presentation counts every collected group by category and reserves
+one of its five places for in-progress work. Native Node.js nonblocking file
+opens reject named pipes before reading protected inputs. No dependency or new
+persistent state is required. All 178 synthetic tests passed locally, including
+delegated/unassigned PRs, identity mismatches, attention-heavy summaries and both
+named-pipe inputs. These corrections have not been requalified with private live
+data and do not replace the owner's pending acceptance.

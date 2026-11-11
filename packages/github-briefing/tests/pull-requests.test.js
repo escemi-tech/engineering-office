@@ -105,7 +105,11 @@ suite("PR identity and independent context", () => {
 		);
 		assert.equal(evidence.items[1].state, "MERGED");
 		assert.deepEqual(evidence.items[1].taskIds, [task.id]);
-		const queries = api.requests.filter(({ method }) => method === "POST");
+		const queries = api.requests.filter(
+			({ method, body }) =>
+				method === "POST" &&
+				!JSON.parse(body).query.includes("BriefingRepositoryAccess"),
+		);
 		assert.equal(queries.length, 4);
 		assert.ok(
 			queries.every(
@@ -251,7 +255,7 @@ suite("Bounded context failures", () => {
 			assert.equal(result.pullRequests.items[0].reviewDecision, undefined);
 			assert.doesNotMatch(JSON.stringify(snapshot), /canary/u);
 			if (failure === "rate-limit") {
-				assert.equal(api.requests.length, 11);
+				assert.equal(api.requests.length, 12);
 				assert.equal(result.access.reason, "rate-limit");
 			}
 		});

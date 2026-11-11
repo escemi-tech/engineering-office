@@ -5,6 +5,7 @@ import {
 	BriefingUnavailableError,
 	GitHubBriefing,
 } from "../src/github-briefing.js";
+import { RepositoryAccess } from "../src/repository-access.js";
 import { GitHubApiFixture } from "./helpers/github-api.js";
 
 suite("Account-wide scoped evidence", () => {
@@ -17,7 +18,7 @@ suite("Account-wide scoped evidence", () => {
 		const snapshot = await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(snapshot.schemaVersion, 6);
+		assert.equal(snapshot.schemaVersion, 8);
 		assert.equal(snapshot.scope, "professional-internal");
 		assert.equal(snapshot.classification, "restricted");
 		assert.deepEqual(snapshot.source.account, api.viewer);
@@ -50,7 +51,7 @@ suite("Account-wide scoped evidence", () => {
 		await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(api.requests.length, 20);
+		assert.equal(api.requests.length, 15);
 		const discovery = api.requests[1].url.searchParams;
 		assert.equal(
 			discovery.get("affiliation"),
@@ -79,17 +80,17 @@ suite("Account-wide scoped evidence", () => {
 			if (query.includes("mentions:")) {
 				assert.match(
 					query,
-					/^repo:(work|client)\/project is:open is:(issue|pull-request) mentions:example-user$/u,
+					/^\(repo:work\/project OR repo:client\/project\) is:open is:(issue|pull-request) mentions:example-user$/u,
 				);
 			} else if (query.includes("review-requested:")) {
 				assert.match(
 					query,
-					/^repo:(work|client)\/project is:open is:pull-request review-requested:example-user$/u,
+					/^\(repo:work\/project OR repo:client\/project\) is:open is:pull-request review-requested:example-user$/u,
 				);
 			} else {
 				assert.match(
 					query,
-					/^repo:(work|client)\/project is:open is:(issue|pull-request) \(author:example-user OR assignee:example-user\)$/u,
+					/^\(repo:work\/project OR repo:client\/project\) is:open is:(issue|pull-request) \(author:example-user OR assignee:example-user\)$/u,
 				);
 			}
 			assert.doesNotMatch(query, /updated:|created:|since:/u);
@@ -180,9 +181,7 @@ suite("Review request relevance", () => {
 				item.assignees = [api.viewer];
 			}
 			for (const selection of ["", "reviews/"])
-				api.overrides.set(`work/project/pull-request/${selection}1`, {
-					data: { total_count: 1, incomplete_results: false, items: [item] },
-				});
+				api.setSearchResult(`work/project/pull-request/${selection}1`, [item]);
 
 			// Act
 			const snapshot = await api.collect(new GitHubBriefing());
@@ -198,7 +197,8 @@ suite("Review request relevance", () => {
 				kind: "pull-request",
 				selection: "reviews",
 				status: "complete",
-				total: 1,
+				matched: 1,
+				batchTotal: 1,
 			});
 			assert.equal(
 				snapshot.coverage.excluded.includes("team-review-requests"),
@@ -212,19 +212,46 @@ suite("Review request relevance", () => {
 		});
 	}
 
-	test("rejects unrelated PRs in authored or assigned search results", async () => {
+	test("retains an unassigned delegated PR with explicit search attribution", async () => {
 		// Arrange
-		item.user = null;
-		api.overrides.set("work/project/pull-request/1", {
-			data: { total_count: 1, incomplete_results: false, items: [item] },
-		});
+		item.user = { id: 505, login: "Copilot" };
+		api.setSearchResult("work/project/pull-request/1", [item]);
 
 		// Act
-		const result = api.collect(new GitHubBriefing());
+		const snapshot = await api.collect(new GitHubBriefing());
+		const text = new GitHubBriefingText().render(snapshot);
 
 		// Assert
-		await assert.rejects(result, BriefingUnavailableError);
+		assert.equal(snapshot.coverage.status, "complete");
+		assert.deepEqual(snapshot.repositories[0].items[1].reasons, [
+			"author-search",
+		]);
+		assert.match(text, /Authored or delegated \(search result\)/u);
 	});
+
+	for (const mismatch of ["repository", "url", "number", "issue"]) {
+		test(`rejects a search match with inconsistent ${mismatch} evidence`, async () => {
+			// Arrange
+			item.user = { id: 505, login: "Copilot" };
+			let kind = "pull-request";
+			if (mismatch === "repository")
+				item.repository_url = "https://api.github.com/repos/unadmitted/project";
+			if (mismatch === "url")
+				item.html_url = "https://github.com/work/project/pull/999";
+			if (mismatch === "number") item.number = 999;
+			if (mismatch === "issue") {
+				kind = "issue";
+				item = { ...api.item(api.repositories[0], kind), user: null };
+			}
+			api.setSearchResult(`work/project/${kind}/1`, [item]);
+
+			// Act
+			const result = api.collect(new GitHubBriefing());
+
+			// Assert
+			await assert.rejects(result, BriefingUnavailableError);
+		});
+	}
 
 	for (const status of [401, 403, 404, 422, 429, 503]) {
 		test(`handles review search failure ${status} without inferring a review request`, async () => {
@@ -287,7 +314,8 @@ suite("Review request relevance", () => {
 			selection: "reviews",
 			status: "partial",
 			reason: "incomplete-search",
-			total: 2,
+			matched: 1,
+			batchTotal: 2,
 		});
 		assert.deepEqual(snapshot.repositories[0].items[1].reasons, [
 			"authored",
@@ -351,8 +379,11 @@ suite("Admission and credentials", () => {
 			}
 			if (problem === "visibility-changed") repository.private = true;
 			if (problem === "replaced") repository.id = 999;
-			api.overrides.set("/repos/work/project", {
-				data: repository,
+			api.overrides.set("work/project/access", {
+				data: api.graphql(repository, {
+					issues: { totalCount: 1 },
+					pullRequests: { totalCount: 1 },
+				}),
 				status: problem === "access-revoked" ? 404 : 200,
 			});
 			t.mock.method(globalThis, "fetch", api.fetch);
@@ -367,7 +398,7 @@ suite("Admission and credentials", () => {
 			assert.ok(
 				api.requests.every(
 					({ url }) =>
-						!url.searchParams.get("q")?.startsWith("repo:work/project "),
+						!url.searchParams.get("q")?.includes("repo:work/project"),
 				),
 			);
 		});
@@ -424,7 +455,7 @@ suite("Partial coverage and failed sources", () => {
 			assert.equal(snapshot.coverage.status, "partial");
 			assert.equal(snapshot.repositories[0].searches[0].status, "partial");
 			assert.doesNotMatch(JSON.stringify(snapshot), /canary/u);
-			if (problem === "rate-limit") assert.equal(api.requests.length, 4);
+			if (problem === "rate-limit") assert.equal(api.requests.length, 5);
 		});
 	}
 
@@ -485,6 +516,7 @@ suite("Partial coverage and failed sources", () => {
 	test("caps search pagination at GitHub's 1000-result boundary", async (t) => {
 		// Arrange
 		const api = new GitHubApiFixture();
+		api.policy.repositories = [api.policy.repositories[0]];
 		for (let page = 1; page <= 10; page++)
 			api.overrides.set(`work/project/issue/${page}`, {
 				data: {
@@ -582,27 +614,34 @@ suite("Partial coverage and failed sources", () => {
 });
 
 suite("Collection limits and current provider records", () => {
-	test("stops at the global request budget and marks remaining sources unavailable", async (t) => {
+	test("visits every repository in a large admitted scope with bounded batched searches", async (t) => {
 		// Arrange
 		const api = new GitHubApiFixture();
-		api.repositories = Array.from({ length: 40 }, (_, index) =>
-			api.repository(300 + index, "work/repo-" + index),
-		);
-		api.policy.repositories = api.repositories.map((repo) => ({
-			id: repo.id,
-			fullName: repo.full_name,
-			visibility: "public",
-		}));
+		api.setRepositoryCount(300);
 		t.mock.method(globalThis, "fetch", api.fetch);
 
 		// Act
 		const snapshot = await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(api.requests.length, 100);
-		assert.equal(snapshot.coverage.requests, 100);
-		assert.equal(snapshot.coverage.status, "partial");
-		assert.equal(snapshot.repositories.at(-1).reason, "request-budget");
+		assert.equal(snapshot.coverage.status, "complete");
+		assert.equal(snapshot.repositories.length, 300);
+		assert.ok(
+			snapshot.repositories.every(
+				(repo) => repo.items.length === 2 && repo.access.status === "complete",
+			),
+		);
+		const searches = api.requests.filter(
+			({ url }) => url.pathname === "/search/issues",
+		);
+		assert.equal(searches.length, 75);
+		assert.ok(
+			searches.every(
+				({ url }) =>
+					[...url.searchParams.get("q").matchAll(/repo:/gu)].length === 20,
+			),
+		);
+		assert.ok(snapshot.coverage.requests < 1500);
 	});
 
 	test("bounds discovery without claiming unseen repositories are inaccessible", async (t) => {
@@ -637,7 +676,7 @@ suite("Collection limits and current provider records", () => {
 		t.mock.method(Date, "now", () => start + elapsed);
 		t.mock.method(globalThis, "fetch", async (url, options) => {
 			const response = await api.fetch(url, options);
-			if (new URL(url).pathname === "/user/repos") elapsed = 120_001;
+			if (new URL(url).pathname === "/user/repos") elapsed = 900_001;
 			return response;
 		});
 
@@ -712,6 +751,8 @@ suite("Protected operator command", () => {
 		{ status: 401 },
 		{ mode: 0o644 },
 		{ symbolic: true },
+		{ namedPipe: "token" },
+		{ namedPipe: "source" },
 		{ malformed: true },
 		{ args: [] },
 		{ format: "html" },
@@ -726,6 +767,7 @@ suite("Protected operator command", () => {
 
 			// Assert
 			assert.equal(result.status, 1);
+			assert.equal(result.error, undefined);
 			assert.equal(result.stdout, "");
 			assert.doesNotMatch(result.stderr, /canary|\/tmp\//u);
 		});
@@ -765,7 +807,13 @@ suite("Direct user mentions", () => {
 				result.searches.find(
 					(search) => search.kind === kind && search.selection === "mentions",
 				),
-				{ kind, selection: "mentions", status: "complete", total: 1 },
+				{
+					kind,
+					selection: "mentions",
+					status: "complete",
+					matched: 1,
+					batchTotal: 1,
+				},
 			);
 			assert.equal(snapshot.coverage.excluded.includes("mentions"), false);
 			assert.doesNotMatch(JSON.stringify(snapshot), /body-canary|assignees/u);
@@ -808,6 +856,7 @@ suite("Direct user mentions", () => {
 			api.requests.filter(
 				({ url, body }) =>
 					url.pathname === "/graphql" &&
+					JSON.parse(body).query.includes("query BriefingPullRequest(") &&
 					JSON.parse(body).variables.owner === "work",
 			).length,
 			1,
@@ -860,7 +909,7 @@ suite("Direct user mentions", () => {
 			assert.equal(snapshot.coverage.status, "partial");
 			assert.equal(snapshot.repositories[0].items[0].kind, "issue");
 			assert.equal(snapshot.repositories[0].searches[1].status, "partial");
-			if (problem === "rate-limit") assert.equal(api.requests.length, 5);
+			if (problem === "rate-limit") assert.equal(api.requests.length, 6);
 		});
 	}
 
@@ -912,4 +961,216 @@ suite("Direct user mentions", () => {
 			await assert.rejects(result, BriefingUnavailableError);
 		});
 	}
+});
+
+suite("Operational setup and bounded refresh", () => {
+	test("creates an owner-only policy from explicit account-wide admission and exclusions", () => {
+		// Arrange
+		const api = new GitHubApiFixture();
+
+		// Act
+		const result = api.runCli({ initialize: true });
+
+		// Assert
+		assert.equal(result.status, 0, result.stderr);
+		assert.equal(result.stdout, "");
+		assert.equal(result.mode, 0o600);
+		assert.deepEqual(result.source, {
+			...api.policy,
+			repositories: [api.policy.repositories[0]],
+		});
+		assert.doesNotMatch(result.stderr, /canary|client\/project/u);
+	});
+
+	test("refuses to overwrite an existing admission policy", () => {
+		// Arrange
+		const api = new GitHubApiFixture();
+
+		// Act
+		const result = api.runCli({ initialize: true, existing: true });
+
+		// Assert
+		assert.equal(result.status, 1);
+		assert.deepEqual(result.source, api.policy);
+	});
+
+	test("setup performs metadata reads only and refuses incomplete discovery", async (t) => {
+		// Arrange
+		const api = new GitHubApiFixture();
+		api.overrides.set("/user/repos/1", { status: 503 });
+		t.mock.method(globalThis, "fetch", api.fetch);
+
+		// Act
+		const result = new GitHubBriefing().createPolicy({
+			token: "synthetic",
+			scope: "professional-internal",
+		});
+
+		// Assert
+		await assert.rejects(result, /discovery incomplete/u);
+		assert.deepEqual(
+			api.requests.map(({ url }) => url.pathname),
+			["/user", "/user/repos"],
+		);
+	});
+
+	for (const [bucket, beyondDeadline] of [
+		["search", false],
+		["search", true],
+		["tasks", false],
+		["tasks", true],
+	]) {
+		test(`honors a ${bucket} quota reset ${beyondDeadline ? "beyond" : "within"} the refresh deadline`, async (t) => {
+			// Arrange
+			const api = new GitHubApiFixture();
+			const start = Date.now();
+			let elapsed = 0;
+			const waits = [];
+			t.mock.method(Date, "now", () => start + elapsed);
+			t.mock.method(globalThis, "setTimeout", (resolve, delay) => {
+				waits.push(delay);
+				elapsed += delay;
+				resolve();
+			});
+			api.overrides.set(
+				bucket === "search"
+					? "work/project/issue/1"
+					: "/agents/repos/work/project/tasks/1",
+				{
+					headers: {
+						"x-ratelimit-remaining": "0",
+						"x-ratelimit-reset": String(
+							Math.ceil(start / 1000) + (beyondDeadline ? 901 : 30),
+						),
+					},
+				},
+			);
+			t.mock.method(globalThis, "fetch", api.fetch);
+
+			// Act
+			const result = await api.collect(new GitHubBriefing());
+
+			// Assert
+			assert.equal(
+				result.coverage.status,
+				beyondDeadline ? "partial" : "complete",
+			);
+			assert.equal(waits.length, beyondDeadline ? 0 : 1);
+			if (beyondDeadline)
+				assert.equal(
+					(bucket === "search"
+						? result.repositories[0].searches[1]
+						: result.repositories[1].copilot
+					).reason,
+					"rate-limit",
+				);
+			else assert.ok(elapsed >= 30_000 && elapsed < 33_000);
+		});
+	}
+
+	test("never exceeds the global budget for a scope larger than a single refresh", async (t) => {
+		// Arrange
+		const api = new GitHubApiFixture();
+		api.setRepositoryCount(1000);
+		t.mock.method(globalThis, "fetch", api.fetch);
+
+		// Act
+		const result = await api.collect(new GitHubBriefing());
+
+		// Assert
+		assert.equal(api.requests.length, 2000);
+		assert.equal(result.coverage.status, "partial");
+		assert.equal(result.repositories.at(-1).access.reason, "request-budget");
+		assert.equal(result.repositories.length, 1000);
+	});
+});
+
+suite("Individual permissions around batched search", () => {
+	for (const afterSearch of [false, true]) {
+		test(`discards a source with denied issue access ${afterSearch ? "after" : "before"} search`, async (t) => {
+			// Arrange
+			const api = new GitHubApiFixture();
+			const denied = {
+				data: {
+					errors: [{ type: "FORBIDDEN", message: "synthetic-error-canary" }],
+				},
+			};
+			if (!afterSearch) api.overrides.set("work/project/access", denied);
+			t.mock.method(globalThis, "fetch", async (url, options) => {
+				const result = await api.fetch(url, options);
+				if (afterSearch && new URL(url).pathname === "/search/issues")
+					api.overrides.set("work/project/access", denied);
+				return result;
+			});
+
+			// Act
+			const result = await api.collect(new GitHubBriefing());
+
+			// Assert
+			assert.deepEqual(result.repositories[0], {
+				...api.policy.repositories[0],
+				status: "unavailable",
+				reason: "http-403",
+				items: [],
+			});
+			assert.equal(result.repositories[1].status, "complete");
+			assert.doesNotMatch(JSON.stringify(result), /canary/u);
+			if (!afterSearch)
+				assert.ok(
+					api.requests.every(
+						({ url }) =>
+							!url.searchParams.get("q")?.includes("repo:work/project"),
+					),
+				);
+		});
+	}
+
+	test("rejects a misspelled exclusion instead of admitting the unintended repository", async (t) => {
+		// Arrange
+		const api = new GitHubApiFixture();
+		t.mock.method(globalThis, "fetch", api.fetch);
+
+		// Act
+		const result = new GitHubBriefing().createPolicy({
+			token: "synthetic",
+			scope: "professional-internal",
+			exclude: ["client/wrong-name"],
+		});
+
+		// Assert
+		await assert.rejects(result, /excluded repository was not discovered/u);
+		assert.equal(api.requests.length, 2);
+	});
+
+	test("limits repository access queries to fixed fields and admitted identities", () => {
+		// Arrange
+		const api = new GitHubApiFixture();
+		const query = {
+			query: RepositoryAccess.query,
+			variables: { owner: "work", name: "project" },
+		};
+
+		// Act
+		const allowed = RepositoryAccess.allows(
+			JSON.stringify(query),
+			api.policy.repositories,
+		);
+		const foreign = RepositoryAccess.allows(
+			JSON.stringify({
+				...query,
+				variables: { owner: "other", name: "private" },
+			}),
+			api.policy.repositories,
+		);
+
+		// Assert
+		assert.equal(allowed, true);
+		assert.equal(foreign, false);
+		assert.throws(() =>
+			RepositoryAccess.allows(
+				JSON.stringify({ ...query, query: "mutation { forbidden }" }),
+				api.policy.repositories,
+			),
+		);
+	});
 });

@@ -133,12 +133,15 @@ export class CopilotTasks {
 
 	#validate(current, repository, viewer) {
 		const apiUrl = `https://api.github.com/agents/repos/${repository.fullName}/tasks/${current.id}`;
-		const webUrl = `https://github.com/${repository.fullName}/copilot/tasks/${current.id}`;
+		const webUrls = ["tasks", "copilot/tasks"].map(
+			(path) =>
+				`https://github.com/${repository.fullName}/${path}/${current.id}`,
+		);
 		if (
 			(current.repository && current.repository.id !== repository.id) ||
 			(current.creator && current.creator.id !== viewer.id) ||
 			(current.url && current.url !== apiUrl) ||
-			(current.html_url && current.html_url !== webUrl) ||
+			(current.html_url && !webUrls.includes(current.html_url)) ||
 			current.archived_at ||
 			(current.updated_at &&
 				Date.parse(current.updated_at) < Date.parse(current.created_at))
@@ -168,19 +171,25 @@ export class CopilotTasks {
 		const updated = this.#project(current);
 		const sessions = current.sessions ?? [];
 		const seen = new Set();
+		let invalidSessionTime = false;
 		for (const attempt of sessions) {
 			if (
 				seen.has(attempt.id) ||
 				(attempt.task_id && attempt.task_id !== current.id) ||
-				(attempt.repository && attempt.repository.id !== repository.id) ||
+				(attempt.repository && attempt.repository.id !== repository.id)
+			)
+				throw new Error("Inconsistent Copilot session evidence");
+			seen.add(attempt.id);
+			if (
 				Date.parse(attempt.created_at) < Date.parse(current.created_at) ||
 				[attempt.updated_at, attempt.completed_at].some(
 					(value) =>
 						value && Date.parse(value) < Date.parse(attempt.created_at),
 				)
-			)
-				throw new Error("Inconsistent Copilot session evidence");
-			seen.add(attempt.id);
+			) {
+				invalidSessionTime = true;
+				continue;
+			}
 			updated.sessions.push({
 				id: attempt.id,
 				state: attempt.state,
@@ -190,11 +199,15 @@ export class CopilotTasks {
 			});
 		}
 		updated.sessionCoverage =
-			current.sessions && current.session_count === sessions.length
+			current.sessions &&
+			!invalidSessionTime &&
+			current.session_count === sessions.length
 				? { status: "complete", expected: current.session_count }
 				: {
 						status: "partial",
-						reason: "unverified-sessions",
+						reason: invalidSessionTime
+							? "inconsistent-session-time"
+							: "unverified-sessions",
 						expected: current.session_count,
 					};
 		return updated;

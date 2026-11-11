@@ -47,6 +47,37 @@ suite("Readable GitHub briefing", () => {
 		assert.deepEqual(snapshot, before);
 	});
 
+	test("keeps running work visible when failures fill the concise briefing", () => {
+		// Arrange
+		snapshot.repositories = [repository];
+		repository.items = [];
+		repository.pullRequests.items = [];
+		const running = repository.copilot.tasks[0];
+		repository.copilot.tasks = [
+			...Array.from({ length: 6 }, (_, index) => ({
+				...running,
+				id: `failed-${index}`,
+				state: "failed",
+				sessions: [],
+			})),
+			running,
+		];
+
+		// Act
+		const text = new GitHubBriefingText().render(snapshot);
+
+		// Assert
+		assert.match(
+			text,
+			/Grouped items by category: Needs attention: 6; In progress: 1/u,
+		);
+		assert.match(text, /Showing 5 of 7 grouped items/u);
+		assert.equal(text.match(/\d\. \[Needs attention\]/gu).length, 4);
+		assert.match(text, /5\. \[In progress\]/u);
+		assert.match(text, /Task task-1: in_progress/u);
+		assert.equal(repository.copilot.tasks.length, 7);
+	});
+
 	test("groups verified PR and task links without merging issues or other repositories", () => {
 		// Arrange
 		const pull = repository.pullRequests.items[0];
