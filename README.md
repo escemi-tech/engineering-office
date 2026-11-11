@@ -15,6 +15,9 @@ Use the [backup and recovery guide](docs/usage/hermes-backup.md) to encrypt stop
 state, schedule monitored backups to independent storage, and restore a selected
 snapshot into a fresh volume.
 
+Prepare dedicated encrypted infrastructure storage with the
+[state bootstrap and recovery guide](docs/usage/infrastructure-state.md).
+
 Use the [shared writing policy](docs/usage/writing-policy.md) to review English
 and French drafts. Hermes startup builds and loads this policy automatically.
 

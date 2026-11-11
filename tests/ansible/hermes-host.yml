@@ -66,3 +66,5 @@
         name: "{{ fixture_operator.stdout }}"
         groups: docker
         append: true
+    - name: Reconnect after the fixture operator's group membership changes
+      ansible.builtin.meta: reset_connection

@@ -9,11 +9,6 @@
   tasks:
     - name: Select the synthetic recovery settings
       ansible.builtin.include_tasks: helpers/recovery-settings.yml
-    - name: Protect the runner handoff directory
-      ansible.builtin.file:
-        path: "{{ recovery_directory }}"
-        state: directory
-        mode: "0700"
 
 - name: Prepare the synthetic repository and state canary
   hosts: hermes
@@ -30,17 +25,8 @@
         RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
       changed_when: true
       no_log: true
-    - name: Inspect the source state volume
-      community.docker.docker_volume_info:
-        name: "{{ hermes_project_name }}_state"
-      register: fixture_state_volume
-    - name: Add a synthetic ownership and encryption canary
-      ansible.builtin.copy:
-        dest: "{{ fixture_state_volume.volume.Mountpoint }}/recovery-canary"
-        content: synthetic-restic-plaintext-canary
-        owner: "10000"
-        group: "10000"
-        mode: "0600"
+    - name: Prepare the synthetic state canary
+      ansible.builtin.include_tasks: helpers/backup-canary.yml
 
 - name: Verify backup admission failures
   hosts: localhost

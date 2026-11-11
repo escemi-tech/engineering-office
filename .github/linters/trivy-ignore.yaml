@@ -1,0 +1,14 @@
+---
+misconfigurations:
+  # FIXME: Waiting for https://github.com/aquasecurity/trivy/pull/11624 to merge.
+  # Remove this exception and trivy.yaml once the shared linter includes the fix.
+  - id: AVD-AWS-0089
+    paths:
+      # Trivy reports this role path without its .yml extension.
+      - ansible/roles/infrastructure_state/tasks/main
+      - tests/ansible/helpers/infrastructure-state-lifecycle.yml
+    expired_at: 2026-12-12
+    statement: >-
+      Logging is configured and tested, but the bundled Ansible adapter ignores
+      amazon.aws.s3_bucket.logging. Engineering-office maintainers own removal
+      after the upstream fix reaches the shared linter.

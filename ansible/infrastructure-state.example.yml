@@ -1,0 +1,10 @@
+---
+# Review the storage quote and approve this change before running the bootstrap.
+# This is a dedicated state bucket; never reuse the Hermes backup repository.
+infrastructure_state_bucket: engineering-office-state-CHANGE-ME
+infrastructure_state_endpoint: https://s3.eu-west-par.io.cloud.ovh.net
+infrastructure_state_log_bucket: engineering-office-audit-CHANGE-ME
+infrastructure_state_region: eu-west-par
+# Existing, separately recoverable, mode-0600 files belonging to the operator.
+infrastructure_state_credentials_file: /absolute/path/to/professional-state-credentials
+infrastructure_state_password_file: /absolute/path/to/professional-state-password

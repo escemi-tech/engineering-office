@@ -1,0 +1,74 @@
+---
+name: Test - Recoverable infrastructure state
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  test-infrastructure-state:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      # Arrange
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up the Ansible controller Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version-file: ansible/.python-version
+      - name: Prepare native OpenTofu recovery tests
+        id: native
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            await io.mkdirP('.local');
+            const root = fs.mkdtempSync(path.join(process.env.GITHUB_WORKSPACE, '.local/native-tofu-'));
+            fs.mkdirSync(path.join(root, 'module'), { mode: 0o700 });
+            for (const source of ['tofu/professional-host/state.tofu', 'tests/infrastructure-state/contract.tofu', 'tests/infrastructure-state/native.tofutest.hcl'])
+              fs.copyFileSync(source, path.join(root, 'module', path.basename(source)));
+            fs.writeFileSync(path.join(root, 'key'), 'synthetic-independent-native-state-test-password', { mode: 0o600 });
+            core.setOutput('directory', path.relative(process.env.GITHUB_WORKSPACE, root));
+            core.setOutput('key', path.join(root, 'key'));
+      - name: Test native OpenTofu configuration
+        uses: hoverkraft-tech/ci-github-iac/actions/opentofu/test@49d8c3244e2a731e1a3dad7110b337d06922806b # 1.2.0
+        env:
+          TF_VAR_state_password_file: ${{ steps.native.outputs.key }}
+        with:
+          working-directory: ${{ steps.native.outputs.directory }}/module
+          tofu-version-file: tofu/.opentofu-version
+          comment: "false"
+          report-name: engineering-office - Native OpenTofu
+      - name: Check native OpenTofu formatting
+        run: tofu fmt -check -recursive tofu tests/infrastructure-state
+      - name: Start isolated independent storage
+        run: |
+          docker compose -p infrastructure-state-fixture -f tests/infrastructure-state/compose.yml up -d --wait storage
+          docker compose -p infrastructure-state-fixture -f tests/infrastructure-state/compose.yml run --rm audit
+      # Act and Assert: assertions use real native encryption, S3 and concurrent writers.
+      - name: Test state bootstrap, locking and recovery
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@49d8c3244e2a731e1a3dad7110b337d06922806b # 1.2.0
+        with:
+          ansible-requirements: ansible/requirements.txt
+          ansible-config: tests/ansible/ansible.cfg
+          galaxy-requirements: ansible/collections/requirements.yml
+          test-playbook: tests/ansible/infrastructure-state.yml
+          comment: "false"
+          report-name: engineering-office - Infrastructure state
+      - name: Remove isolated storage and every fixture object version
+        if: always()
+        run: docker compose -p infrastructure-state-fixture -f tests/infrastructure-state/compose.yml down --volumes
+      - name: Remove disposable native state and key files
+        if: ${{ always() && steps.native.outputs.directory != '' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          FIXTURE_DIRECTORY: ${{ steps.native.outputs.directory }}
+        with:
+          script: await io.rmRF(process.env.FIXTURE_DIRECTORY);

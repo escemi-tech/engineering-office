@@ -1,0 +1,7 @@
+---
+- name: Bootstrap recoverable professional infrastructure state
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - infrastructure_state

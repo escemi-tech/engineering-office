@@ -1,0 +1,2 @@
+---
+infrastructure_state_stack_directory: "{{ (role_path + '/../../../tofu/professional-host') | realpath }}"

@@ -31,6 +31,10 @@ ci: ## Execute local CI tasks
 github-briefing: ## Show a scoped GitHub work briefing using the protected local source policy
 	@npm run --silent --prefix packages/github-briefing briefing -- --source "$(CURDIR)/.local/github-briefing/source.json" --token-file "$(CURDIR)/.local/github-briefing/token" --format text
 
+.PHONY: infrastructure-state
+infrastructure-state: ## Bootstrap approved private state storage and initialize the encrypted workspace
+	ansible-playbook ansible/infrastructure-state.yml --extra-vars @.local/infrastructure-state.yml
+
 hermes-policy: ## Build the canonical writing policy with the qualified APM compiler
 	bash services/hermes/build-policy.sh
 

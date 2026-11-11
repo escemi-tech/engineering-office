@@ -1,0 +1,29 @@
+---
+services:
+  storage:
+    image: ghcr.io/getmoto/motoserver:5.2.5@sha256:59a1965d845249b04def37a0e2565f9cc6c44543cb89b68e90f28f344b3b0d1a
+    ports: ["127.0.0.1:18333:5000"]
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:5000/]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  audit:
+    image: public.ecr.aws/aws-cli/aws-cli:2.40.1@sha256:4ade0fe3e60e0b9e1fb0910f86c6d992baf4e12d3172c25a3c8c11f6c81cee08
+    profiles: [tools]
+    depends_on:
+      storage:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: synthetic-backup-key
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://storage:5000
+      AWS_EC2_METADATA_DISABLED: "true"
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        aws s3api create-bucket --bucket engineering-office-audit-ci
+        aws s3api put-bucket-acl --bucket engineering-office-audit-ci --grant-write URI=http://acs.amazonaws.com/groups/s3/LogDelivery --grant-read-acp URI=http://acs.amazonaws.com/groups/s3/LogDelivery
+        aws s3api put-bucket-versioning --bucket engineering-office-audit-ci --versioning-configuration Status=Enabled
+        aws s3api put-public-access-block --bucket engineering-office-audit-ci --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
