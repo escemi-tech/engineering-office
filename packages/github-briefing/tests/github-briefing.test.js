@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, suite, test } from "node:test";
+import { GitHubBriefingText } from "../src/briefing-text.js";
 import {
 	BriefingUnavailableError,
 	GitHubBriefing,
@@ -16,7 +17,7 @@ suite("Account-wide scoped evidence", () => {
 		const snapshot = await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(snapshot.schemaVersion, 5);
+		assert.equal(snapshot.schemaVersion, 6);
 		assert.equal(snapshot.scope, "professional-internal");
 		assert.equal(snapshot.classification, "restricted");
 		assert.deepEqual(snapshot.source.account, api.viewer);
@@ -49,7 +50,7 @@ suite("Account-wide scoped evidence", () => {
 		await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(api.requests.length, 18);
+		assert.equal(api.requests.length, 20);
 		const discovery = api.requests[1].url.searchParams;
 		assert.equal(
 			discovery.get("affiliation"),
@@ -80,14 +81,15 @@ suite("Account-wide scoped evidence", () => {
 					query,
 					/^repo:(work|client)\/project is:open is:(issue|pull-request) mentions:example-user$/u,
 				);
+			} else if (query.includes("review-requested:")) {
+				assert.match(
+					query,
+					/^repo:(work|client)\/project is:open is:pull-request review-requested:example-user$/u,
+				);
 			} else {
 				assert.match(
 					query,
-					/^repo:(work|client)\/project is:open is:(issue|pull-request) \(author:example-user OR assignee:example-user/u,
-				);
-				assert.equal(
-					query.includes("review-requested:"),
-					query.includes("is:pull-request"),
+					/^repo:(work|client)\/project is:open is:(issue|pull-request) \(author:example-user OR assignee:example-user\)$/u,
 				);
 			}
 			assert.doesNotMatch(query, /updated:|created:|since:/u);
@@ -104,8 +106,14 @@ suite("Account-wide scoped evidence", () => {
 			item.user = { id: 505, login: "dependabot[bot]" };
 			if (relation === "assigned") item.assignees = [api.viewer];
 			api.overrides.set("work/project/pull-request/1", {
-				data: { total_count: 1, incomplete_results: false, items: [item] },
+				data: { total_count: 0, incomplete_results: false, items: [] },
 			});
+			api.overrides.set(
+				`work/project/pull-request/${relation === "assigned" ? "" : "reviews/"}1`,
+				{
+					data: { total_count: 1, incomplete_results: false, items: [item] },
+				},
+			);
 			t.mock.method(globalThis, "fetch", api.fetch);
 
 			// Act
@@ -150,6 +158,143 @@ suite("Account-wide scoped evidence", () => {
 		assert.equal(snapshot.coverage.discoveredRepositories, 2);
 		assert.ok(
 			api.requests.every(({ url }) => url.hostname === "api.github.com"),
+		);
+	});
+});
+
+suite("Review request relevance", () => {
+	let api;
+	let item;
+	beforeEach((t) => {
+		// Arrange
+		api = new GitHubApiFixture();
+		item = api.item(api.repositories[0], "pull-request");
+		t.mock.method(globalThis, "fetch", api.fetch);
+	});
+
+	for (const relation of ["authored", "assigned"]) {
+		test(`retains a review request on an ${relation} PR and shows the qualified attention signal`, async () => {
+			// Arrange
+			if (relation === "assigned") {
+				item.user = null;
+				item.assignees = [api.viewer];
+			}
+			for (const selection of ["", "reviews/"])
+				api.overrides.set(`work/project/pull-request/${selection}1`, {
+					data: { total_count: 1, incomplete_results: false, items: [item] },
+				});
+
+			// Act
+			const snapshot = await api.collect(new GitHubBriefing());
+			const text = new GitHubBriefingText().render(snapshot);
+
+			// Assert
+			const repository = snapshot.repositories[0];
+			assert.deepEqual(repository.items[1].reasons, [
+				relation,
+				"review-requested",
+			]);
+			assert.deepEqual(repository.searches.at(-1), {
+				kind: "pull-request",
+				selection: "reviews",
+				status: "complete",
+				total: 1,
+			});
+			assert.equal(
+				snapshot.coverage.excluded.includes("team-review-requests"),
+				false,
+			);
+			assert.match(text, /\[Needs attention\] work\/project/u);
+			assert.match(
+				text,
+				/Review requested from you or a team \(search result\)/u,
+			);
+		});
+	}
+
+	test("rejects unrelated PRs in authored or assigned search results", async () => {
+		// Arrange
+		item.user = null;
+		api.overrides.set("work/project/pull-request/1", {
+			data: { total_count: 1, incomplete_results: false, items: [item] },
+		});
+
+		// Act
+		const result = api.collect(new GitHubBriefing());
+
+		// Assert
+		await assert.rejects(result, BriefingUnavailableError);
+	});
+
+	for (const status of [401, 403, 404, 422, 429, 503]) {
+		test(`handles review search failure ${status} without inferring a review request`, async () => {
+			// Arrange
+			api.overrides.set("work/project/pull-request/reviews/1", {
+				status,
+				data: { message: "private-review-error-canary" },
+			});
+
+			// Act
+			const result = api.collect(new GitHubBriefing());
+
+			// Assert
+			if (status === 401)
+				await assert.rejects(result, BriefingUnavailableError);
+			else {
+				const snapshot = await result;
+				const repository = snapshot.repositories[0];
+				assert.equal(snapshot.coverage.status, "partial");
+				if ([403, 404, 422].includes(status)) {
+					assert.equal(repository.status, "unavailable");
+					assert.deepEqual(repository.items, []);
+				} else {
+					assert.equal(repository.items.length, 2);
+					assert.equal(repository.searches.at(-1).status, "partial");
+					assert.ok(
+						repository.items.every(
+							({ reasons }) => !reasons.includes("review-requested"),
+						),
+					);
+					assert.match(
+						new GitHubBriefingText().render(snapshot),
+						/pull-request reviews partial/u,
+					);
+				}
+				assert.doesNotMatch(
+					JSON.stringify(snapshot),
+					/private-review-error-canary/u,
+				);
+			}
+		});
+	}
+
+	test("paginates review requests independently and reports incomplete review coverage", async () => {
+		// Arrange
+		api.overrides.set("work/project/pull-request/reviews/1", {
+			data: { total_count: 2, incomplete_results: false, items: [item] },
+			headers: { link: '<https://untrusted.invalid>; rel="next"' },
+		});
+		api.overrides.set("work/project/pull-request/reviews/2", {
+			data: { total_count: 2, incomplete_results: true, items: [] },
+		});
+
+		// Act
+		const snapshot = await api.collect(new GitHubBriefing());
+
+		// Assert
+		assert.deepEqual(snapshot.repositories[0].searches.at(-1), {
+			kind: "pull-request",
+			selection: "reviews",
+			status: "partial",
+			reason: "incomplete-search",
+			total: 2,
+		});
+		assert.deepEqual(snapshot.repositories[0].items[1].reasons, [
+			"authored",
+			"review-requested",
+		]);
+		assert.ok(
+			api.requests.every(({ url }) => url.origin === "https://api.github.com"),
 		);
 	});
 });
@@ -636,11 +781,12 @@ suite("Direct user mentions", () => {
 		// Arrange
 		const repo = api.repositories[0];
 		const issue = api.item(repo, "issue");
-		const pull = { ...api.item(repo, "pull-request"), user: null };
+		const pull = api.item(repo, "pull-request");
 		for (const [key, item] of [
 			["issue/mentions/1", issue],
 			["pull-request/1", pull],
 			["pull-request/mentions/1", pull],
+			["pull-request/reviews/1", pull],
 		])
 			api.overrides.set(`work/project/${key}`, {
 				data: { total_count: 1, incomplete_results: false, items: [item] },
@@ -655,7 +801,7 @@ suite("Direct user mentions", () => {
 			snapshot.repositories[0].items.map(({ reasons }) => reasons),
 			[
 				["authored", "mentioned"],
-				["review-requested", "mentioned"],
+				["authored", "mentioned", "review-requested"],
 			],
 		);
 		assert.equal(

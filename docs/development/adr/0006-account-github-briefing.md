@@ -203,3 +203,31 @@ A mention can be old or already answered. Label it as search-derived relevance
 without claiming urgency, a pending reply or permission to act. Team mentions and
 team review requests remain excluded; this extension grants no new private-source
 admission, assistant access, write operation or storage.
+
+## Review request attribution (2026-11-11)
+
+GitHub's documented `review-requested:<login>` qualifier includes requests to the
+user and to teams they belong to. The earlier direct-only description and team
+review exclusion in this ADR were incorrect. The combined authored/assigned/review
+query also omitted review relevance when authorship or assignment already matched.
+This decision supersedes those review-selection and coverage statements.
+
+Schema 6 separates authored/assigned queries from one PR-only review query per
+admitted repository. Keep `review-requested` relevance as the combined direct/team
+relationship supported by the response, independent of other matching reasons.
+Label it as a request to the account or a team in the briefing. Do not infer which
+target matched, team identity, sole responsibility, approval or merge readiness.
+The existing revision-aware overlap handling reads each selected PR context once.
+
+This adds one first-page search per repository, for five before pagination, under
+the unchanged global request and time budgets. Prefer the native qualifier over
+team membership enumeration, per-team searches or additional credentials. Keep
+review coverage independent, including rate limits and inaccessible sources;
+a failed review search cannot create a review reason from authorship or assignment.
+Team mentions remain outside coverage. No private source or runtime tool is enabled.
+
+Synthetic SDK/presentation tests cover overlapping relationships, independent
+pagination, partial search and access failures, and rejection of unrelated PRs
+in authored/assigned results. They do not establish positive live team matching
+for the owner's credential. The official contract is documented in
+[GitHub review search](https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests#search-by-pull-request-review-status-and-reviewer).

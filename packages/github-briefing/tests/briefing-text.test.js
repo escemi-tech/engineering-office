@@ -152,7 +152,10 @@ suite("Readable GitHub briefing", () => {
 		const text = new GitHubBriefingText().render(snapshot);
 
 		// Assert
-		assert.match(text, /Review requested \(search result\)/u);
+		assert.match(
+			text,
+			/Review requested from you or a team \(search result\)/u,
+		);
 		assert.match(text, /review not reported; CI not reported/u);
 		assert.doesNotMatch(text, /CI SUCCESS|ready to merge/u);
 	});
@@ -274,7 +277,7 @@ suite("Readable GitHub briefing", () => {
 			);
 			assert.match(
 				text,
-				/Outside coverage: team mentions; team review requests/u,
+				/Outside coverage: team mentions; copilot tasks created by others/u,
 			);
 		});
 	}

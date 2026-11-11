@@ -116,7 +116,7 @@ export class GitHubBriefing {
 			);
 		}
 		return {
-			schemaVersion: 5,
+			schemaVersion: 6,
 			scope: policy.scope,
 			classification: "restricted",
 			source: { system: "github", account: viewer },
@@ -137,7 +137,6 @@ export class GitHubBriefing {
 				limits: { ...limits },
 				excluded: [
 					"team-mentions",
-					"team-review-requests",
 					"copilot-tasks-created-by-others",
 					"archived-copilot-tasks",
 					"local-agent-activity",
@@ -335,7 +334,9 @@ export class GitHubBriefing {
 		result.searches = [];
 		const items = new Map();
 		for (const kind of ["issue", "pull-request"]) {
-			for (const selection of ["work", "mentions"]) {
+			const selections = ["work", "mentions"];
+			if (kind === "pull-request") selections.push("reviews");
+			for (const selection of selections) {
 				const search = await this.#search(
 					request,
 					approved,
@@ -437,10 +438,12 @@ export class GitHubBriefing {
 	}
 
 	async #search(request, approved, viewer, kind, selection) {
-		const criteria = [`author:${viewer.login}`, `assignee:${viewer.login}`];
-		if (kind === "pull-request")
-			criteria.push(`review-requested:${viewer.login}`);
-		const query = `repo:${approved.fullName} is:open is:${kind} ${selection === "mentions" ? `mentions:${viewer.login}` : `(${criteria.join(" OR ")})`}`;
+		const criteria = {
+			work: `(author:${viewer.login} OR assignee:${viewer.login})`,
+			mentions: `mentions:${viewer.login}`,
+			reviews: `review-requested:${viewer.login}`,
+		};
+		const query = `repo:${approved.fullName} is:open is:${kind} ${criteria[selection]}`;
 		const coverage = {
 			kind,
 			selection,
@@ -475,15 +478,15 @@ export class GitHubBriefing {
 					Boolean(item.pull_request) !== (kind === "pull-request") ||
 					(item.pull_request && item.pull_request.html_url !== url) ||
 					Date.parse(item.updated_at) > Date.now() ||
-					(selection === "work" && kind === "issue" && !reasons.length)
+					(selection === "work" && !reasons.length)
 				) {
 					throw new BriefingUnavailableError(
 						"Inconsistent GitHub work evidence. No snapshot produced.",
 					);
 				}
-				// Dedicated mentions queries avoid confusing mentions with review requests.
+				// Search-only relationships remain independent of authorship and assignment.
 				if (selection === "mentions") reasons.push("mentioned");
-				else if (!reasons.length) reasons.push("review-requested");
+				if (selection === "reviews") reasons.push("review-requested");
 				if (items.has(item.id)) coverage.reason = "changing-results";
 				items.set(item.id, {
 					issueId: item.id,
