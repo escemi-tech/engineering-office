@@ -537,12 +537,32 @@ suite("Protected operator command", () => {
 		assert.doesNotMatch(result.stdout, /canary/u);
 	});
 
+	test("prints a readable briefing with an explicit format", () => {
+		// Arrange
+		const api = new GitHubApiFixture();
+
+		// Act
+		const result = api.runCli({ format: "text" });
+
+		// Assert
+		assert.equal(result.status, 0, result.stderr);
+		assert.match(result.stdout, /^GitHub work briefing\n/u);
+		assert.match(result.stdout, /Coverage: complete/u);
+		assert.match(
+			result.stdout,
+			/Issue #1: https:\/\/github.com\/work\/project/u,
+		);
+		assert.doesNotMatch(result.stdout, /canary/u);
+		assert.equal(result.stderr, "");
+	});
+
 	for (const options of [
 		{ status: 401 },
 		{ mode: 0o644 },
 		{ symbolic: true },
 		{ malformed: true },
 		{ args: [] },
+		{ format: "html" },
 		{ args: ["--unknown"] },
 	]) {
 		test(`rejects unsafe or invalid invocation ${JSON.stringify(options)}`, () => {

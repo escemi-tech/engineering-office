@@ -28,8 +28,8 @@ lint-fix: ## Execute linting and fix
 ci: ## Execute local CI tasks
 	$(MAKE) lint-fix
 
-github-briefing: ## Collect relevant GitHub work using the protected local source policy
-	@npm run --silent --prefix packages/github-briefing briefing -- --source "$(CURDIR)/.local/github-briefing/source.json" --token-file "$(CURDIR)/.local/github-briefing/token"
+github-briefing: ## Show a scoped GitHub work briefing using the protected local source policy
+	@npm run --silent --prefix packages/github-briefing briefing -- --source "$(CURDIR)/.local/github-briefing/source.json" --token-file "$(CURDIR)/.local/github-briefing/token" --format text
 
 hermes-policy: ## Build the canonical writing policy with the qualified APM compiler
 	bash services/hermes/build-policy.sh
