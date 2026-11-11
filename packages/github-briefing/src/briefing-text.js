@@ -59,11 +59,23 @@ export class GitHubBriefingText {
 					: "No work could be summarized from the incomplete source reads.",
 			);
 		else {
+			const selected = groups.slice(0, itemLimit);
+			const running = groups.find(({ priority }) => priority === 1);
+			if (running && !selected.includes(running))
+				selected[itemLimit - 1] = running;
 			lines.push(
-				`Showing ${Math.min(itemLimit, groups.length)} of ${groups.length} grouped items. Attention signals first, then older updates within each category.`,
+				`Grouped items by category: ${categories
+					.map((category, priority) => [
+						category,
+						groups.filter((group) => group.priority === priority).length,
+					])
+					.filter(([, count]) => count > 0)
+					.map(([category, count]) => `${category}: ${count}`)
+					.join("; ")}.`,
+				`Showing ${selected.length} of ${groups.length} grouped items. Attention signals first, with one place reserved for in-progress work; older updates first within each category.`,
 				"",
 			);
-			for (const [index, group] of groups.slice(0, itemLimit).entries())
+			for (const [index, group] of selected.entries())
 				lines.push(...this.#item(group, index + 1), "");
 		}
 		lines.push(
@@ -175,6 +187,8 @@ export class GitHubBriefingText {
 		const priority = reasons.length ? 0 : 2;
 		if (work?.reasons.includes("mentioned"))
 			reasons.push("Mentioned (search result)");
+		if (work?.reasons.includes("author-search"))
+			reasons.push("Authored or delegated (search result)");
 		return {
 			priority,
 			reasons: reasons.length

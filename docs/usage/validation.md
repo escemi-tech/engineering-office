@@ -50,6 +50,9 @@ library with synthetic HTTP responses. Suites cover provenance, minimal data,
 account and repository identity, scope admission, public/private visibility, old
 unresolved work, relevance, pagination, partial coverage, request budgets, access
 revocation, malformed records, sanitized failures and protected CLI inputs.
+Operational cases cover protected policy generation, exclusions, non-overwrite,
+300 admitted repositories, batch isolation, independent read-access checks,
+quota-reset waits, deadlines and fairness when one repository has many tasks.
 Mention scenarios cover both work types, query attribution, overlapping relevance,
 revision changes, identity mismatches, inaccessible sources, partial results and
 rate limits. A mention alone must not become a reply obligation or attention signal.
@@ -59,7 +62,8 @@ pagination, incomplete results and access failures. Presentation must describe
 requests to the account or its teams without inferring which target matched.
 Copilot scenarios cover all task states, separate attempts, tasks without PRs,
 opaque artifact IDs, creator/source restrictions, pagination, request limits,
-missing permissions, incomplete or stale sessions and access loss. Raw prompt and
+missing permissions, incomplete or stale sessions, omission of attempts with
+inconsistent timestamp ordering and access loss. Raw prompt and
 error canaries must stay out of evidence. PR context scenarios cover resource-ID
 resolution, multiple tasks per PR, task-only merged PRs, opaque cursor pagination,
 review/check independence, unknown states, head changes, scoped fixed queries,

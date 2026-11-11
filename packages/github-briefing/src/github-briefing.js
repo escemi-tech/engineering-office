@@ -2,6 +2,7 @@ import { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import { CopilotTasks } from "./copilot-tasks.js";
 import { PullRequests } from "./pull-requests.js";
+import { RepositoryAccess } from "./repository-access.js";
 
 const identity = z.object({
 	id: z.int().positive(),
@@ -57,26 +58,71 @@ const searchSchema = z.object({
 	items: z.array(itemSchema).max(100),
 });
 const limits = {
-	requests: 100,
+	requests: 2000,
+	searchBatchSize: 20,
+	repositoryRequests: 100,
 	discoveryPages: 10,
 	searchPages: 10,
 	copilotPages: 10,
 	pullIdentityPages: 10,
-	durationMs: 120_000,
+	durationMs: 900_000,
 };
 
 export class BriefingUnavailableError extends Error {}
 
 export class GitHubBriefing {
 	async collect({ policy, token }) {
+		return this.#validated(token, () =>
+			this.#collect(policySchema.parse(policy), token),
+		);
+	}
+
+	async createPolicy({ token, scope, exclude = [] }) {
+		return this.#validated(token, async () => {
+			policySchema.shape.scope.parse(scope);
+			const excluded = new Set(
+				z
+					.array(fullName)
+					.max(1000)
+					.parse(exclude)
+					.map((name) => name.toLowerCase()),
+			);
+			const { request } = this.#requester({ repositories: [] }, token);
+			const account = await this.#viewer(request);
+			const { discovered, discovery } = await this.#discover(request);
+			if (discovery.status !== "complete")
+				throw new BriefingUnavailableError(
+					"Repository discovery incomplete. No policy produced.",
+				);
+			const names = new Set(
+				[...discovered.values()].map((repo) => repo.full_name.toLowerCase()),
+			);
+			if ([...excluded].some((name) => !names.has(name)))
+				throw new BriefingUnavailableError(
+					"An excluded repository was not discovered. Review its name and credential visibility. No policy produced.",
+				);
+			return policySchema.parse({
+				account,
+				scope,
+				repositories: [...discovered.values()]
+					.filter((repo) => !excluded.has(repo.full_name.toLowerCase()))
+					.map((repo) => ({
+						id: repo.id,
+						fullName: repo.full_name,
+						visibility: repo.private ? "private" : "public",
+					})),
+			});
+		});
+	}
+
+	async #validated(token, operation) {
 		try {
-			policy = policySchema.parse(policy);
 			if (typeof token !== "string" || !/^[\x21-\x7e]{1,16384}$/u.test(token)) {
 				throw new BriefingUnavailableError(
 					"A valid explicit GitHub credential is required.",
 				);
 			}
-			return await this.#collect(policy, token);
+			return await operation();
 		} catch (error) {
 			if (error instanceof BriefingUnavailableError) throw error;
 			throw new BriefingUnavailableError(
@@ -85,14 +131,18 @@ export class GitHubBriefing {
 		}
 	}
 
-	async #collect(policy, token) {
-		const { request, requestCount } = this.#requester(policy, token);
-		const viewerResponse = await request("GET /user");
-		if (viewerResponse.failure)
+	async #viewer(request) {
+		const response = await request("GET /user");
+		if (response.failure)
 			throw new BriefingUnavailableError(
 				"GitHub account verification unavailable. No snapshot produced.",
 			);
-		const viewer = identity.parse(viewerResponse.data);
+		return identity.parse(response.data);
+	}
+
+	async #collect(policy, token) {
+		const { request, requestCount } = this.#requester(policy, token);
+		const viewer = await this.#viewer(request);
 		if (
 			viewer.id !== policy.account.id ||
 			viewer.login.toLowerCase() !== policy.account.login.toLowerCase()
@@ -107,16 +157,40 @@ export class GitHubBriefing {
 		const repositories = [];
 		for (const approved of policy.repositories) {
 			repositories.push(
-				await this.#repository(
-					request,
-					approved,
-					discovered.get(approved.id),
-					viewer,
-				),
+				await this.#admit(request, approved, discovered.get(approved.id)),
 			);
 		}
+		const ready = repositories.filter((repo) => repo.status === "pending");
+		for (
+			let offset = 0;
+			offset < ready.length;
+			offset += limits.searchBatchSize
+		) {
+			await this.#work(
+				request,
+				ready.slice(offset, offset + limits.searchBatchSize),
+				viewer,
+			);
+		}
+		for (const [index, result] of ready.entries()) {
+			if (result.status === "unavailable") continue;
+			// Reserve a task listing and final access check for every later repository.
+			let remaining = Math.min(
+				limits.repositoryRequests,
+				Math.max(
+					0,
+					limits.requests - requestCount() - 2 * (ready.length - index - 1) - 1,
+				),
+			);
+			const bounded = (...args) =>
+				remaining-- > 0
+					? request(...args)
+					: Promise.resolve({ failure: "repository-budget" });
+			await this.#enrich(bounded, request, result, viewer);
+		}
+
 		return {
-			schemaVersion: 6,
+			schemaVersion: 8,
 			scope: policy.scope,
 			classification: "restricted",
 			source: { system: "github", account: viewer },
@@ -152,12 +226,12 @@ export class GitHubBriefing {
 	#requester(policy, token) {
 		let requests = 0;
 		let stopped;
+		const resetTimes = new Map();
 		const deadline = Date.now() + limits.durationMs;
 		const allowedPaths = new Set([
 			"/user",
 			"/user/repos",
 			"/search/issues",
-			...policy.repositories.map((repo) => `/repos/${repo.fullName}`),
 			...policy.repositories.map(
 				(repo) => `/agents/repos/${repo.fullName}/tasks`,
 			),
@@ -178,6 +252,14 @@ export class GitHubBriefing {
 			request: {
 				fetch: async (url, options) => {
 					const target = new URL(url);
+					const bucket = target.pathname.startsWith("/agents/")
+						? "tasks"
+						: target.pathname === "/search/issues"
+							? "search"
+							: target.pathname === "/graphql"
+								? "graphql"
+								: "core";
+					const nextRequestAt = resetTimes.get(bucket) ?? 0;
 					const allowedRead =
 						options.method === "GET" &&
 						(allowedPaths.has(target.pathname) || allowedTask(target.pathname));
@@ -185,7 +267,10 @@ export class GitHubBriefing {
 						target.pathname === "/graphql" &&
 						options.method === "POST" &&
 						!target.search &&
-						PullRequests.allows(options.body, policy.repositories);
+						(JSON.parse(options.body).query === RepositoryAccess.query
+							? RepositoryAccess
+							: PullRequests
+						).allows(options.body, policy.repositories);
 					if (
 						target.origin !== "https://api.github.com" ||
 						target.username ||
@@ -195,6 +280,18 @@ export class GitHubBriefing {
 						throw new BriefingUnavailableError(
 							"Request outside the GitHub source boundary.",
 						);
+					}
+					if (
+						!stopped &&
+						requests < limits.requests &&
+						Date.now() < deadline &&
+						nextRequestAt > Date.now()
+					) {
+						if (nextRequestAt >= deadline) stopped = "rate-limit";
+						else
+							await new Promise((resolve) =>
+								setTimeout(resolve, nextRequestAt - Date.now()),
+							);
 					}
 					if (
 						stopped ||
@@ -220,6 +317,15 @@ export class GitHubBriefing {
 								response.headers.get("x-ratelimit-remaining") === "0"))
 					) {
 						stopped = "rate-limit";
+					}
+					if (
+						response.ok &&
+						response.headers.get("x-ratelimit-remaining") === "0"
+					) {
+						const reset = Number(response.headers.get("x-ratelimit-reset"));
+						if (Number.isSafeInteger(reset) && reset > 0)
+							resetTimes.set(bucket, Math.max(Date.now(), reset * 1000) + 1000);
+						else stopped = "rate-limit";
 					}
 					let bytes = 0;
 					const body = response.body?.pipeThrough(
@@ -252,7 +358,15 @@ export class GitHubBriefing {
 						.parse(response.data.errors);
 					if (errors.some(({ type }) => type === "RATE_LIMITED"))
 						stopped = "rate-limit";
-					return { failure: stopped ?? "graphql-error" };
+					return {
+						failure:
+							stopped ??
+							(errors.some(({ type }) => type === "FORBIDDEN")
+								? "http-403"
+								: errors.some(({ type }) => type === "NOT_FOUND")
+									? "http-404"
+									: "graphql-error"),
+					};
 				}
 				return response;
 			} catch (error) {
@@ -308,86 +422,103 @@ export class GitHubBriefing {
 		return { discovered, discovery };
 	}
 
-	async #repository(request, approved, found, viewer) {
-		const result = { ...approved, status: "unavailable", items: [] };
-		if (!found) {
-			result.reason = "not-discovered";
-			return result;
-		}
-		const matches = (repo) =>
+	#matches(approved, repo) {
+		return (
 			repo.id === approved.id &&
 			repo.full_name === approved.fullName &&
-			repo.private === (approved.visibility === "private");
-		if (!matches(found)) {
-			result.reason = "source-changed";
-			return result;
-		}
-		const response = await request(`GET /repos/${approved.fullName}`);
-		if (response.failure) {
-			result.reason = response.failure;
-			return result;
-		}
-		if (!matches(repositorySchema.parse(response.data))) {
-			result.reason = "source-changed";
-			return result;
-		}
-		result.searches = [];
-		const items = new Map();
+			repo.private === (approved.visibility === "private")
+		);
+	}
+
+	#unavailable(result, reason) {
+		for (const key of ["searches", "copilot", "pullRequests", "access"])
+			delete result[key];
+		Object.assign(result, { status: "unavailable", reason, items: [] });
+	}
+
+	async #admit(request, approved, found) {
+		const result = { ...approved, status: "unavailable", items: [] };
+		if (!found) return { ...result, reason: "not-discovered" };
+		if (!this.#matches(approved, found))
+			return { ...result, reason: "source-changed" };
+		const response = await new RepositoryAccess().read(request, approved);
+		if (response.failure) return { ...result, reason: response.failure };
+		if (!this.#matches(approved, repositorySchema.parse(response.data)))
+			return { ...result, reason: "source-changed" };
+		return { ...result, status: "pending", searches: [] };
+	}
+
+	async #work(request, repositories, viewer) {
 		for (const kind of ["issue", "pull-request"]) {
-			const selections = ["work", "mentions"];
-			if (kind === "pull-request") selections.push("reviews");
-			for (const selection of selections) {
+			for (const selection of kind === "issue"
+				? ["work", "mentions"]
+				: ["work", "mentions", "reviews"]) {
+				const active = repositories.filter(
+					(repo) => repo.status !== "unavailable",
+				);
+				if (!active.length) return;
 				const search = await this.#search(
 					request,
-					approved,
+					active,
 					viewer,
 					kind,
 					selection,
 				);
-				result.searches.push(search.coverage);
 				if (
+					active.length > 1 &&
 					["http-403", "http-404", "http-422"].includes(search.coverage.reason)
 				) {
-					return {
-						...approved,
-						status: "unavailable",
-						reason: search.coverage.reason,
-						items: [],
-					};
-				}
-				for (const item of search.items) {
-					const previous = items.get(item.issueId);
-					if (
-						previous &&
-						(previous.kind !== item.kind || previous.number !== item.number)
-					)
-						throw new BriefingUnavailableError(
-							"Inconsistent GitHub work identity. No snapshot produced.",
+					// A rejected batch cannot identify the inaccessible source; isolate these reads.
+					for (const repo of active)
+						this.#merge(
+							repo,
+							await this.#search(request, [repo], viewer, kind, selection),
 						);
-					if (
-						previous &&
-						(previous.updatedAt !== item.updatedAt ||
-							previous.title !== item.title)
-					) {
-						search.coverage.status = "partial";
-						search.coverage.reason = "changing-results";
-						// Do not attach an older query's relevance to a different revision.
-						items.set(
-							item.issueId,
-							Date.parse(previous.updatedAt) > Date.parse(item.updatedAt)
-								? previous
-								: item,
-						);
-					} else {
-						items.set(item.issueId, {
-							...item,
-							reasons: [
-								...new Set([...(previous?.reasons ?? []), ...item.reasons]),
-							],
-						});
-					}
-				}
+				} else for (const repo of active) this.#merge(repo, search);
 			}
+		}
+	}
+
+	#merge(result, search) {
+		if (["http-403", "http-404", "http-422"].includes(search.coverage.reason)) {
+			this.#unavailable(result, search.coverage.reason);
+			return;
+		}
+		const selected = search.items.filter(
+			(item) => item.repositoryId === result.id,
+		);
+		const { total, ...fields } = search.coverage;
+		const coverage = { ...fields, matched: selected.length, batchTotal: total };
+		result.searches.push(coverage);
+		const items = new Map(result.items.map((item) => [item.issueId, item]));
+		for (const { repositoryId, ...item } of selected) {
+			const previous = items.get(item.issueId);
+			if (
+				previous &&
+				(previous.kind !== item.kind || previous.number !== item.number)
+			)
+				throw new BriefingUnavailableError(
+					"Inconsistent GitHub work identity. No snapshot produced.",
+				);
+			if (
+				previous &&
+				(previous.updatedAt !== item.updatedAt || previous.title !== item.title)
+			) {
+				coverage.status = "partial";
+				coverage.reason = "changing-results";
+				items.set(
+					item.issueId,
+					Date.parse(previous.updatedAt) > Date.parse(item.updatedAt)
+						? previous
+						: item,
+				);
+			} else
+				items.set(item.issueId, {
+					...item,
+					reasons: [
+						...new Set([...(previous?.reasons ?? []), ...item.reasons]),
+					],
+				});
 		}
 		result.items = [...items.values()];
 		if (
@@ -397,32 +528,31 @@ export class GitHubBriefing {
 			throw new BriefingUnavailableError(
 				"Inconsistent GitHub work identity. No snapshot produced.",
 			);
+	}
+
+	async #enrich(request, verify, result, viewer) {
 		result.copilot = await new CopilotTasks().collect(
 			request,
-			approved,
+			result,
 			viewer,
 			limits.copilotPages,
 		);
 		result.pullRequests = await new PullRequests().collect(
 			request,
-			approved,
+			result,
 			result.items,
 			result.copilot.tasks,
 			limits.pullIdentityPages,
 		);
 		// Metadata permissions are independent; recheck core access before retaining evidence.
-		const verification = await request(`GET /repos/${approved.fullName}`);
+		const verification = await new RepositoryAccess().read(verify, result);
 		if (
 			["http-403", "http-404"].includes(verification.failure) ||
 			(!verification.failure &&
-				!matches(repositorySchema.parse(verification.data)))
+				!this.#matches(result, repositorySchema.parse(verification.data)))
 		) {
-			return {
-				...approved,
-				status: "unavailable",
-				reason: verification.failure ?? "source-changed",
-				items: [],
-			};
+			this.#unavailable(result, verification.failure ?? "source-changed");
+			return;
 		}
 		result.access = verification.failure
 			? { status: "unavailable", reason: verification.failure }
@@ -437,13 +567,17 @@ export class GitHubBriefing {
 		return result;
 	}
 
-	async #search(request, approved, viewer, kind, selection) {
+	async #search(request, repositories, viewer, kind, selection) {
 		const criteria = {
 			work: `(author:${viewer.login} OR assignee:${viewer.login})`,
 			mentions: `mentions:${viewer.login}`,
 			reviews: `review-requested:${viewer.login}`,
 		};
-		const query = `repo:${approved.fullName} is:open is:${kind} ${criteria[selection]}`;
+		const names = repositories
+			.map((repo) => `repo:${repo.fullName}`)
+			.join(" OR ");
+		const sourceQuery = repositories.length > 1 ? `(${names})` : names;
+		const query = `${sourceQuery} is:open is:${kind} ${criteria[selection]}`;
 		const coverage = {
 			kind,
 			selection,
@@ -466,11 +600,24 @@ export class GitHubBriefing {
 			}
 			const data = searchSchema.parse(response.data);
 			for (const item of data.items) {
+				const approved = repositories.find(
+					(repo) =>
+						item.repository_url ===
+						`https://api.github.com/repos/${repo.fullName}`,
+				);
+				if (!approved)
+					throw new BriefingUnavailableError(
+						"GitHub returned work outside the admitted search. No snapshot produced.",
+					);
 				const url = `https://github.com/${approved.fullName}/${kind === "issue" ? "issues" : "pull"}/${item.number}`;
 				const reasons = [];
 				if (item.user?.id === viewer.id) reasons.push("authored");
 				if (item.assignees.some(({ id }) => id === viewer.id))
 					reasons.push("assigned");
+				// GitHub's author filter also matches PRs delegated to agents.
+				// Preserve search attribution without claiming literal authorship.
+				if (selection === "work" && kind === "pull-request" && !reasons.length)
+					reasons.push("author-search");
 				if (
 					item.html_url !== url ||
 					item.repository_url !==
@@ -489,6 +636,7 @@ export class GitHubBriefing {
 				if (selection === "reviews") reasons.push("review-requested");
 				if (items.has(item.id)) coverage.reason = "changing-results";
 				items.set(item.id, {
+					repositoryId: approved.id,
 					issueId: item.id,
 					number: item.number,
 					kind,

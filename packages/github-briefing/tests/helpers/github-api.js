@@ -1,8 +1,11 @@
 import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
+	existsSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
+	statSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -28,6 +31,23 @@ export class GitHubApiFixture {
 	overrides = new Map();
 	tasks = new Map();
 	pulls = new Map();
+
+	setSearchResult(key, items) {
+		this.overrides.set(key, {
+			data: { total_count: items.length, incomplete_results: false, items },
+		});
+	}
+
+	setRepositoryCount(count) {
+		this.repositories = Array.from({ length: count }, (_, index) =>
+			this.repository(300 + index, `work/repo-${index}`),
+		);
+		this.policy.repositories = this.repositories.map((repo) => ({
+			id: repo.id,
+			fullName: repo.full_name,
+			visibility: "public",
+		}));
+	}
 
 	graphql(repository, fields) {
 		return {
@@ -130,6 +150,15 @@ export class GitHubApiFixture {
 			const repository = this.repositories.find(
 				(repo) => repo.full_name === `${variables.owner}/${variables.name}`,
 			);
+			if (query.includes("BriefingRepositoryAccess")) {
+				return this.response(
+					`${repository.full_name}/access`,
+					this.graphql(repository, {
+						issues: { totalCount: 1 },
+						pullRequests: { totalCount: 1 },
+					}),
+				);
+			}
 			const pulls = this.pulls.get(repository.full_name) ?? [
 				this.pull(repository),
 			];
@@ -152,11 +181,20 @@ export class GitHubApiFixture {
 		} else if (key === "/user") payload = this.viewer;
 		else if (key === "/user/repos") {
 			key += `/${target.searchParams.get("page")}`;
-			payload = this.repositories;
+			const page = Number(target.searchParams.get("page"));
+			return this.response(
+				key,
+				this.repositories.slice((page - 1) * 100, page * 100),
+				page * 100 < this.repositories.length
+					? { link: '<https://api.github.com/user/repos>; rel="next"' }
+					: {},
+			);
 		} else if (key === "/search/issues") {
 			const query = target.searchParams.get("q");
-			const repository = this.repositories.find((repo) =>
-				query.startsWith(`repo:${repo.full_name} `),
+			if (query.startsWith("(") && !query.split(")")[0].includes(" OR "))
+				throw new Error("Batched repository qualifiers require explicit OR");
+			const names = [...query.matchAll(/repo:([^ )]+)/gu)].map(
+				(match) => match[1],
 			);
 			const kind = query.includes("is:pull-request") ? "pull-request" : "issue";
 			const relationship = query.includes("mentions:")
@@ -164,12 +202,43 @@ export class GitHubApiFixture {
 				: query.includes("review-requested:")
 					? "reviews/"
 					: "";
-			key = `${repository.full_name}/${kind}/${relationship}${target.searchParams.get("page")}`;
-			payload = {
-				total_count: relationship ? 0 : 1,
-				incomplete_results: false,
-				items: relationship ? [] : [this.item(repository, kind)],
-			};
+			const responses = names.map((name) => {
+				const repository = this.repositories.find(
+					(repo) => repo.full_name === name,
+				);
+				const page = target.searchParams.get("page");
+				return this.response(`${name}/${kind}/${relationship}${page}`, {
+					total_count: relationship ? 0 : 1,
+					incomplete_results: false,
+					items:
+						relationship || page !== "1" ? [] : [this.item(repository, kind)],
+				});
+			});
+			if (responses.length === 1) return responses[0];
+			const failed = responses.find((response) => !response.ok);
+			if (failed) return failed;
+			const pages = [];
+			for (const response of responses) {
+				try {
+					pages.push(await response.clone().json());
+				} catch {
+					return response;
+				}
+			}
+			return Response.json(
+				{
+					total_count: pages.reduce((sum, page) => sum + page.total_count, 0),
+					incomplete_results: pages.some((page) => page.incomplete_results),
+					items: pages.flatMap((page) => page.items),
+				},
+				{
+					headers: Object.fromEntries(
+						responses
+							.flatMap((response) => [...response.headers])
+							.filter(([name]) => name !== "content-type"),
+					),
+				},
+			);
 		} else if (key.startsWith("/agents/repos/")) {
 			const repository = this.repositories.find((repo) =>
 				key.startsWith(`/agents/repos/${repo.full_name}/tasks`),
@@ -184,14 +253,18 @@ export class GitHubApiFixture {
 				(repo) => key === `/repos/${repo.full_name}`,
 			);
 		if (!payload) throw new Error("Unexpected fixture request");
+		return this.response(key, payload);
+	};
+
+	response(key, payload, headers = {}) {
 		const override = this.overrides.get(key);
 		if (override instanceof Error) throw override;
-		if (override instanceof Response) return override;
+		if (override instanceof Response) return override.clone();
 		return Response.json(override?.data ?? payload, {
 			status: override?.status ?? 200,
-			headers: override?.headers,
+			headers: override?.headers ?? headers,
 		});
-	};
+	}
 
 	collect(collector) {
 		return collector.collect({
@@ -204,22 +277,33 @@ export class GitHubApiFixture {
 		status = 200,
 		mode = 0o600,
 		symbolic = false,
+		namedPipe,
 		malformed = false,
 		format,
 		args,
+		initialize = false,
+		existing = false,
 	} = {}) {
 		const directory = mkdtempSync(join(tmpdir(), "github-briefing-"));
 		const source = join(directory, "source.json");
 		const token = join(directory, "token");
 		try {
-			writeFileSync(
-				source,
-				malformed ? "invalid-json" : JSON.stringify(this.policy),
-				{ mode: 0o600 },
-			);
+			if (!initialize || existing)
+				writeFileSync(
+					source,
+					malformed ? "invalid-json" : JSON.stringify(this.policy),
+					{ mode: 0o600 },
+				);
 			writeFileSync(token, "synthetic-token-canary\n", { mode: 0o600 });
 			chmodSync(token, mode);
 			if (symbolic) symlinkSync(token, join(directory, "token-link"));
+			if (namedPipe) {
+				const path = namedPipe === "token" ? token : source;
+				rmSync(path);
+				const result = spawnSync("mkfifo", ["-m", "600", path]);
+				if (result.status !== 0)
+					throw new Error("Could not create named-pipe fixture");
+			}
 			const setup = `
 				import { GitHubApiFixture } from ${JSON.stringify(import.meta.url)};
 				const fixture = new GitHubApiFixture();
@@ -228,14 +312,15 @@ export class GitHubApiFixture {
 					if (new Headers(options.headers).get('authorization') !== 'token synthetic-token-canary') throw new Error('Unexpected credential');
 					return fixture.fetch(url, options);
 				};
-				process.argv = ['node', 'cli.js', ...${JSON.stringify(args ?? ["--source", source, "--token-file", symbolic ? join(directory, "token-link") : token, ...(format ? ["--format", format] : [])])}];
+				process.argv = ['node', 'cli.js', ...${JSON.stringify(args ?? ["--source", source, "--token-file", symbolic ? join(directory, "token-link") : token, ...(format ? ["--format", format] : []), ...(initialize ? ["--init-policy", "--scope", "professional-internal", "--exclude", "client/project"] : [])])}];
 				await import(${JSON.stringify(new URL("../../src/cli.js", import.meta.url).href)});
 			`;
-			return spawnSync(
+			const result = spawnSync(
 				process.execPath,
 				["--input-type=module", "--eval", setup],
 				{
 					encoding: "utf8",
+					timeout: 5000,
 					env: {
 						...process.env,
 						GH_TOKEN: "ambient-token-canary",
@@ -243,6 +328,14 @@ export class GitHubApiFixture {
 					},
 				},
 			);
+			return {
+				...result,
+				source:
+					existsSync(source) && !malformed && namedPipe !== "source"
+						? JSON.parse(readFileSync(source, "utf8"))
+						: undefined,
+				mode: existsSync(source) ? statSync(source).mode & 0o777 : undefined,
+			};
 		} finally {
 			rmSync(directory, { recursive: true, force: true });
 		}
