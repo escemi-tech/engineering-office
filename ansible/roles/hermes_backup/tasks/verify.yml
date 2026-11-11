@@ -1,0 +1,12 @@
+---
+- name: Validate protected recovery paths before verification
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Authenticate and verify the encrypted repository
+  ansible.builtin.command:
+    argv: [restic, --no-cache, check, --read-data]
+  environment:
+    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
+    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+  changed_when: false
+  no_log: true

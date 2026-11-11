@@ -49,12 +49,3 @@
       - not hermes_backup_password_file.startswith(hermes_backup_repository.rstrip('/') ~ '/')
     fail_msg: Use a root-owned mode-0700 repository and a separate nonempty mode-0600 password file, without symlinks.
     quiet: true
-
-- name: Authenticate and verify the encrypted repository
-  ansible.builtin.command:
-    argv: [restic, --no-cache, check, --read-data]
-  environment:
-    RESTIC_REPOSITORY: "{{ hermes_backup_repository }}"
-    RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
-  changed_when: false
-  no_log: true

@@ -1,6 +1,6 @@
 ---
 - name: Verify recovery credentials and full repository integrity
-  ansible.builtin.import_tasks: preflight.yml
+  ansible.builtin.import_tasks: verify.yml
 
 - name: Inspect the deployment's current state volume
   community.docker.docker_volume_info:

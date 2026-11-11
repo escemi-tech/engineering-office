@@ -128,7 +128,8 @@ Shared test inventory setup belongs in `tests/ansible/helpers/`.
 The backup and host-loss recovery scenarios use the production backup/restore
 entrypoints and the distribution's Restic package. Retention tests
 cover sparse expired history, daily/weekly limits, unrelated snapshots, future
-timestamps and preserved recovery after pruning. Keep encryption,
+timestamps, failed backup/verification preventing deletion and preserved recovery
+after pruning. Keep encryption,
 snapshot selection and integrity checking in native Restic. Never run its
 destructive fixture against an operational inventory. The workflow retains only
 the encrypted repository and snapshot/host identity record in a private runner
