@@ -5,12 +5,15 @@ requests with a direct review request for you. Discover repositories across
 ownership, collaboration and organization membership. Collection has no age cutoff;
 older unresolved work remains eligible and is retrieved first.
 Also collect non-archived Copilot cloud-agent tasks created by your authenticated
-account, with their session attempts and supplied PR/branch identities.
+account, with their session attempts and supplied PR/branch identities. Resolve
+linked PRs and read GitHub's review decision and head-commit check rollup separately.
 
 The command produces scoped JSON evidence, not a prioritized assistant briefing.
 Mentions, team review requests, tasks created by other accounts, archived tasks,
-local IDE/CLI agent activity, review decisions, CI results and closed issue/PR
-work are not collected. These omissions are explicit in the output.
+local IDE/CLI agent activity and closed issues are not collected. Closed or merged
+PRs are not independently searched; eligible Copilot artifacts can resolve to
+them, and an open search result can close before its context is read. Merge
+readiness is not evaluated. These omissions are explicit in the output.
 
 ## Approve sources and credentials
 
@@ -51,6 +54,13 @@ access. Organization approval and SSO restrictions may further limit results.
 The implementation supports user identity verification through `GET /user`;
 installation tokens are not an account-wide identity.
 
+PR context also needs read access to the selected PRs' commits, checks and commit
+statuses. Include those metadata reads and bounded PR identity listing in source
+admission. [GraphQL permissions](https://docs.github.com/en/graphql/guides/forming-calls-with-graphql#authenticating-with-graphql)
+depend on the requested fields; qualify the selected credential before live use.
+Missing permission is reported as unavailable context and does not replace the
+existing issue/PR or task evidence with a fabricated result.
+
 Copilot reads require the additional `Agent tasks: read` repository permission.
 The [Agent Tasks API](https://docs.github.com/en/rest/agent-tasks/agent-tasks)
 supports fine-grained personal access tokens and GitHub App user access tokens;
@@ -85,7 +95,7 @@ files to 16 KiB. Up to 1,000 repository admissions are supported per policy.
 
 ## Read coverage before using the evidence
 
-The snapshot uses `schemaVersion: 3`, the selected `scope` and conservative
+The snapshot uses `schemaVersion: 4`, the selected `scope` and conservative
 `classification: restricted`, including when some source repositories are public.
 `source.account` identifies the authenticated owner. Each admitted repository
 carries its identity, visibility, collection status and items. Items retain their
@@ -116,6 +126,11 @@ Check these fields before interpreting an empty list:
 - `repositories[].access` records the final repository identity/access check.
   A failed verification makes coverage partial; confirmed access loss or changed
   identity/visibility removes all evidence collected for that repository.
+- `repositories[].pullRequests` reports PR context and artifact resolution.
+  Its `items[]` contains one record per PR number; `taskIds[]` links distinct tasks
+  without merging their session histories. `unresolvedArtifacts[]` identifies
+  resource IDs that could not be resolved and explains why. Context failures or
+  unresolved artifacts make repository coverage partial.
 - `coverage.status: complete` means discovery and the admitted source queries
   completed within this credential's boundary. It does not include unadmitted
   sources or the capabilities listed in `coverage.excluded`.
@@ -152,16 +167,45 @@ Missing, stale or failed detail is explicit and does not invent session results.
 
 `artifacts[]` preserves PR resource IDs and optional GraphQL IDs, or branch refs.
 GitHub's PR resource ID is not the issue ID or PR number; do not turn it into a
-`/pull/<number>` URL or join it to `items[].issueId`. PR URL resolution and grouping
-with collected issue/PR items remain follow-ups. Separate tasks referencing the
-same PR remain separate records. Optional fields omitted by GitHub remain absent
+`/pull/<number>` URL or join it to `items[].issueId`. Resolved links appear in
+`pullRequests.items[]`, keyed by PR number and carrying their resource ID as a
+decimal string. Separate tasks referencing the same PR remain separate records.
+Optional fields omitted by GitHub remain absent
 in the output; absent artifact metadata is not proof that no PR exists.
 
 Agent completion does not mean tests passed, approval was granted or a PR is ready
-to merge. Review/CI state is outside this collector. For waiting or failed work,
+to merge. For waiting or failed work,
 inspect the supplied task link; raw error messages, prompts, transcripts, model
 and billing details are excluded. A snapshot is an observation, not a live task
 monitor. Check its `observedAt` before relying on task states.
+
+### Interpret PR review and checks
+
+`pullRequests.items[]` includes current PR state, draft flag, title, link, update
+time and head commit. `reviewDecision` preserves GitHub's `APPROVED`,
+`CHANGES_REQUESTED` or `REVIEW_REQUIRED`; `null` means GitHub did not report a
+decision, not approval. `checks.state` preserves the head commit's combined check
+and commit-status rollup: `ERROR`, `EXPECTED`, `FAILURE`, `PENDING` or `SUCCESS`.
+A null state means no rollup was reported, not passing CI or proof of no checks.
+`status: complete` means the query completed, not that all review/check states
+are known or successful. A missing or mismatched last commit makes checks
+unavailable, so a previous commit's success cannot describe the current head.
+
+These are GitHub's aggregate observations, not an independent evaluation of
+required checks, branch protection, merge queues or merge readiness. Task state,
+review decision and checks can legitimately disagree. Raw reviews, check logs
+and individual check details are not collected. A PR may have changed since its
+search-index entry; the context record supplies the later observation.
+
+The collector uses two fixed repository-scoped GraphQL queries through the same
+Octokit transport. It first reads context for relevant PR numbers. For remaining
+task artifacts it scans at most ten pages of 100 PR identities, including closed
+and merged PRs, ordered by most recent update. Only matching identities are kept;
+unrelated PR titles and bodies are not requested. It never follows opaque global
+IDs to another repository or guesses PR numbers from resource IDs. Context needs
+one query per selected PR; all requests share the global budget. Unresolved IDs,
+pagination changes and inaccessible context stay explicit. GraphQL errors discard
+that response's partial data; raw errors are not emitted. No mutation is allowed.
 
 ## Data handling and revocation
 

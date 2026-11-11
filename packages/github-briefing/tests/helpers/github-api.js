@@ -27,6 +27,40 @@ export class GitHubApiFixture {
 	};
 	overrides = new Map();
 	tasks = new Map();
+	pulls = new Map();
+
+	graphql(repository, fields) {
+		return {
+			data: {
+				repository: {
+					databaseId: repository.id,
+					nameWithOwner: repository.full_name,
+					isPrivate: repository.private,
+					...fields,
+				},
+			},
+		};
+	}
+
+	pull(repository, number = 1) {
+		const head = "a".repeat(40);
+		return {
+			fullDatabaseId: String(repository.id * 10000 + number),
+			number,
+			url: `${repository.html_url}/pull/${number}`,
+			title: "Synthetic PR context",
+			state: "OPEN",
+			isDraft: false,
+			updatedAt: "2020-01-02T00:00:00Z",
+			headRefOid: head,
+			reviewDecision: "REVIEW_REQUIRED",
+			commits: {
+				nodes: [
+					{ commit: { oid: head, statusCheckRollup: { state: "PENDING" } } },
+				],
+			},
+		};
+	}
 
 	task(repository, id = "task-1", state = "in_progress") {
 		return {
@@ -91,7 +125,31 @@ export class GitHubApiFixture {
 		this.requests.push({ url: target, ...options });
 		let key = target.pathname;
 		let payload;
-		if (key === "/user") payload = this.viewer;
+		if (key === "/graphql") {
+			const { query, variables } = JSON.parse(options.body);
+			const repository = this.repositories.find(
+				(repo) => repo.full_name === `${variables.owner}/${variables.name}`,
+			);
+			const pulls = this.pulls.get(repository.full_name) ?? [
+				this.pull(repository),
+			];
+			const resolving = query.includes("BriefingPullIdentities");
+			key = `${repository.full_name}/${resolving ? `resolve/${variables.after ?? "start"}` : `context/${variables.number}`}`;
+			payload = this.graphql(
+				repository,
+				resolving
+					? {
+							pullRequests: {
+								nodes: pulls,
+								pageInfo: { hasNextPage: false, endCursor: null },
+							},
+						}
+					: {
+							pullRequest:
+								pulls.find((pull) => pull.number === variables.number) ?? null,
+						},
+			);
+		} else if (key === "/user") payload = this.viewer;
 		else if (key === "/user/repos") {
 			key += `/${target.searchParams.get("page")}`;
 			payload = this.repositories;

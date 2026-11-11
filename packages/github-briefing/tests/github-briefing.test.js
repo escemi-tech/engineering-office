@@ -16,7 +16,7 @@ suite("Account-wide scoped evidence", () => {
 		const snapshot = await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(snapshot.schemaVersion, 3);
+		assert.equal(snapshot.schemaVersion, 4);
 		assert.equal(snapshot.scope, "professional-internal");
 		assert.equal(snapshot.classification, "restricted");
 		assert.deepEqual(snapshot.source.account, api.viewer);
@@ -49,7 +49,7 @@ suite("Account-wide scoped evidence", () => {
 		await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(api.requests.length, 12);
+		assert.equal(api.requests.length, 14);
 		const discovery = api.requests[1].url.searchParams;
 		assert.equal(
 			discovery.get("affiliation"),
@@ -58,7 +58,10 @@ suite("Account-wide scoped evidence", () => {
 		assert.equal(discovery.get("visibility"), "all");
 		for (const request of api.requests) {
 			assert.equal(request.url.origin, "https://api.github.com");
-			assert.equal(request.method, "GET");
+			assert.equal(
+				request.method,
+				request.url.pathname === "/graphql" ? "POST" : "GET",
+			);
 			assert.equal(request.redirect, "error");
 			assert.equal(request.credentials, "omit");
 			assert.ok(request.signal instanceof AbortSignal);

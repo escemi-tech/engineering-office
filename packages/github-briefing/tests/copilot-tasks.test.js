@@ -121,7 +121,8 @@ suite("Scoped Copilot work", () => {
 		);
 		assert.ok(
 			api.requests.every(
-				({ url, method }) => method === "GET" && !url.href.includes("client"),
+				({ url, body }) =>
+					!url.href.includes("client") && !body?.includes("client"),
 			),
 		);
 		assert.ok(

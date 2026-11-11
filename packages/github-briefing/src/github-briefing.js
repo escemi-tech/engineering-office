@@ -1,6 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import { CopilotTasks } from "./copilot-tasks.js";
+import { PullRequests } from "./pull-requests.js";
 
 const identity = z.object({
 	id: z.int().positive(),
@@ -60,6 +61,7 @@ const limits = {
 	discoveryPages: 10,
 	searchPages: 10,
 	copilotPages: 10,
+	pullIdentityPages: 10,
 	durationMs: 120_000,
 };
 
@@ -114,7 +116,7 @@ export class GitHubBriefing {
 			);
 		}
 		return {
-			schemaVersion: 3,
+			schemaVersion: 4,
 			scope: policy.scope,
 			classification: "restricted",
 			source: { system: "github", account: viewer },
@@ -139,9 +141,9 @@ export class GitHubBriefing {
 					"copilot-tasks-created-by-others",
 					"archived-copilot-tasks",
 					"local-agent-activity",
-					"review-decisions",
-					"ci-status",
-					"closed-issues-and-pull-requests",
+					"closed-issues",
+					"closed-pull-requests-without-copilot-task",
+					"merge-readiness",
 				],
 			},
 			repositories,
@@ -177,13 +179,19 @@ export class GitHubBriefing {
 			request: {
 				fetch: async (url, options) => {
 					const target = new URL(url);
+					const allowedRead =
+						options.method === "GET" &&
+						(allowedPaths.has(target.pathname) || allowedTask(target.pathname));
+					const allowedQuery =
+						target.pathname === "/graphql" &&
+						options.method === "POST" &&
+						!target.search &&
+						PullRequests.allows(options.body, policy.repositories);
 					if (
 						target.origin !== "https://api.github.com" ||
 						target.username ||
 						target.password ||
-						(!allowedPaths.has(target.pathname) &&
-							!allowedTask(target.pathname)) ||
-						options.method !== "GET"
+						(!allowedRead && !allowedQuery)
 					) {
 						throw new BriefingUnavailableError(
 							"Request outside the GitHub source boundary.",
@@ -235,10 +243,19 @@ export class GitHubBriefing {
 		});
 		const request = async (route, parameters = {}) => {
 			try {
-				return await client.request(route, {
+				const response = await client.request(route, {
 					...parameters,
 					headers: { "X-GitHub-Api-Version": "2026-03-10" },
 				});
+				if (route === "POST /graphql" && response.data.errors?.length) {
+					const errors = z
+						.array(z.object({ type: z.string().optional() }))
+						.parse(response.data.errors);
+					if (errors.some(({ type }) => type === "RATE_LIMITED"))
+						stopped = "rate-limit";
+					return { failure: stopped ?? "graphql-error" };
+				}
+				return response;
 			} catch (error) {
 				if (error?.status === 401)
 					throw new BriefingUnavailableError(
@@ -337,7 +354,14 @@ export class GitHubBriefing {
 			viewer,
 			limits.copilotPages,
 		);
-		// Agent Tasks permissions are independent; recheck core access before retaining evidence.
+		result.pullRequests = await new PullRequests().collect(
+			request,
+			approved,
+			result.items,
+			result.copilot.tasks,
+			limits.pullIdentityPages,
+		);
+		// Metadata permissions are independent; recheck core access before retaining evidence.
 		const verification = await request(`GET /repos/${approved.fullName}`);
 		if (
 			["http-403", "http-404"].includes(verification.failure) ||
@@ -357,6 +381,7 @@ export class GitHubBriefing {
 		result.status =
 			result.searches.every(({ status }) => status === "complete") &&
 			result.copilot.status === "complete" &&
+			result.pullRequests.status === "complete" &&
 			result.access.status === "complete"
 				? "complete"
 				: "partial";
