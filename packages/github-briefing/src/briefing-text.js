@@ -172,8 +172,11 @@ export class GitHubBriefingText {
 			reasons.push(`CI reports ${context.checks.state.toLowerCase()}`);
 		if (work?.reasons.includes("review-requested"))
 			reasons.push("Review requested (search result)");
+		const priority = reasons.length ? 0 : 2;
+		if (work?.reasons.includes("mentioned"))
+			reasons.push("Mentioned (search result)");
 		return {
-			priority: reasons.length ? 0 : 2,
+			priority,
 			reasons: reasons.length
 				? reasons
 				: [
@@ -248,7 +251,10 @@ export class GitHubBriefingText {
 		if (repository.reason) return `${repository.status} (${repository.reason})`;
 		const parts = (repository.searches ?? [])
 			.filter(({ status }) => status !== "complete")
-			.map(({ kind, status, reason }) => `${kind} ${status} (${reason})`);
+			.map(
+				({ kind, selection, status, reason }) =>
+					`${kind} ${selection} ${status} (${reason})`,
+			);
 		for (const [name, value] of [
 			["Copilot", repository.copilot],
 			["PR context", repository.pullRequests],

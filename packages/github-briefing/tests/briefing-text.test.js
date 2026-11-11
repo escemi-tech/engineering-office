@@ -201,6 +201,18 @@ suite("Readable GitHub briefing", () => {
 		assert.doesNotMatch(text, /pull\/9999/u);
 	});
 
+	test("labels a mention as relevance without claiming that a reply is owed", () => {
+		// Arrange
+		repository.items[0].reasons = ["mentioned"];
+
+		// Act
+		const text = new GitHubBriefingText().render(snapshot);
+
+		// Assert
+		assert.match(text, /Mentioned \(search result\)/u);
+		assert.doesNotMatch(text, /Needs attention|reply required/u);
+	});
+
 	test("bounds linked details and session histories with visible omissions", () => {
 		// Arrange
 		const task = repository.copilot.tasks[0];
@@ -260,7 +272,10 @@ suite("Readable GitHub briefing", () => {
 					? /No matching work in the admitted source reads/u
 					: /No work could be summarized from the incomplete source reads/u,
 			);
-			assert.match(text, /Outside coverage: mentions; team review requests/u);
+			assert.match(
+				text,
+				/Outside coverage: team mentions; team review requests/u,
+			);
 		});
 	}
 });

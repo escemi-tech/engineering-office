@@ -251,7 +251,7 @@ suite("Bounded context failures", () => {
 			assert.equal(result.pullRequests.items[0].reviewDecision, undefined);
 			assert.doesNotMatch(JSON.stringify(snapshot), /canary/u);
 			if (failure === "rate-limit") {
-				assert.equal(api.requests.length, 8);
+				assert.equal(api.requests.length, 10);
 				assert.equal(result.access.reason, "rate-limit");
 			}
 		});

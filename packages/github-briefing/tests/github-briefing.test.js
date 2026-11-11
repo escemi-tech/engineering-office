@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { suite, test } from "node:test";
+import { beforeEach, suite, test } from "node:test";
 import {
 	BriefingUnavailableError,
 	GitHubBriefing,
@@ -16,7 +16,7 @@ suite("Account-wide scoped evidence", () => {
 		const snapshot = await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(snapshot.schemaVersion, 4);
+		assert.equal(snapshot.schemaVersion, 5);
 		assert.equal(snapshot.scope, "professional-internal");
 		assert.equal(snapshot.classification, "restricted");
 		assert.deepEqual(snapshot.source.account, api.viewer);
@@ -49,7 +49,7 @@ suite("Account-wide scoped evidence", () => {
 		await api.collect(new GitHubBriefing());
 
 		// Assert
-		assert.equal(api.requests.length, 14);
+		assert.equal(api.requests.length, 18);
 		const discovery = api.requests[1].url.searchParams;
 		assert.equal(
 			discovery.get("affiliation"),
@@ -75,14 +75,21 @@ suite("Account-wide scoped evidence", () => {
 			);
 			if (request.url.pathname !== "/search/issues") continue;
 			const query = request.url.searchParams.get("q");
-			assert.match(
-				query,
-				/^repo:(work|client)\/project is:open is:(issue|pull-request) \(author:example-user OR assignee:example-user/u,
-			);
-			assert.equal(
-				query.includes("review-requested:"),
-				query.includes("is:pull-request"),
-			);
+			if (query.includes("mentions:")) {
+				assert.match(
+					query,
+					/^repo:(work|client)\/project is:open is:(issue|pull-request) mentions:example-user$/u,
+				);
+			} else {
+				assert.match(
+					query,
+					/^repo:(work|client)\/project is:open is:(issue|pull-request) \(author:example-user OR assignee:example-user/u,
+				);
+				assert.equal(
+					query.includes("review-requested:"),
+					query.includes("is:pull-request"),
+				);
+			}
 			assert.doesNotMatch(query, /updated:|created:|since:/u);
 			assert.equal(request.url.searchParams.get("advanced_search"), "true");
 			assert.equal(request.url.searchParams.get("order"), "asc");
@@ -576,6 +583,187 @@ suite("Protected operator command", () => {
 			assert.equal(result.status, 1);
 			assert.equal(result.stdout, "");
 			assert.doesNotMatch(result.stderr, /canary|\/tmp\//u);
+		});
+	}
+});
+
+suite("Direct user mentions", () => {
+	let api;
+	beforeEach((t) => {
+		// Arrange
+		api = new GitHubApiFixture();
+		t.mock.method(globalThis, "fetch", api.fetch);
+	});
+
+	for (const kind of ["issue", "pull-request"]) {
+		test(`includes a mentioned ${kind} without authorship or assignment`, async () => {
+			// Arrange
+			const repo = api.repositories[0];
+			const item = { ...api.item(repo, kind, 2), user: null };
+			api.overrides.set(`work/project/${kind}/mentions/1`, {
+				data: { total_count: 1, incomplete_results: false, items: [item] },
+			});
+			api.pulls.set(repo.full_name, [api.pull(repo), api.pull(repo, 2)]);
+
+			// Act
+			const snapshot = await api.collect(new GitHubBriefing());
+
+			// Assert
+			const result = snapshot.repositories[0];
+			assert.equal(result.status, "complete");
+			assert.equal(result.items.length, 3);
+			assert.deepEqual(
+				result.items.find(({ issueId }) => issueId === item.id).reasons,
+				["mentioned"],
+			);
+			assert.deepEqual(
+				result.searches.find(
+					(search) => search.kind === kind && search.selection === "mentions",
+				),
+				{ kind, selection: "mentions", status: "complete", total: 1 },
+			);
+			assert.equal(snapshot.coverage.excluded.includes("mentions"), false);
+			assert.doesNotMatch(JSON.stringify(snapshot), /body-canary|assignees/u);
+			if (kind === "pull-request")
+				assert.equal(
+					result.pullRequests.items.find(({ number }) => number === 2).status,
+					"complete",
+				);
+		});
+	}
+
+	test("unions overlapping relevance once and reads each PR context once", async () => {
+		// Arrange
+		const repo = api.repositories[0];
+		const issue = api.item(repo, "issue");
+		const pull = { ...api.item(repo, "pull-request"), user: null };
+		for (const [key, item] of [
+			["issue/mentions/1", issue],
+			["pull-request/1", pull],
+			["pull-request/mentions/1", pull],
+		])
+			api.overrides.set(`work/project/${key}`, {
+				data: { total_count: 1, incomplete_results: false, items: [item] },
+			});
+
+		// Act
+		const snapshot = await api.collect(new GitHubBriefing());
+
+		// Assert
+		assert.equal(snapshot.repositories[0].items.length, 2);
+		assert.deepEqual(
+			snapshot.repositories[0].items.map(({ reasons }) => reasons),
+			[
+				["authored", "mentioned"],
+				["review-requested", "mentioned"],
+			],
+		);
+		assert.equal(
+			api.requests.filter(
+				({ url, body }) =>
+					url.pathname === "/graphql" &&
+					JSON.parse(body).variables.owner === "work",
+			).length,
+			1,
+		);
+	});
+
+	for (const revision of ["older", "newer", "same-time"]) {
+		test(`reports changing evidence when the mention query returns a ${revision} revision`, async () => {
+			// Arrange
+			const item = api.item(api.repositories[0], "issue");
+			item.title = "Changed source title";
+			if (revision !== "same-time")
+				item.updated_at =
+					revision === "older"
+						? "2019-01-01T00:00:00Z"
+						: "2021-01-01T00:00:00Z";
+			api.overrides.set("work/project/issue/mentions/1", {
+				data: { total_count: 1, incomplete_results: false, items: [item] },
+			});
+
+			// Act
+			const snapshot = await api.collect(new GitHubBriefing());
+
+			// Assert
+			const result = snapshot.repositories[0];
+			assert.equal(result.status, "partial");
+			assert.equal(result.searches[1].reason, "changing-results");
+			assert.equal(result.items.length, 2);
+			assert.equal(result.items[0].title === item.title, revision !== "older");
+			assert.equal(
+				result.items[0].reasons.includes("mentioned"),
+				revision !== "older",
+			);
+		});
+	}
+
+	for (const problem of ["incomplete", "http-503", "rate-limit"]) {
+		test(`keeps existing work with explicit ${problem} mention coverage`, async () => {
+			// Arrange
+			const override =
+				problem === "incomplete"
+					? { data: { total_count: 0, incomplete_results: true, items: [] } }
+					: { status: problem === "http-503" ? 503 : 429 };
+			api.overrides.set("work/project/issue/mentions/1", override);
+
+			// Act
+			const snapshot = await api.collect(new GitHubBriefing());
+
+			// Assert
+			assert.equal(snapshot.coverage.status, "partial");
+			assert.equal(snapshot.repositories[0].items[0].kind, "issue");
+			assert.equal(snapshot.repositories[0].searches[1].status, "partial");
+			if (problem === "rate-limit") assert.equal(api.requests.length, 5);
+		});
+	}
+
+	for (const status of [401, 403, 404, 422]) {
+		test(`rejects mention access failure ${status} without retaining unavailable evidence`, async () => {
+			// Arrange
+			api.overrides.set("work/project/pull-request/mentions/1", {
+				status,
+				data: { message: "private-error-canary" },
+			});
+
+			// Act
+			const result = api.collect(new GitHubBriefing());
+
+			// Assert
+			if (status === 401)
+				await assert.rejects(result, BriefingUnavailableError);
+			else {
+				const snapshot = await result;
+				assert.equal(snapshot.repositories[0].status, "unavailable");
+				assert.deepEqual(snapshot.repositories[0].items, []);
+				assert.doesNotMatch(JSON.stringify(snapshot), /private-error-canary/u);
+			}
+		});
+	}
+
+	for (const mismatch of ["number", "id", "kind", "foreign-url"]) {
+		test(`rejects ${mismatch} mismatches between mention and work identities`, async () => {
+			// Arrange
+			const kind = mismatch === "kind" ? "pull-request" : "issue";
+			const item = api.item(api.repositories[0], kind);
+			if (mismatch === "kind")
+				item.id = api.item(api.repositories[0], "issue").id;
+			if (mismatch === "number") {
+				item.number = 2;
+				item.html_url = "https://github.com/work/project/issues/2";
+			}
+			if (mismatch === "id") item.id += 1;
+			if (mismatch === "foreign-url")
+				item.html_url = "https://github.com/foreign/repo/issues/1";
+			api.overrides.set(`work/project/${kind}/mentions/1`, {
+				data: { total_count: 1, incomplete_results: false, items: [item] },
+			});
+
+			// Act
+			const result = api.collect(new GitHubBriefing());
+
+			// Assert
+			await assert.rejects(result, BriefingUnavailableError);
 		});
 	}
 });
