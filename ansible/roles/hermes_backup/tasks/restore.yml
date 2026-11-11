@@ -1,6 +1,6 @@
 ---
 - name: Validate the recovery repository and key
-  ansible.builtin.import_tasks: preflight.yml
+  ansible.builtin.import_tasks: verify.yml
 
 - name: Require an explicitly selected immutable snapshot
   ansible.builtin.assert:

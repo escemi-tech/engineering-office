@@ -92,7 +92,7 @@
   no_log: true
 
 - name: Verify repository integrity after pruning
-  ansible.builtin.import_tasks: preflight.yml
+  ansible.builtin.import_tasks: verify.yml
 
 - name: Report completed retention without exposing snapshot contents
   ansible.builtin.debug:

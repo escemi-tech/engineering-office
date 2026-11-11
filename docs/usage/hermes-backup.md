@@ -107,10 +107,17 @@ make hermes-backup
 ```
 
 The playbook requires the gateway to be stopped with automatic restart disabled,
-checks the repository and key, and backs up only the deployment's dedicated local
+validates protected repository/key paths, and backs up only the deployment's dedicated local
 Docker volume. It excludes `config.yaml`, which deployment supplies from reviewed
 source. The deployment credential file, backup key and controller files are outside
 that volume. Restic preserves the remaining native state and ownership.
+
+Restic authenticates the key when opening the repository for backup. After a
+successful backup, one full `check --read-data` verifies the entire repository,
+including existing snapshots. No full data scan runs before backup. A standalone
+backup therefore performs one full scan; its duration still grows with the
+retained archive. A failed verification may leave a new, unverified snapshot;
+preserve the repository and investigate rather than treating it as a recovery point.
 
 After full data verification, the command prints the snapshot's full ID. Record
 it with the deployment commit and image digest in the private recovery record.
@@ -150,7 +157,11 @@ its duration options are relative to the latest snapshot. See the
 [native retention semantics](https://restic.readthedocs.io/en/stable/060_forget.html#removing-snapshots-according-to-a-policy).
 
 The command then runs `prune --max-unused 0` and a full data check, leaving Hermes
-stopped. Pruning requires free scratch space. It reclaims repository-wide
+stopped. The complete backup/retention operation performs two full scans: after
+backup and after pruning. The first must pass before any snapshot deletion;
+a post-prune failure reports failure and does not undo deletions. The explicit
+backup-check command and restore preflight also retain full data verification.
+Pruning requires free scratch space. It reclaims repository-wide
 unreferenced data, including data from earlier interrupted maintenance; it does
 not remove unrelated snapshots. Content shared with a retained snapshot remains.
 This does not provide secure erasure from storage-provider replicas or copies.

@@ -59,7 +59,7 @@
   register: hermes_backup_result
 
 - name: Verify the new encrypted recovery point
-  ansible.builtin.import_tasks: preflight.yml
+  ansible.builtin.import_tasks: verify.yml
 
 - name: Record the full snapshot identity
   ansible.builtin.set_fact:

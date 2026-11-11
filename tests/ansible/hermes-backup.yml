@@ -283,11 +283,12 @@
           - playbook: hermes-backup
             variables:
               hermes_backup_password_file: /var/lib/hermes-backup-test/wrong-password
-            message: Authenticate and verify the encrypted repository
+            message: Encrypt a consistent snapshot using native Restic
           - playbook: hermes-backup-prune
             variables:
               hermes_backup_password_file: /var/lib/hermes-backup-test/wrong-password
-            message: Authenticate and verify the encrypted repository
+            message: Encrypt a consistent snapshot using native Restic
+            forbidden_task: Remove only the selected snapshot identities
           - playbook: hermes-backup-prune
             variables: {}
             message: Reject future timestamps
@@ -390,6 +391,11 @@
             variables:
               hermes_backup_repository: /var/lib/hermes-backup-test/corrupt-repository
             message: Authenticate and verify the encrypted repository
+          - playbook: hermes-backup-prune
+            variables:
+              hermes_backup_repository: /var/lib/hermes-backup-test/corrupt-repository
+            message: Authenticate and verify the encrypted repository
+            forbidden_task: Remove only the selected snapshot identities
     - name: Remove the temporary inventory
       ansible.builtin.file:
         path: "{{ backup_test_inventory.path }}"
@@ -401,6 +407,23 @@
   gather_facts: false
   tasks:
     # Assert
+    - name: Read the damaged repository after rejected retention
+      ansible.builtin.command:
+        argv: [restic, --no-cache, snapshots, --json]
+      environment:
+        RESTIC_REPOSITORY: /var/lib/hermes-backup-test/corrupt-repository
+        RESTIC_PASSWORD_FILE: "{{ hermes_backup_password_file }}"
+      changed_when: false
+      no_log: true
+      register: damaged_repository_snapshots
+    - name: Require failed verification to preserve every previous recovery point
+      ansible.builtin.assert:
+        that:
+          - existing_ids | difference(damaged_ids) | length == 0
+      vars:
+        existing_ids: "{{ preserved_snapshots.stdout | from_json | map(attribute='id') | reject('equalto', future_snapshot) | list }}"
+        damaged_ids: "{{ damaged_repository_snapshots.stdout | from_json | map(attribute='id') | list }}"
+      no_log: true
     - name: Inspect the source after successful and failed backup checks
       community.docker.docker_container_info:
         name: "{{ hermes_project_name }}-hermes-1"
