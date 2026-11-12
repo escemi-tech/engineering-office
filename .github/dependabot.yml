@@ -1,6 +1,8 @@
 version: 2
 updates:
   - package-ecosystem: pip
+    commit-message:
+      prefix: build
     directory: /ansible
     groups:
       pip-dependencies:
@@ -11,6 +13,8 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: npm
+    commit-message:
+      prefix: build
     directories:
       - /packages/writing-normalizer
       - /packages/github-briefing
@@ -23,6 +27,8 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: github-actions
+    commit-message:
+      prefix: build
     directory: /
     groups:
       github-actions-dependencies:
@@ -33,6 +39,8 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: docker
+    commit-message:
+      prefix: build
     directory: /
     groups:
       docker-dependencies:
@@ -43,6 +51,8 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: docker-compose
+    commit-message:
+      prefix: build
     directories:
       - /services/hermes
       - /tests/hermes/backup-services
@@ -55,6 +65,8 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: apm
+    commit-message:
+      prefix: build
     directory: /packages/writing-policy
     groups:
       apm-dependencies:
