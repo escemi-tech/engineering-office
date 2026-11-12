@@ -1,0 +1,118 @@
+---
+- name: Validate the administration scope
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Inspect the actual SSH connection before restricting access
+  ansible.builtin.command:
+    argv: [printenv, SSH_CONNECTION]
+  become: false
+  changed_when: false
+  register: management_connection
+
+- name: Require SSH through the approved WireGuard addresses
+  ansible.builtin.assert:
+    that:
+      - management_connection.stdout.split() | length == 4
+      - management_connection.stdout.split()[0] == management_operator_address.split('/')[0]
+      - management_connection.stdout.split()[2] == management_address.split('/')[0]
+      - management_connection.stdout.split()[3] == '22'
+    fail_msg: Connect over WireGuard before enforcing private SSH; the bootstrap or console connection cannot close its own access path.
+    quiet: true
+
+- name: Inspect the effective SSH service configuration
+  ansible.builtin.command:
+    argv: [/usr/sbin/sshd, -T]
+  changed_when: false
+  register: management_sshd
+
+- name: Require the supported SSH port before applying its boundary
+  ansible.builtin.assert:
+    that:
+      - management_sshd.stdout_lines | select('match', '^port ') | list == ['port 22']
+    fail_msg: This administration policy supports the standard SSH service on TCP 22 only; inspect other listeners through the console.
+    quiet: true
+
+- name: Verify that the approved operator is the configured peer
+  ansible.builtin.command:
+    argv: [wg, show, wg-mgmt, peers]
+  changed_when: false
+  register: management_peers
+
+- name: Require the declared WireGuard identity
+  ansible.builtin.assert:
+    that:
+      - management_peers.stdout_lines == [management_operator_public_key]
+    quiet: true
+
+- name: Protect the management policy directory
+  ansible.builtin.file:
+    path: /etc/engineering-office
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Inspect the dedicated policy file
+  ansible.builtin.stat:
+    path: /etc/engineering-office/management.nft
+  register: management_existing_policy
+
+- name: Inspect the reserved firewall table
+  ansible.builtin.command:
+    argv: [nft, list, table, inet, engineering_management]
+  changed_when: false
+  failed_when: false
+  register: management_existing_table
+
+- name: Refuse an unmanaged firewall table
+  ansible.builtin.assert:
+    that:
+      - management_existing_policy.stat.exists or management_existing_table.rc != 0
+    fail_msg: The reserved firewall table already exists without its managed policy; inspect it through the recovery console.
+    quiet: true
+
+- name: Write and validate the dedicated atomic firewall policy
+  ansible.builtin.template:
+    src: management.nft.j2
+    dest: /etc/engineering-office/management.nft
+    owner: root
+    group: root
+    mode: "0600"
+    validate: nft --check --file %s
+  register: management_policy
+
+- name: Install the boot-time management boundary
+  ansible.builtin.template:
+    src: management.service.j2
+    dest: /etc/systemd/system/engineering-office-management.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: management_unit
+
+- name: Create SSH service override directories
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.d"
+    state: directory
+    mode: "0755"
+  loop: [ssh.service, ssh.socket]
+
+- name: Require firewall success before SSH can start
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item }}.d/management.conf"
+    content: |
+      [Unit]
+      Requires=engineering-office-management.service
+      After=engineering-office-management.service
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [ssh.service, ssh.socket]
+  register: management_ssh_units
+
+- name: Persist and apply only the owned firewall table
+  ansible.builtin.systemd_service:
+    name: engineering-office-management.service
+    enabled: true
+    daemon_reload: "{{ management_unit.changed or management_ssh_units.changed }}"
+    state: "{{ 'reloaded' if management_policy.changed or management_unit.changed or management_existing_table.rc != 0 else 'started' }}"

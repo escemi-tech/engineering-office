@@ -1,0 +1,13 @@
+---
+- name: Validate the selected host
+  ansible.builtin.import_playbook: helpers/management-inventory.yml
+
+- name: Restrict SSH after verifying the private connection
+  hosts: management
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Enforce the private administration boundary
+      ansible.builtin.include_role:
+        name: management
+        tasks_from: enforce

@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+# One owned table; never flush the host or Docker ruleset.
+add table inet engineering_management
+flush table inet engineering_management
+table inet engineering_management {
+  chain input {
+    type filter hook input priority -10; policy accept;
+    iifname "lo" accept
+    ct state established,related accept
+    iifname "wg-mgmt" ip saddr {{ management_operator_address }} tcp dport 22 accept
+    tcp dport 22 reject with tcp reset
+    iifname "wg-mgmt" drop
+  }
+  chain forward {
+    type filter hook forward priority -10; policy accept;
+    iifname "wg-mgmt" drop
+    oifname "wg-mgmt" drop
+  }
+}

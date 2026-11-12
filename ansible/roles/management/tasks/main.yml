@@ -1,0 +1,80 @@
+---
+- name: Validate the administration scope
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Inspect the reserved interface configuration and ownership record
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/wireguard/wg-mgmt.conf
+    - /etc/wireguard/.engineering-office-management
+  register: management_existing
+
+- name: Refuse to adopt an unmanaged interface
+  ansible.builtin.assert:
+    that:
+      - not management_existing.results[0].stat.exists or management_existing.results[1].stat.exists
+    fail_msg: The reserved wg-mgmt interface already has unmanaged configuration; inspect it through the recovery console.
+    quiet: true
+
+- name: Read the owned address assignment
+  ansible.builtin.slurp:
+    src: /etc/wireguard/.engineering-office-management
+  when: management_existing.results[1].stat.exists
+  register: management_assignment
+
+- name: Preserve the management routes on reruns
+  ansible.builtin.assert:
+    that:
+      - management_assignment.content | b64decode | trim == management_address ~ ' ' ~ management_operator_address
+    fail_msg: Address changes require a replacement host; preserve the current routes for safe reruns and peer-key rotation.
+    quiet: true
+  when: management_existing.results[1].stat.exists
+
+- name: Install the native host firewall tool
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Protect the WireGuard configuration directory
+  ansible.builtin.file:
+    path: /etc/wireguard
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Record ownership before configuring the reserved interface
+  ansible.builtin.copy:
+    dest: /etc/wireguard/.engineering-office-management
+    content: "{{ management_address }} {{ management_operator_address }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Configure WireGuard with the maintained upstream role
+  ansible.builtin.include_role:
+    name: githubixx.ansible_role_wireguard
+    apply:
+      no_log: true
+  vars:
+    wireguard_interface: wg-mgmt
+    wireguard_addresses: ["{{ management_address }}"]
+    wireguard_endpoint: "{{ inventory_hostname }}"
+    wireguard_unmanaged_peers:
+      operator:
+        public_key: "{{ management_operator_public_key }}"
+        allowed_ips: "{{ management_operator_address }}"
+    wireguard_flush_handlers: true
+
+- name: Read only the server public key
+  ansible.builtin.command:
+    argv: [wg, show, wg-mgmt, public-key]
+  changed_when: false
+  register: management_public_key
+
+- name: Show the public identity for the operator's independently configured client
+  ansible.builtin.debug:
+    msg: "WireGuard server public key: {{ management_public_key.stdout }}"

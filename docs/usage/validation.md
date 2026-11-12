@@ -290,3 +290,23 @@ to install or update its runtime.
 Use `hermes-backup-check` to verify integrity and freshness, and `hermes-backup`,
 `hermes-backup-prune` and `hermes-restore` for explicit stopped-state recovery
 operations, following the [backup guide](hermes-backup.md).
+
+## Private administration
+
+The dedicated `test-management.yml` workflow invokes the released native Molecule
+action. Its scenario uses disposable Ubuntu/systemd containers and real WireGuard
+and SSH traffic. It checks unsafe-input refusal, preserved unmanaged configuration,
+convergence, private access, public and wrong-key rejection, denied forwarding,
+retained identity across restart, revocation and independent console recovery.
+A reachable neighbour is probed before enforcement so a later denial cannot pass
+merely because routing or the service was absent.
+
+The fixture needs privileged networking and runs only on a fresh GitHub-hosted
+runner. No operational credentials, cloud resources or developer-host changes are
+involved. Native destruction removes containers, volumes, networks and synthetic
+keys; native JUnit joins the consolidated test comment. The workflow has a bounded
+ten-minute scenario deadline plus time for cleanup and reporting.
+
+Container restart validates systemd startup and retained configuration. Before
+activation, independently qualify the real host's reboot, provider firewall,
+private SSH and emergency console using the [administration guide](management-access.md).

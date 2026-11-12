@@ -1,0 +1,28 @@
+---
+# Disposable GitHub runner only: systemd and real network namespaces need privilege.
+services:
+  server:
+    image: &ubuntu geerlingguy/docker-ubuntu2604-ansible:latest@sha256:ec1b0f439520bc9d6217b7fad3b045e385a229e012d82c1e88c6dde37df14c36
+    container_name: management-fixture-server
+    privileged: true
+    cgroup: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /tmp
+    healthcheck:
+      test: [CMD, test, -d, /run/systemd/system]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+  operator:
+    image: *ubuntu
+    container_name: management-fixture-operator
+    cap_add: [NET_ADMIN]
+    command: [sleep, infinity]
+  neighbour:
+    image: *ubuntu
+    container_name: management-fixture-neighbour
+    cap_add: [NET_ADMIN]
+    command: [python3, -m, http.server, "8000"]

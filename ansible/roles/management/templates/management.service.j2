@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Engineering-office private SSH boundary
+DefaultDependencies=no
+After=local-fs.target nftables.service
+Before=network-pre.target ssh.service ssh.socket
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft --file /etc/engineering-office/management.nft
+ExecReload=/usr/sbin/nft --file /etc/engineering-office/management.nft
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,11 @@
+---
+- name: Require the approved administration target
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Reject absent or ambiguous management inventory
+      ansible.builtin.assert:
+        that:
+          - groups.management | default([]) | length == 1
+        fail_msg: The management inventory group must contain exactly one approved host.
+        quiet: true
