@@ -31,6 +31,13 @@ ci: ## Execute local CI tasks
 github-briefing: ## Show a scoped GitHub work briefing using the protected local source policy
 	@npm run --silent --prefix packages/github-briefing briefing -- --source "$(CURDIR)/.local/github-briefing/source.json" --token-file "$(CURDIR)/.local/github-briefing/token" --format text
 
+.PHONY: management management-enforce
+management: ## Configure the approved host's WireGuard interface without closing bootstrap SSH
+	ANSIBLE_ROLES_PATH="$(CURDIR)/.local/ansible/roles:$(CURDIR)/ansible/roles" ansible-playbook -i .local/management-inventory.yml ansible/management.yml --extra-vars @.local/management.yml
+
+management-enforce: ## Require the verified WireGuard path for new SSH connections
+	ANSIBLE_ROLES_PATH="$(CURDIR)/.local/ansible/roles:$(CURDIR)/ansible/roles" ansible-playbook -i .local/management-inventory.yml ansible/management-enforce.yml --extra-vars @.local/management.yml
+
 .PHONY: infrastructure-state
 infrastructure-state: ## Bootstrap approved private state storage and initialize the encrypted workspace
 	ansible-playbook ansible/infrastructure-state.yml --extra-vars @.local/infrastructure-state.yml

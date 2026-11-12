@@ -118,6 +118,18 @@ and cleanup in `tests/hermes/helpers/`.
 
 ## Ansible validation
 
+Private administration uses the released native Molecule action in
+`test-management.yml`. The scenario lives in `tests/molecule/management` and
+exercises the production playbooks over real SSH and WireGuard. Run its privileged
+network fixtures only on a disposable GitHub-hosted runner. The scenario owns
+creation and destruction; never run it against the workstation or an operational
+inventory. The shared publisher collects its native JUnit reports.
+
+Renovate maintains the WireGuard role and its collection dependencies in the
+mixed Galaxy manifest. Install roles into `.local/ansible/roles` as documented in
+the administration guide; the Make targets add that path explicitly. Dependabot
+maintains controller dependencies and the systemd fixture's Compose digest.
+
 The independent infrastructure-state scenario runs native Ansible and OpenTofu
 against a pinned Moto S3 fixture, without a VM. The shared OpenTofu test action
 executes native tests and owns runtime setup and reports; the Ansible test action
@@ -129,9 +141,10 @@ bootstrap manages the backend bucket with the maintained S3 collection.
 
 Renovate updates `tofu/.opentofu-version` from OpenTofu releases and the
 `amazon.aws` collection through its existing Galaxy manager. Dependabot owns
-the SDK pin in `ansible/requirements.txt` and the setup Action. The native state
+the SDK pin in `ansible/requirements.txt` and shared Action references. The native state
 lifecycle must pass when any of these change. Dependabot also maintains the Moto and official AWS CLI images in the fixture
-Compose manifest. The CLI prepares the independently managed audit destination.
+Compose manifest. Recursive Dependabot directory matching discovers Compose
+fixtures without adding a directory entry for each one. The CLI prepares the independently managed audit destination.
 
 Run `tofu fmt -check -recursive tofu tests/infrastructure-state` with the pinned
 binary, then the isolated Ansible scenario. Its fixture requires a disposable S3
@@ -192,7 +205,9 @@ Dependabot updates the exact Ansible Core pin in `ansible/requirements.txt` thro
 its grouped pip configuration. Renovate's `ansible-galaxy` manager updates the exact
 collection pins in `ansible/collections/requirements.yml`, including the Docker
 collection's inventory-filtering dependency. Its `pyenv` manager updates
-`ansible/.python-version`, which the upstream Python setup Action reads in CI.
+`ansible/.python-version`, supplied to the shared test actions through
+`python-version-file`. Those actions compose the official Python setup Action;
+consumer workflows do not repeat controller setup.
 Keep controller Python compatible with the pinned Core version. Linting and
 syntax checks stay separate from tests.
 

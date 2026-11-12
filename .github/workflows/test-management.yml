@@ -1,0 +1,34 @@
+---
+name: Test - Private host administration
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  test-management:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      # Arrange: privilege is confined to this disposable hosted runner.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Load native WireGuard support for the isolated network namespaces
+        run: sudo modprobe wireguard
+      # Act and Assert: native Molecule owns setup, convergence, probes and destruction.
+      - name: Test private SSH, denied flows, restart and revocation
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test-molecule@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
+        env:
+          FIXTURE_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        with:
+          molecule-scenario: tests/molecule/management
+          ansible-requirements: ansible/requirements.txt
+          python-version-file: ansible/.python-version
+          test-timeout-minutes: "10"
+          comment: "false"
+          report-name: engineering-office - Private administration

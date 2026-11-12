@@ -1,0 +1,5 @@
+---
+# Select unused private /32 addresses; these example addresses are not defaults.
+management_address: 10.253.0.1/32
+management_operator_address: 10.253.0.2/32
+management_operator_public_key: replace-with-the-operators-wireguard-public-key

@@ -1,0 +1,252 @@
+---
+# Assert: always open new SSH sessions so a surviving bootstrap session cannot pass.
+- name: Verify the allowed identity and denied public path
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require a fresh private SSH connection
+      ansible.builtin.command: &private-ssh
+        argv:
+          [
+            ssh,
+            -F,
+            "{{ fixture_directory }}/ssh.config",
+            -o,
+            ControlMaster=no,
+            -o,
+            ControlPath=none,
+            -o,
+            ConnectTimeout=3,
+            management-server,
+            "true",
+          ]
+      changed_when: false
+    - name: Require the public SSH listener to reject new connections
+      ansible.builtin.wait_for: &public-ssh-denied
+        host: "{{ lookup('ansible.builtin.file', fixture_directory ~ '/bootstrap-address') }}"
+        port: 22
+        state: stopped
+        timeout: 5
+
+- name: Verify lateral isolation and identity rejection
+  hosts: operator-console
+  gather_facts: false
+  tasks:
+    - name: Attempt the previously reachable lateral path
+      ansible.builtin.command:
+        argv:
+          [
+            curl,
+            --fail,
+            --silent,
+            --max-time,
+            "3",
+            "http://{{ lookup('ansible.builtin.file', fixture_directory ~ '/neighbour-address') }}:8000/",
+          ]
+      changed_when: false
+      register: denied_lateral
+      failed_when: denied_lateral.rc == 0
+    # Act
+    - name: Replace only the disposable client's key with an unadmitted identity
+      ansible.builtin.command:
+        argv: [wg, set, operator, private-key, /etc/wireguard/unapproved.key]
+      changed_when: true
+
+- name: Reject the unadmitted WireGuard identity
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Attempt private SSH with the wrong VPN identity
+      ansible.builtin.command: *private-ssh
+      changed_when: false
+      register: wrong_identity
+      failed_when: wrong_identity.rc != 255
+
+- name: Restore only the approved fixture identity
+  hosts: operator-console
+  gather_facts: false
+  tasks:
+    - name: Restore the independently held operator key
+      ansible.builtin.command:
+        argv: [wg, set, operator, private-key, /etc/wireguard/operator.key]
+      changed_when: true
+
+- name: Verify key custody and persistent service configuration
+  hosts: management
+  gather_facts: false
+  tasks:
+    - name: Require the unrelated firewall table to survive enforcement
+      ansible.builtin.command:
+        argv: [nft, list, table, inet, fixture_unrelated]
+      changed_when: false
+    - name: Inspect the private server configuration
+      ansible.builtin.stat:
+        path: /etc/wireguard/wg-mgmt.conf
+      register: server_key_metadata
+    - name: Require root-only key custody
+      ansible.builtin.assert:
+        that:
+          - server_key_metadata.stat.uid == 0
+          - server_key_metadata.stat.gid == 0
+          - server_key_metadata.stat.mode == '0600'
+        quiet: true
+    - name: Record the public server identity before restart
+      ansible.builtin.command:
+        argv: [wg, show, wg-mgmt, public-key]
+      changed_when: false
+      register: before_restart_identity
+
+# Act: restart systemd in the server's own network namespace.
+- name: Restart the isolated host services
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Restart the server container without replacing its retained configuration
+      community.docker.docker_container:
+        name: management-fixture-server
+        state: started
+        restart: true
+    # Assert
+    - name: Require private SSH to recover after service startup
+      ansible.builtin.command: *private-ssh
+      changed_when: false
+      register: restarted_private
+      until: restarted_private.rc == 0
+      retries: 30
+      delay: 1
+    - name: Require public SSH to remain denied after restart
+      ansible.builtin.wait_for: *public-ssh-denied
+
+- name: Verify identity preservation after restart
+  hosts: management
+  gather_facts: false
+  tasks:
+    - name: Read the retained public server identity
+      ansible.builtin.command:
+        argv: [wg, show, wg-mgmt, public-key]
+      changed_when: false
+      register: after_restart_identity
+    - name: Require the original WireGuard key
+      ansible.builtin.assert:
+        that:
+          - after_restart_identity.stdout == before_restart_identity.stdout
+        quiet: true
+
+# Act: the console can revoke access without the assistant or a working tunnel.
+- name: Disable private administration independently
+  hosts: server-console
+  gather_facts: false
+  tasks:
+    - name: Stop and disable the private interface
+      ansible.builtin.systemd_service:
+        name: wg-quick@wg-mgmt.service
+        state: stopped
+        enabled: false
+
+- name: Verify revocation never falls back to public SSH
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require the revoked private path to fail
+      ansible.builtin.command: *private-ssh
+      changed_when: false
+      register: revoked_connection
+      failed_when: revoked_connection.rc != 255
+    - name: Require public SSH to remain denied after revocation
+      ansible.builtin.wait_for: *public-ssh-denied
+
+- name: Restore private access through the independent console
+  hosts: server-console
+  gather_facts: false
+  tasks:
+    - name: Explicitly re-enable the reviewed interface
+      ansible.builtin.systemd_service:
+        name: wg-quick@wg-mgmt.service
+        state: started
+        enabled: true
+
+- name: Verify console recovery
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require a fresh private SSH session after recovery
+      ansible.builtin.command: *private-ssh
+      changed_when: false
+      register: recovered_connection
+      until: recovered_connection.rc == 0
+      retries: 10
+      delay: 1
+
+# Arrange: a malformed persisted policy must fail closed at the next startup.
+- name: Prepare a firewall startup failure through the independent console
+  hosts: server-console
+  gather_facts: false
+  tasks:
+    - name: Retain the reviewed public policy for console recovery
+      ansible.builtin.slurp:
+        src: /etc/engineering-office/management.nft
+      register: reviewed_policy
+    - name: Write a deliberately invalid fixture policy
+      ansible.builtin.copy:
+        dest: /etc/engineering-office/management.nft
+        content: "invalid fixture policy\n"
+        mode: "0600"
+
+- name: Restart with the invalid policy
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    # Act
+    - name: Exercise systemd startup with failed firewall loading
+      community.docker.docker_container:
+        name: management-fixture-server
+        state: started
+        restart: true
+
+- name: Verify that SSH cannot start after firewall failure
+  hosts: server-console
+  gather_facts: false
+  tasks:
+    # Assert
+    - name: Require the firewall unit to reach its failed state
+      ansible.builtin.command:
+        argv: [systemctl, is-failed, engineering-office-management.service]
+      changed_when: false
+      register: failed_policy
+      until: failed_policy.rc == 0
+      retries: 30
+      delay: 1
+    - name: Require both SSH activation units to remain inactive
+      ansible.builtin.command:
+        argv: [systemctl, is-active, "{{ item }}"]
+      loop: [ssh.service, ssh.socket]
+      changed_when: false
+      register: blocked_ssh
+      failed_when: blocked_ssh.rc == 0
+    - name: Restore the reviewed policy through the console
+      ansible.builtin.copy:
+        dest: /etc/engineering-office/management.nft
+        content: "{{ reviewed_policy.content | b64decode }}"
+        mode: "0600"
+    - name: Recover the firewall before SSH
+      ansible.builtin.systemd_service:
+        name: engineering-office-management.service
+        state: started
+    - name: Recover SSH after the reviewed policy loads
+      ansible.builtin.systemd_service:
+        name: ssh.service
+        state: started
+
+- name: Verify recovery preserves the private boundary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require private access after failed-startup recovery
+      ansible.builtin.command: *private-ssh
+      changed_when: false
+      register: policy_recovery
+      until: policy_recovery.rc == 0
+      retries: 10
+      delay: 1
+    - name: Keep public access denied after policy recovery
+      ansible.builtin.wait_for: *public-ssh-denied

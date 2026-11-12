@@ -18,6 +18,8 @@ snapshot into a fresh volume.
 Prepare dedicated encrypted infrastructure storage with the
 [state bootstrap and recovery guide](docs/usage/infrastructure-state.md).
 
+Configure private SSH with the [host administration guide](docs/usage/management-access.md).
+
 Use the [shared writing policy](docs/usage/writing-policy.md) to review English
 and French drafts. Hermes startup builds and loads this policy automatically.
 

@@ -1,0 +1,10 @@
+---
+- name: Validate the selected host
+  ansible.builtin.import_playbook: helpers/management-inventory.yml
+
+- name: Configure private administration on the approved host
+  hosts: management
+  become: true
+  gather_facts: true
+  roles:
+    - management

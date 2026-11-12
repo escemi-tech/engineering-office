@@ -54,8 +54,7 @@ updates:
     commit-message:
       prefix: build
     directories:
-      - /services/hermes
-      - /tests/hermes/backup-services
+      - "**/*"
     groups:
       docker-compose-dependencies:
         patterns:

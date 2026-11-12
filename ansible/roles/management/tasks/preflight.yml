@@ -1,0 +1,27 @@
+---
+- name: Require one supported host and explicit operator settings
+  ansible.builtin.assert:
+    that:
+      - ansible_play_hosts_all | length == 1
+      - ansible_facts.distribution == 'Ubuntu'
+      - ansible_facts.distribution_version == '26.04'
+      - ansible_verbosity < 3
+      - management_address is defined
+      - management_operator_address is defined
+      - management_operator_public_key is defined
+    fail_msg: Supply one approved Ubuntu 26.04 host and its private management settings; do not use secret-bearing verbose logging.
+    quiet: true
+
+- name: Require distinct private host routes and a public operator key
+  ansible.builtin.assert:
+    that:
+      - management_address is string
+      - management_operator_address is string
+      - management_address is match('^[0-9.]+/32$')
+      - management_operator_address is match('^[0-9.]+/32$')
+      - (management_address | ansible.utils.ipv4('10.0.0.0/8')) is truthy or (management_address | ansible.utils.ipv4('172.16.0.0/12')) is truthy or (management_address | ansible.utils.ipv4('192.168.0.0/16')) is truthy
+      - (management_operator_address | ansible.utils.ipv4('10.0.0.0/8')) is truthy or (management_operator_address | ansible.utils.ipv4('172.16.0.0/12')) is truthy or (management_operator_address | ansible.utils.ipv4('192.168.0.0/16')) is truthy
+      - management_address != management_operator_address
+      - management_operator_public_key is match('^[A-Za-z0-9+/]{43}=$')
+    fail_msg: Use distinct private IPv4 /32 addresses and the operator's WireGuard public key; routes and private keys are not accepted.
+    quiet: true

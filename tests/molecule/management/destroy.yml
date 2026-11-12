@@ -1,0 +1,30 @@
+---
+- name: Remove only the disposable administration fixture
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require hosted cleanup scope
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.env', 'GITHUB_ACTIONS') == 'true'
+          - lookup('ansible.builtin.env', 'FIXTURE_RUNNER_ENVIRONMENT') == 'github-hosted'
+        quiet: true
+    - name: Remove the fixture containers and network
+      community.docker.docker_compose_v2:
+        project_src: "{{ fixture_compose }}"
+        project_name: management-fixture
+        state: absent
+        remove_volumes: true
+    - name: Remove ephemeral credentials and connection records
+      ansible.builtin.file:
+        path: "{{ fixture_directory }}/{{ item }}"
+        state: absent
+      loop:
+        [
+          ssh-key,
+          ssh-key.pub,
+          ssh.config,
+          bootstrap-address,
+          neighbour-address,
+          operator.pub,
+        ]
