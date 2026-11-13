@@ -136,7 +136,6 @@
       bucket_acl: true
       bucket_versioning: true
       bucket_logging: true
-      public_access_block: true
   environment: "{{ infrastructure_state_environment }}"
   register: infrastructure_state_audit
   no_log: true
@@ -146,11 +145,14 @@
     that:
       - infrastructure_state_audit.buckets | length == 1
       - infrastructure_state_audit.buckets[0].bucket_versioning.Status == 'Enabled'
-      - infrastructure_state_audit.buckets[0].public_access_block.values() | select('equalto', true) | list | length == 4
+      - infrastructure_state_audit.buckets[0].bucket_acl.Owner.ID | default('') | length > 0
+      - infrastructure_state_audit.buckets[0].bucket_acl.Grants | map(attribute='Grantee.Type') | difference(['CanonicalUser', 'Group']) | length == 0
+      - infrastructure_state_audit.buckets[0].bucket_acl.Grants | selectattr('Grantee.Type', 'equalto', 'CanonicalUser') | map(attribute='Grantee.ID') | difference([infrastructure_state_audit.buckets[0].bucket_acl.Owner.ID]) | length == 0
+      - infrastructure_state_audit.buckets[0].bucket_acl.Grants | selectattr('Grantee.Type', 'equalto', 'CanonicalUser') | map(attribute='Permission') | difference(['FULL_CONTROL']) | length == 0
       - not infrastructure_state_audit.buckets[0].bucket_logging.get('LoggingEnabled')
       - infrastructure_state_audit.buckets[0].bucket_acl.Grants | selectattr('Grantee.Type', 'equalto', 'Group') | map(attribute='Grantee.URI') | unique | list == ['http://acs.amazonaws.com/groups/s3/LogDelivery']
       - infrastructure_state_audit.buckets[0].bucket_acl.Grants | selectattr('Grantee.Type', 'equalto', 'Group') | map(attribute='Permission') | sort | list == ['READ_ACP', 'WRITE']
-    fail_msg: Prepare a separate private versioned audit bucket with only the LogDelivery group grants, public-access blocking and no recursive logging.
+    fail_msg: Prepare a separate versioned audit bucket with only owner and LogDelivery access, and no recursive logging.
     quiet: true
   no_log: true
 
@@ -166,17 +168,40 @@
     logging:
       target_bucket: "{{ infrastructure_state_log_bucket }}"
       target_prefix: "{{ infrastructure_state_bucket }}/"
-    public_access:
-      block_public_acls: true
-      block_public_policy: true
-      ignore_public_acls: true
-      restrict_public_buckets: true
     tags:
       managed-by: engineering-office
       purpose: infrastructure-state
     purge_tags: false
   environment: "{{ infrastructure_state_environment }}"
   register: infrastructure_state_storage
+  no_log: true
+
+- name: Inspect the effective state ACL before backend initialization
+  amazon.aws.s3_bucket_info:
+    name: "{{ infrastructure_state_bucket }}"
+    endpoint_url: "{{ infrastructure_state_endpoint }}"
+    region: "{{ infrastructure_state_region }}"
+    profile: default
+    bucket_facts:
+      bucket_acl: true
+  environment: "{{ infrastructure_state_environment }}"
+  register: infrastructure_state_access
+  # A missing bucket is skipped when the caller applies task-scoped check mode.
+  when: not ansible_check_mode and infrastructure_state_storage is not skipped
+  no_log: true
+
+- name: Require exclusive owner access to state storage
+  ansible.builtin.assert:
+    that:
+      - infrastructure_state_access.buckets | length == 1
+      - infrastructure_state_access.buckets[0].bucket_acl.Owner.ID | default('') | length > 0
+      - infrastructure_state_access.buckets[0].bucket_acl.Grants | length == 1
+      - infrastructure_state_access.buckets[0].bucket_acl.Grants[0].Grantee.Type == 'CanonicalUser'
+      - infrastructure_state_access.buckets[0].bucket_acl.Grants[0].Grantee.ID == infrastructure_state_access.buckets[0].bucket_acl.Owner.ID
+      - infrastructure_state_access.buckets[0].bucket_acl.Grants[0].Permission == 'FULL_CONTROL'
+    fail_msg: The state ACL must grant FULL_CONTROL exclusively to the bucket owner.
+    quiet: true
+  when: infrastructure_state_access is not skipped
   no_log: true
 
 - name: Create protected backend configuration and cache directories

@@ -1,7 +1,7 @@
 ---
 misconfigurations:
   # FIXME: Waiting for https://github.com/aquasecurity/trivy/pull/11624 to merge.
-  # Remove this exception and trivy.yaml once the shared linter includes the fix.
+  # Remove this logging exception once the shared linter includes the fix.
   - id: AVD-AWS-0089
     paths:
       # Trivy reports this role path without its .yml extension.
@@ -12,3 +12,27 @@ misconfigurations:
       Logging is configured and tested, but the bundled Ansible adapter ignores
       amazon.aws.s3_bucket.logging. Engineering-office maintainers own removal
       after the upstream fix reaches the shared linter.
+  # OVH does not implement AWS Block Public Access. Limit these exceptions to
+  # the state bootstrap and its matching synthetic unmanaged-bucket fixture.
+  # FIXME: Revisit when OVH supports these APIs, then qualify before enabling:
+  # https://docs.ovhcloud.com/en/guides/storage-and-backup/object-storage/s3-s3-compliancy
+  - id: AVD-AWS-0086
+    paths: &ovh-state-paths
+      - ansible/roles/infrastructure_state/tasks/main
+      - tests/ansible/helpers/infrastructure-state-lifecycle.yml
+    statement: &ovh-state-access >-
+      The target is OVH S3, where Block Public Access is unsupported. Private
+      state ACLs are read back and validated; audit ACLs reject additional
+      readers. Native lifecycle tests require anonymous state and audit reads
+      to fail. This does not prevent later privileged ACL changes. Maintainers
+      must reassess on provider/API changes; live access qualification remains
+      required before activation. See ADR 0007's OVH compatibility correction.
+  - id: AVD-AWS-0087
+    paths: *ovh-state-paths
+    statement: *ovh-state-access
+  - id: AVD-AWS-0091
+    paths: *ovh-state-paths
+    statement: *ovh-state-access
+  - id: AVD-AWS-0093
+    paths: *ovh-state-paths
+    statement: *ovh-state-access

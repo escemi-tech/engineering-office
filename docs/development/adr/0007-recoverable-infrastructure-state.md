@@ -88,9 +88,41 @@ group changes explicitly reset the connection. This uses more runners and repeat
 host setup to shorten elapsed feedback time without sharing mutable VM state.
 The scenario timeout is 25 minutes; hosted qualification establishes actual duration.
 
+## OVH access-control compatibility correction on 2026-11-13
+
+The initial bootstrap and Moto fixture required AWS Block Public Access.
+OVH's published S3 compatibility matrix explicitly marks its read/write APIs as
+unsupported in Regions, including the selected Paris endpoint. A successful
+ListBuckets authentication check does not validate these APIs. Remove that
+dependency before operational bootstrap; do not swallow unsupported API errors
+or introduce a switch that disables all protection.
+
+Use the supported private ACL with an explicit read-back of state grants before
+backend initialization. Require owner-only FULL_CONTROL on state, and only
+LogDelivery WRITE/READ_ACP plus optional owner FULL_CONTROL on the audit bucket.
+The original audit check validated group grants but could accept an additional
+canonical user. Reject that sharing before any state mutation. Reuse the existing
+native lifecycle with no public-access-block configuration and add that rejection
+case; preserve its anonymous state-read, encryption, locking and recovery checks.
+
+This protects the configured ACL, but cannot prevent a privileged administrator
+from later making resources public. Bucket administration remains separate from
+daily state operations. Live anonymous state/audit access denial and actual log
+delivery remain activation gates; neither source documentation nor Moto proves
+the operational endpoint's behavior. The change keeps the existing maintained
+Ansible collection and provider-native ACL setup, with no custom S3 client.
+
+Trivy applies AWS checks to these S3-compatible tasks. Scope exceptions for
+`AVD-AWS-0086`, `AVD-AWS-0087`, `AVD-AWS-0091` and `AVD-AWS-0093` to the production
+role and matching unmanaged-bucket fixture, with the provider compatibility
+reference and explicit protection limits. Other checks remain enabled. Reassess
+these exceptions if OVH adds the APIs; removing the independent logging-adapter
+exception must not remove the configuration still needed for this target.
+
 ## References
 
 - [OpenTofu state and plan encryption](https://opentofu.org/docs/language/state/encryption/)
 - [OpenTofu S3 backend and locking](https://opentofu.org/docs/language/settings/backends/s3/)
 - [Ansible S3 bucket module](https://docs.ansible.com/projects/ansible/latest/collections/amazon/aws/s3_bucket_module.html)
 - [OVH native S3 locking](https://blog.ovhcloud.com/en/posts/terraform-s3-state-locking-ovhcloud-object-storage/)
+- [OVH S3 compatibility](https://docs.ovhcloud.com/en/guides/storage-and-backup/object-storage/s3-s3-compliancy)
