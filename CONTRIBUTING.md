@@ -67,10 +67,17 @@ formatting directly with the repository image's `prettier --check` command.
 Trivy temporarily ignores only `AVD-AWS-0089` in the two Ansible paths listed in
 [its exception file](.github/linters/trivy-ignore.yaml). Logging is configured and
 tested; the bundled adapter does not read it. Engineering-office maintainers must
-remove the exception and custom Trivy configuration once
+remove the logging exception once
 [Trivy #11624](https://github.com/aquasecurity/trivy/pull/11624) is merged, released
-and included in the shared linter. The exception expires automatically; all other
-findings remain blocking.
+and included in the shared linter. The logging exception expires automatically.
+
+The same file limits AWS Block Public Access checks `AVD-AWS-0086`,
+`AVD-AWS-0087`, `AVD-AWS-0091` and `AVD-AWS-0093` to the OVH state bootstrap and
+its matching fixture. OVH does not implement those APIs; private ACL verification
+and anonymous state/audit read denial remain required. Keep the Trivy
+configuration while these provider-specific exceptions are needed, and reassess
+them when OVH's API support changes. Other findings remain blocking. See
+[the state decision](docs/development/adr/0007-recoverable-infrastructure-state.md#ovh-access-control-compatibility-correction-on-2026-11-13).
 
 Declare APM Git dependencies as strings pinned to full commit SHAs, followed by
 the matching release tag as an inline comment: `owner/repo#<40-character SHA> # vX.Y.Z`.

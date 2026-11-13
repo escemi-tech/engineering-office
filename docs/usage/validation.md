@@ -10,10 +10,12 @@ OpenTofu creates only synthetic `terraform_data` resources; no provider account
 or paid resource is used.
 
 The scenario verifies a read-only preview, repeatable private/versioned bucket
-setup, mandatory access logging, encrypted state and saved plans, anonymous-access rejection, real
+setup without AWS Block Public Access, mandatory access logging, encrypted state
+and saved plans, anonymous state/audit read rejection, real
 concurrent-lock exclusion, wrong-key rejection and recovery of the original
 resource identity after deleting the local checkout and key. An unmanaged bucket
-must remain unmodified. The shared Ansible action publishes native JUnit results;
+must remain unmodified, and an audit destination with another canonical reader
+must be rejected before state mutation. The shared Ansible action publishes native JUnit results;
 the common publisher consolidates them with the other test reports. Cleanup
 removes the fixture volumes and every object version after success or failure.
 

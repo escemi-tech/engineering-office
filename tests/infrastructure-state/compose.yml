@@ -26,4 +26,7 @@ services:
         aws s3api create-bucket --bucket engineering-office-audit-ci
         aws s3api put-bucket-acl --bucket engineering-office-audit-ci --grant-write URI=http://acs.amazonaws.com/groups/s3/LogDelivery --grant-read-acp URI=http://acs.amazonaws.com/groups/s3/LogDelivery
         aws s3api put-bucket-versioning --bucket engineering-office-audit-ci --versioning-configuration Status=Enabled
-        aws s3api put-public-access-block --bucket engineering-office-audit-ci --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+        # OVH does not implement S3 Block Public Access. Exercise ACL protection.
+        aws s3api create-bucket --bucket engineering-office-audit-shared
+        aws s3api put-bucket-acl --bucket engineering-office-audit-shared --grant-write URI=http://acs.amazonaws.com/groups/s3/LogDelivery --grant-read-acp URI=http://acs.amazonaws.com/groups/s3/LogDelivery --grant-read id=0000000000000000000000000000000000000000000000000000000000000000
+        aws s3api put-bucket-versioning --bucket engineering-office-audit-shared --versioning-configuration Status=Enabled

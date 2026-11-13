@@ -30,7 +30,7 @@ not protect against loss of the entire provider account.
 
 Create a dedicated professional S3 identity through the provider's native account
 management and store its credentials in Bitwarden. Bootstrap requires bucket
-listing and creation, tag/ACL/versioning/public-access configuration, and access
+listing and creation, tag/ACL/versioning/logging configuration, and access
 to state and lock objects. Bucket discovery reads the S3 identity's bucket names;
 only the selected bucket's details are inspected. Restrict the identity to this
 purpose and do not reuse the runtime's backup identity. After bootstrap, a daily
@@ -38,8 +38,9 @@ state operator needs list/read/write access to the state key and read/write/dele
 access to its `.tflock` key; bucket administration stays separate.
 Access logging is mandatory. Supply an existing dedicated private audit bucket
 in the same region, named `engineering-office-audit-<unique-suffix>`. The bootstrap
-checks versioning, all four public-access blocks, the LogDelivery group's `WRITE`
-and `READ_ACP` grants, and absence of recursive logging before any state changes.
+checks versioning, the LogDelivery group's `WRITE` and `READ_ACP` grants, and
+absence of recursive logging before any state changes. Other ACL entries may
+only grant `FULL_CONTROL` to the bucket owner; extra readers are rejected.
 It never creates or modifies the audit destination. The Ansible collection enables
 source logging but does not support the log-delivery canned ACL for destination setup.
 Use the provider's native CLI procedure with the separately approved administrator:
@@ -49,7 +50,6 @@ Use the provider's native CLI procedure with the separately approved administrat
 aws --endpoint-url "$state_endpoint" --region "$state_region" s3 mb "s3://$state_audit_bucket"
 aws --endpoint-url "$state_endpoint" s3api put-bucket-acl --bucket "$state_audit_bucket" --grant-write URI=http://acs.amazonaws.com/groups/s3/LogDelivery --grant-read-acp URI=http://acs.amazonaws.com/groups/s3/LogDelivery
 aws --endpoint-url "$state_endpoint" s3api put-bucket-versioning --bucket "$state_audit_bucket" --versioning-configuration Status=Enabled
-aws --endpoint-url "$state_endpoint" s3api put-public-access-block --bucket "$state_audit_bucket" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 ```
 
 Authenticate that administrative terminal using its dedicated shared credentials
@@ -60,6 +60,13 @@ access logs contain source addresses and object names. See the
 [OVH server-access logging procedure](https://docs.ovhcloud.com/en/guides/storage-and-backup/object-storage/s3-server-access-logging).
 Prove actual delivery at the selected endpoint before activation; fixture delivery
 is not provider qualification.
+
+OVH's [S3 compatibility matrix](https://docs.ovhcloud.com/en/guides/storage-and-backup/object-storage/s3-s3-compliancy)
+lists AWS Block Public Access as unsupported. The bootstrap uses private ACLs
+and verifies the effective grants instead. It does not provide an account-level
+guard against later administrative ACL changes. Keep bucket administration with
+the bootstrap operator, restrict the daily operator separately, and verify that
+anonymous reads of real state and audit objects are denied before activation.
 
 Supply a native AWS shared credentials file, owned by the operator with mode
 `0600`, using the `[default]` profile. Keep it outside the checkout. Separately
@@ -101,8 +108,9 @@ storage quote and configuration, run:
 make infrastructure-state
 ```
 
-The role creates or converges the owned bucket's private ACL, public-access block
-and versioning, enables access logging to the verified audit destination, writes location metadata to
+The role creates or converges the owned bucket's private ACL and versioning,
+enables access logging to the verified audit destination, verifies exclusive
+owner access to the state bucket, writes location metadata to
 `tofu/professional-host/.local/backend.hcl`, and runs native `tofu init`. It never
 stores credentials in backend configuration. Changing an existing checkout's
 backend requires explicit native migration; the role does not silently

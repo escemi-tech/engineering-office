@@ -7,7 +7,6 @@
       bucket_acl: true
       bucket_versioning: true
       bucket_logging: true
-      public_access_block: true
   register: protected_bucket
   no_log: true
 # Assert
@@ -17,8 +16,8 @@
       - protected_bucket.buckets[0].bucket_versioning.Status == 'Enabled'
       - protected_bucket.buckets[0].bucket_logging.LoggingEnabled.TargetBucket == infrastructure_state_log_bucket
       - protected_bucket.buckets[0].bucket_logging.LoggingEnabled.TargetPrefix == infrastructure_state_bucket + '/'
-      - protected_bucket.buckets[0].public_access_block.values() | select('equalto', true) | list | length == 4
-      - protected_bucket.buckets[0].bucket_acl.Grants | selectattr('Grantee.Type', 'equalto', 'Group') | list | length == 0
+      - protected_bucket.buckets[0].bucket_acl.Grants | length == 1
+      - protected_bucket.buckets[0].bucket_acl.Grants[0].Grantee.ID == protected_bucket.buckets[0].bucket_acl.Owner.ID
     quiet: true
 # Act
 - name: Save an encrypted native plan
@@ -53,6 +52,13 @@
     mode: get
     dest: "{{ state_fixture.path }}/encrypted-state"
   no_log: true
+- name: Store a private synthetic audit object
+  amazon.aws.s3_object:
+    bucket: "{{ infrastructure_state_log_bucket }}"
+    object: qualification.log
+    mode: put
+    content: synthetic-state-access-log
+  no_log: true
 # Assert
 - name: Probe the saved plan and remote state for plaintext disclosure
   ansible.builtin.command:
@@ -81,12 +87,16 @@
   ansible.builtin.assert:
     that: plaintext_probes.results | map(attribute='rc') | unique | list == [1]
     quiet: true
-- name: Require anonymous state access to be denied
+- name: Require anonymous state and audit access to be denied
   # checkov:skip=CKV2_ANSIBLE_1:Public synthetic loopback S3 fixture
   ansible.builtin.uri:
-    url: "{{ infrastructure_state_endpoint }}/{{ infrastructure_state_bucket }}/professional-host.tfstate"
+    url: "{{ infrastructure_state_endpoint }}/{{ item }}"
     status_code: [403]
     use_proxy: false
+    use_netrc: false
+  loop:
+    - "{{ infrastructure_state_bucket }}/professional-host.tfstate"
+    - "{{ infrastructure_state_log_bucket }}/qualification.log"
 # Act: hold a real lock, then attempt a second writer in the same backend.
 - name: Begin a bounded asynchronous state update
   ansible.builtin.command:
@@ -266,11 +276,6 @@
     logging:
       target_bucket: "{{ infrastructure_state_log_bucket }}"
       target_prefix: unmanaged/
-    public_access:
-      block_public_acls: true
-      block_public_policy: true
-      ignore_public_acls: true
-      restrict_public_buckets: true
     tags:
       managed-by: synthetic-other-owner
   no_log: true
@@ -300,6 +305,9 @@
       rejection: Refuse to adopt an unmanaged bucket
     - bucket: "{{ infrastructure_state_bucket }}"
       audit: engineering-office-audit-absent
+      rejection: Require protected nonrecursive audit delivery before state changes
+    - bucket: "{{ infrastructure_state_bucket }}"
+      audit: engineering-office-audit-shared
       rejection: Require protected nonrecursive audit delivery before state changes
   register: unmanaged_rejection
   no_log: true
