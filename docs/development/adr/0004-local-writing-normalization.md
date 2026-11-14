@@ -54,7 +54,7 @@ Callers must supply complete format fragments and retain trustworthy provenance;
 syntax alone cannot identify source evidence. Unknown formats/locales remain
 unchanged with explicit unsupported coverage. Reject malformed inputs.
 
-The exact [npm dependency and lockfile](../../../packages/writing-normalizer/package.json)
+The exact [npm dependency and lockfile](../../../features/writing/normalizer/package.json)
 pin `polytypo@1.19.0`, MIT, Node.js 20 or newer. The release tag resolves to
 [`ea6ea017c6b6aa0ed238a567ba19bb5f58a81094`](https://github.com/polytypo/polytypo-js/tree/ea6ea017c6b6aa0ed238a567ba19bb5f58a81094).
 The reviewed npm integrity is
@@ -78,7 +78,7 @@ by itself.
 
 ## Qualification and consequences
 
-The [suite and synthetic fixtures](../../../packages/writing-normalizer/tests)
+The [suite and synthetic fixtures](../../../features/writing/normalizer/tests)
 pass 44 tests in Node.js 26.13.0 with container networking disabled:
 
 - English email/review wording and French/Canadian French punctuation spacing.

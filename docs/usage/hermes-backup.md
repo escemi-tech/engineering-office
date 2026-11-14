@@ -48,7 +48,7 @@ an encrypted copy. Keep old keys until every backup requiring them expires.
 On the controller:
 
 ```sh
-install -m 0600 ansible/hermes-backup.example.yml .local/hermes-backup.yml
+install -m 0600 platform/assistant/backup/hermes-backup.example.yml .local/hermes-backup.yml
 ```
 
 Edit its repository and password-file paths to match the target. These are
@@ -107,7 +107,7 @@ response alone does not prove alert delivery or correct check configuration.
 On the controller, prepare the approved inventory and schedule settings:
 
 ```sh
-install -m 0600 ansible/hermes-backup-schedule.example.yml .local/hermes-backup-schedule.yml
+install -m 0600 platform/assistant/backup/hermes-backup-schedule.example.yml .local/hermes-backup-schedule.yml
 ```
 
 Edit the endpoint, three protected file paths and explicit calendar. Set

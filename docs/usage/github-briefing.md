@@ -30,16 +30,16 @@ Repository membership in the policy is the operator's explicit admission decisio
 the collector cannot independently infer business ownership.
 
 Use the Node version in
-[`packages/github-briefing/.node-version`](../../packages/github-briefing/.node-version),
+[`features/briefing/github/.node-version`](../../features/briefing/github/.node-version),
 npm, GNU Make and HTTPS access to `api.github.com`. The CLI supports Linux with
 owner-only regular files. From the repository root:
 
 ```sh
-npm ci --ignore-scripts --prefix packages/github-briefing
+npm ci --ignore-scripts --prefix features/briefing/github
 install -d -m 700 .local/github-briefing
 ```
 
-For a selected subset, copy `packages/github-briefing/source.example.json` with
+For a selected subset, copy `features/briefing/github/source.example.json` with
 `install -m 600` to `.local/github-briefing/source.json` and replace its synthetic
 values with the approved account and repository IDs, names and visibility.
 
@@ -85,7 +85,7 @@ credentials or requests additional permissions.
 To admit the account's current repository set into one context:
 
 ```sh
-node packages/github-briefing/src/cli.js \
+node features/briefing/github/src/adapters/cli.js \
   --init-policy --scope professional-internal \
   --exclude example-user/household \
   --source .local/github-briefing/source.json \
@@ -107,7 +107,7 @@ make github-briefing
 For another already approved context, provide its separate protected files:
 
 ```sh
-node packages/github-briefing/src/cli.js \
+node features/briefing/github/src/adapters/cli.js \
   --source /absolute/path/source.json \
   --token-file /absolute/path/token --format text
 ```
@@ -172,7 +172,7 @@ There is no model-generated synthesis, external delivery or saved briefing.
 Choose JSON when five items or the abbreviated detail are insufficient:
 
 ```sh
-node packages/github-briefing/src/cli.js \
+node features/briefing/github/src/adapters/cli.js \
   --source .local/github-briefing/source.json \
   --token-file .local/github-briefing/token --format json
 ```
@@ -369,13 +369,13 @@ from the repository root:
 set -euo pipefail
 umask 077
 qualification_dir=$(mktemp -d "$PWD/.local/github-briefing/qualification.XXXXXX")
-node packages/github-briefing/src/cli.js \
+node features/briefing/github/src/adapters/cli.js \
   --source .local/github-briefing/source.json \
   --token-file .local/github-briefing/token > "$qualification_dir/snapshot.json"
 node --input-type=module - "$qualification_dir/snapshot.json" \
   > "$qualification_dir/briefing.txt" <<'JS'
 import { readFile } from "node:fs/promises";
-import { GitHubBriefingText } from "./packages/github-briefing/src/briefing-text.js";
+import { GitHubBriefingText } from "./features/briefing/github/src/github-briefing.js";
 const snapshot = JSON.parse(await readFile(process.argv[2], "utf8"));
 process.stdout.write(new GitHubBriefingText().render(snapshot));
 JS
