@@ -1,0 +1,7 @@
+---
+# Act: these are the normal operator entrypoints, including repeated convergence.
+- name: Configure the private interface
+  ansible.builtin.import_playbook: ../../../management.yml
+
+- name: Restrict administration through the verified tunnel
+  ansible.builtin.import_playbook: ../../../management-enforce.yml

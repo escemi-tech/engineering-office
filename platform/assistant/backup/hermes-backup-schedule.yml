@@ -1,0 +1,10 @@
+---
+- name: Require explicit automation targets
+  ansible.builtin.import_playbook: ../deployment/helpers/hermes-inventory.yml
+
+- name: Configure unattended Hermes backups
+  hosts: hermes
+  become: true
+  gather_facts: false
+  roles:
+    - hermes_backup_schedule

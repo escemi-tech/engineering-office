@@ -79,7 +79,7 @@ in Git, command arguments or CI settings.
 Use the [isolated Ansible controller setup](hermes-deployment.md#prepare-the-controller-and-host).
 Its requirements include the S3 SDK; install its Galaxy requirements as well.
 Install OpenTofu from the official distribution at the release pinned in
-[`tofu/.opentofu-version`](../../tofu/.opentofu-version). The bootstrap verifies
+[`tooling/opentofu/.opentofu-version`](../../tooling/opentofu/.opentofu-version). The bootstrap verifies
 that version before any storage mutation.
 
 ## Preview and initialize
@@ -88,7 +88,7 @@ From the repository root:
 
 ```sh
 install -d -m 0700 .local
-install -m 0600 ansible/infrastructure-state.example.yml .local/infrastructure-state.yml
+install -m 0600 platform/hosting/state/infrastructure-state.example.yml .local/infrastructure-state.yml
 ```
 
 Edit both bucket names, endpoint, region and absolute paths to the two protected files.
@@ -96,7 +96,7 @@ Use canonical paths without symlinks. Review an existing destination before
 replacing it. Preview with the same dedicated identity:
 
 ```sh
-ansible-playbook ansible/infrastructure-state.yml \
+ansible-playbook platform/hosting/state/infrastructure-state.yml \
   --extra-vars @.local/infrastructure-state.yml --check
 ```
 
@@ -111,7 +111,7 @@ make infrastructure-state
 The role creates or converges the owned bucket's private ACL and versioning,
 enables access logging to the verified audit destination, verifies exclusive
 owner access to the state bucket, writes location metadata to
-`tofu/professional-host/.local/backend.hcl`, and runs native `tofu init`. It never
+`platform/hosting/host/tofu/.local/backend.hcl`, and runs native `tofu init`. It never
 stores credentials in backend configuration. Changing an existing checkout's
 backend requires explicit native migration; the role does not silently
 reconfigure or copy existing state to another destination. If creation succeeds
@@ -137,7 +137,7 @@ export TF_VAR_state_password_file=/absolute/path/to/professional-state-password
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE
 ```
 
-Native operations run in `tofu/professional-host`. Keep any saved plans in its
+Native operations run in `platform/hosting/host/tofu`. Keep any saved plans in its
 ignored `.local/` directory with a restrictive `umask 077`. Never disable locking
 or encryption to make a failed operation proceed. The workspace currently owns
 the backend configuration; compute resources are added with the qualified host

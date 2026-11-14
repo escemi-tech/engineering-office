@@ -1,0 +1,96 @@
+gossfile:
+  ../goss.yaml: {}
+command:
+  hermes-health:
+    exec: cd /opt/engineering-office && bash platform/assistant/tests/runtime/helpers/compose.sh exec -T hermes curl --fail --silent --max-time 10 http://127.0.0.1:8642/health
+    exit-status: 0
+    stdout:
+      - '"status": "ok"'
+  hermes-unprivileged-gateway:
+    exec: cd /opt/engineering-office && bash platform/assistant/tests/runtime/helpers/compose.sh exec -T hermes ps -eo uid,args
+    exit-status: 0
+    stdout:
+      - "/^10000 .*gateway run --replace$/"
+  hermes-test-network-blocks-external-access:
+    exec: |
+      # Arrange
+      cd /opt/engineering-office
+      # Act: a numeric destination avoids mistaking DNS failure for isolation.
+      if bash platform/assistant/tests/runtime/helpers/compose.sh exec -T hermes curl --noproxy '*' \
+        --silent --connect-timeout 2 --max-time 3 https://1.1.1.1; then
+        exit 1
+      fi
+      # Assert: any successful external request fails this check.
+    timeout: 5000
+    exit-status: 0
+  hermes-rejects-unauthenticated-requests:
+    exec: |
+      # Arrange
+      cd /opt/engineering-office
+      # Act
+      bash platform/assistant/tests/runtime/helpers/compose.sh exec -T hermes curl --silent --max-time 10 \
+        --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8642/api/sessions
+      # Assert: Goss requires an authentication failure.
+    exit-status: 0
+    stdout:
+      - /^401$/
+  hermes-synthetic-conversation:
+    exec: |
+      # Arrange
+      cd /opt/engineering-office
+      # Act
+      bash platform/assistant/tests/runtime/helpers/compose.sh exec -T hermes sh -c '
+        curl --fail --silent --max-time 90 \
+          -H "Authorization: Bearer $API_SERVER_KEY" \
+          -H "X-Hermes-Session-Id: engineering-office-smoke" \
+          -H "Content-Type: application/json" \
+          --data-binary @- http://127.0.0.1:8642/v1/chat/completions
+      ' <<'JSON'
+      {"messages":[{"role":"user","content":"Prepare a synthetic briefing."}],"stream":false}
+      JSON
+      # Assert: the fixture requires the complete compiled policy in system context.
+    timeout: 100000
+    exit-status: 0
+    stdout:
+      - "Synthetic briefing: no connected sources."
+      - '"finish_reason": "stop"'
+  hermes-protected-installation-and-policy:
+    exec: |
+      # Arrange
+      cd /opt/engineering-office
+      # Act: use the same unprivileged identity as the upstream gateway.
+      bash platform/assistant/tests/runtime/helpers/compose.sh exec -T --user 10000:10000 hermes sh -ec '
+        test ! -w /opt/hermes/run_agent.py
+        test ! -w /opt/data/config.yaml
+        test ! -w /etc/hermes/config.yaml
+        test -r /opt/writing-policy/AGENTS.md
+        test ! -w /opt/writing-policy/AGENTS.md
+        test ! -w /opt/writing-policy
+        test ! -e /var/run/docker.sock
+        test -w /opt/data
+      '
+      # Assert: all boundary checks must succeed.
+    exit-status: 0
+  hermes-inference-rejects-user-supplied-policy:
+    exec: |
+      # Arrange: put the complete policy in user content, without system instructions.
+      cd /opt/engineering-office
+      # Act
+      bash platform/assistant/tests/runtime/helpers/compose.sh exec -T hermes node --input-type=module <<'JS'
+      import assert from 'node:assert/strict';
+      import { readFileSync } from 'node:fs';
+      const content = readFileSync('/opt/writing-policy/AGENTS.md', 'utf8');
+      const response = await fetch('http://inference:8080/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer synthetic-inference-key-for-tests-only',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({model: 'synthetic', messages: [{role: 'user', content}], stream: false}),
+        signal: AbortSignal.timeout(5000),
+      });
+      // Assert: user text cannot satisfy the system-policy loading requirement.
+      assert.equal(response.status, 400);
+      JS
+    timeout: 10000
+    exit-status: 0

@@ -14,6 +14,8 @@ jobs:
       # Remove with the Makefile exclusion once zizmor accepts the APM ecosystem.
       # GitHub's native Dependabot configuration validation remains active.
       linter-env: |
+        ANSIBLE_DIRECTORY=platform
+        ANSIBLE_HOME=/github/home/.ansible
         STRIP_DEFAULT_WORKSPACE_FOR_REGEX=true
         FILTER_REGEX_EXCLUDE=^\.github/dependabot\.yml$
     permissions:

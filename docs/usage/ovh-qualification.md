@@ -150,7 +150,7 @@ retain a dated account quote for the selected region and billing mode. A public
 starting price does not establish eligibility or the final invoice. Recheck the
 quote and available quota before execution.
 
-The disposable [CI VM](../../tests/lima.yml) validates deployment behavior with
+The disposable [CI VM](../../platform/assistant/tests/lima.yml) validates deployment behavior with
 synthetic inference. Its size is a test configuration, not measured production
 capacity. Allow for the OS, Docker, retained state and backup operations when
 sizing the host; no local model inference is included.

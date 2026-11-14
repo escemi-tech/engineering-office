@@ -1,0 +1,33 @@
+---
+# Act: use the public command, isolating expected failures from the JUnit callback.
+- name: Run the operator health check
+  ansible.builtin.command:
+    argv:
+      - env
+      - -u
+      - ANSIBLE_CALLBACKS_ENABLED
+      - "{{ ansible_playbook_python | dirname }}/ansible-playbook"
+      - "{{ playbook_dir }}/../../deployment/hermes-health.yml"
+      - -i
+      - "{{ health_test_inventory.path }}"
+      - --extra-vars
+      - "{{ {'hermes_project_name': health_test_project | default('engineering-office-hermes-test')} | to_json }}"
+  delegate_to: localhost
+  become: false
+  register: health_test_result
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+# Assert: inspect captured output without publishing it if redaction fails.
+- name: Require the expected result and sanitized diagnostics
+  ansible.builtin.assert:
+    that:
+      - health_test_result.rc == health_test_rc | default(2)
+      - health_test_message in health_test_result.stdout
+      - "'changed=0' in health_test_result.stdout"
+      - "'synthetic-gateway-key' not in health_test_result.stdout ~ health_test_result.stderr"
+      - "'synthetic-inference-key' not in health_test_result.stdout ~ health_test_result.stderr"
+      - "'synthetic-health-private-canary' not in health_test_result.stdout ~ health_test_result.stderr"
+      - "'Synthetic briefing:' not in health_test_result.stdout ~ health_test_result.stderr"
+    quiet: true

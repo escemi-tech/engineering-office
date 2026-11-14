@@ -1,0 +1,18 @@
+---
+# Super-linter scans platform/; controller dependencies have one canonical owner.
+project_dir: ../../tooling/ansible
+quiet: true
+kinds:
+  - inventory: "**/molecule/*/inventory.yml"
+# Preserve the shared linter's baseline rules while selecting our project root.
+skip_list:
+  - empty-string-compare
+  - "204"
+  - no-changed-when
+  - command-instead-of-module
+  - command-instead-of-shell
+  - no-handler
+  - unnamed-task
+  - yaml
+use_default_rules: true
+verbosity: 1

@@ -16,7 +16,7 @@ to a real host. An operator runs this command after approving the target and cha
 ## Prepare the controller and host
 
 Use a trusted Linux controller with GNU Make, the APM compiler selected in
-`services/hermes/.apm-version`, and the Python version in `ansible/.python-version`.
+`platform/assistant/runtime/.apm-version`, and the Python version in `tooling/ansible/.python-version`.
 Keep SSH access and Bitwarden
 on this controller, outside the assistant runtime. Install the pinned Ansible
 runtime in an isolated environment:
@@ -24,12 +24,12 @@ runtime in an isolated environment:
 ```sh
 python3 -m venv .local/ansible
 . .local/ansible/bin/activate
-python -m pip install -r ansible/requirements.txt
-ansible-galaxy collection install -r ansible/collections/requirements.yml
+python -m pip install -r tooling/ansible/requirements.txt
+ansible-galaxy collection install -r tooling/ansible/collections/requirements.yml
 ```
 
 For host preparation, use Ubuntu 26.04 LTS amd64 with systemd, Python 3 and working
-Ubuntu package repositories. CI qualifies the repository's [Ubuntu VM](../../tests/lima.yml). Allow
+Ubuntu package repositories. CI qualifies the repository's [Ubuntu VM](../../platform/assistant/tests/lima.yml). Allow
 2 CPUs, 4 GiB RAM and enough Docker storage for the pinned image and state.
 The SSH operator must be able to become root; add `--ask-become-pass` to a direct
 Ansible invocation if required. Establish the SSH host key independently before
@@ -44,8 +44,8 @@ from another directory before changing its owner or location.
 
 ```sh
 install -d -m 0700 .local
-install -m 0600 ansible/hermes-inventory.example.yml .local/hermes-inventory.yml
-install -m 0600 ansible/hermes-deployment.example.yml .local/hermes-deployment.yml
+install -m 0600 platform/assistant/deployment/hermes-inventory.example.yml .local/hermes-inventory.yml
+install -m 0600 platform/assistant/deployment/hermes-deployment.example.yml .local/hermes-deployment.yml
 ```
 
 Fill the inventory with the approved host's private SSH address and operator
@@ -73,7 +73,7 @@ With the inventory configured and the Ansible environment active:
 make hermes-host
 ```
 
-The [host playbook](../../ansible/hermes-host.yml) checks the qualified platform,
+The [host playbook](../../platform/assistant/deployment/hermes-host.yml) checks the qualified platform,
 installs Ubuntu's `docker.io`, `docker-compose-v2`, `make`, `python3-requests` and `restic`
 packages, and starts and enables Docker. It uses Ansible's built-in modules and
 the [Ubuntu package installation path](https://ubuntu.com/server/docs/how-to/containers/docker-for-system-admins/),
