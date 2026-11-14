@@ -4,7 +4,8 @@ Professional AI assistance and automation for software engineering, knowledge an
 
 Run a pinned Hermes gateway with persistent conversations and a local authenticated
 API. Start with the [synthetic demo and runtime guide](docs/usage/hermes.md).
-Cloud provisioning and private integrations remain pending.
+Use the [host provisioning guide](docs/usage/host-provisioning.md) to prepare a
+reviewed OVH plan. Live cloud qualification and private integrations remain pending.
 
 Read a concise local briefing of your GitHub work, Copilot tasks and separate PR review/CI context with the
 [GitHub briefing source guide](docs/usage/github-briefing.md).

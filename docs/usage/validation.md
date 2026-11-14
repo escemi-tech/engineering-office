@@ -284,14 +284,34 @@ loss of the source guest. It does not establish an operational backup destinatio
 recovery after runner/provider loss, Bitwarden key recovery, real alert delivery
 or a private operational disaster drill.
 
-`make plan`, `provision`, `configure`, `deploy`, `verify` and `backup` fail explicitly
-until cloud infrastructure and operational preflight are implemented. Use the
+`make configure`, `deploy`, `verify` and `backup` fail explicitly until their
+operational entrypoints are implemented. Use the
 `hermes-start`, `hermes-stop` and `hermes-logs` targets for the local Compose runtime,
 `hermes-host` to prepare an explicitly approved Ubuntu host, and `hermes-deploy`
 to install or update its runtime.
 Use `hermes-backup-check` to verify integrity and freshness, and `hermes-backup`,
 `hermes-backup-prune` and `hermes-restore` for explicit stopped-state recovery
 operations, following the [backup guide](hermes-backup.md).
+
+## Cloud host provisioning
+
+The dedicated `test-professional-host.yml` workflow uses the shared OpenTofu and
+Ansible test actions without cloud credentials. Native provider mocks cover the
+supported host plan, private-only cutover, retained host and rejection of broad
+SSH, a changed image, an excessive test cost or an excessive monthly quote.
+Synthetic Ansible cases reject a fourth campaign run, overlapping runs, changed
+deadlines and reuse after completed cleanup. They also exercise the production
+cleanup guards: empty and
+partially created runs are accepted, while foreign projects, mismatched run
+markers, retained volumes, duplicate resources, foreign SSH keys and orphan ports are rejected
+before any mutation.
+
+These checks do not prove live provider permissions, address release, timer
+execution or interruption cleanup. The bounded real campaign in the
+[provisioning guide](host-provisioning.md) must qualify those boundaries before
+retaining an operational host. `make plan` prepares an encrypted review artifact;
+`make provision` requires its exact approved fingerprint and an independent
+expiry timer for disposable runs.
 
 ## Private administration
 

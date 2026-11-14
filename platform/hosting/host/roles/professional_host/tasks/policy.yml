@@ -1,0 +1,30 @@
+---
+- name: Require a bounded reviewed host configuration
+  ansible.builtin.assert:
+    that:
+      - professional_host is mapping
+      - professional_host.project_id is match('^[a-f0-9]{32}$|^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$')
+      - professional_host.quote.hourly_eur_with_tax | float > 0
+      - professional_host.quote.monthly_eur_with_tax | float > 0
+      - professional_host.quote.monthly_eur_with_tax | float <= 100
+      - professional_host.qualification is none or professional_host.qualification is mapping
+      - ansible_verbosity < 3
+    quiet: true
+
+- name: Require an exact disposable run identity and bounded cost
+  ansible.builtin.assert:
+    that:
+      - professional_host.qualification.run_id is match('^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$')
+      - professional_host.qualification.expires_at is match('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$')
+      - professional_host.quote.hourly_eur_with_tax | float * 3 <= 0.60
+    fail_msg: Use a unique disposable run and reserve three billed hours within EUR 0.60, leaving the storage allowance and cleanup reserve untouched.
+    quiet: true
+  when: professional_host.qualification is not none
+
+- name: Derive the resource name and exact ownership marker
+  ansible.builtin.set_fact:
+    professional_host_name: "{{ 'engineering-office' if professional_host.qualification is none else 'engineering-office-q-' + professional_host.qualification.run_id }}"
+    professional_host_ownership: >-
+      {{ {'owner': 'engineering-office', 'managed_by': 'opentofu',
+          'purpose': 'professional-host' if professional_host.qualification is none else 'qualification'}
+          | combine(professional_host.qualification | default({}, true)) }}

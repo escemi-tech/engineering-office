@@ -1,0 +1,91 @@
+---
+- name: Validate the independent cloud profile
+  ansible.builtin.import_tasks: cloud.yml
+
+- name: Verify that the paid writer has stopped before reconciling resources
+  ansible.builtin.command:
+    argv:
+      [
+        systemctl,
+        --user,
+        show,
+        engineering-office-provisioning.service,
+        --property=ActiveState,
+        --value,
+      ]
+  changed_when: false
+  register: professional_host_writer_state
+
+- name: Refuse cleanup during an active or stopping apply
+  ansible.builtin.assert:
+    that: professional_host_writer_state.stdout in ['inactive', 'failed']
+    fail_msg: Stop the owned writer through systemd before cleanup; never race an active provider apply.
+    quiet: true
+
+- name: Discover the selected run without consulting OpenTofu state
+  ansible.builtin.import_tasks: inspect.yml
+
+- name: Verify all ownership before deleting any resource
+  ansible.builtin.import_tasks: cleanup-ownership.yml
+
+- name: Delete the owned server and its local disk
+  openstack.cloud.server:
+    cloud: "{{ professional_host_cloud }}"
+    name: "{{ item.id }}"
+    state: absent
+    wait: true
+    timeout: 900
+    delete_ips: false
+  loop: "{{ professional_host_servers.servers }}"
+  no_log: true
+
+- name: Read remaining project ports after server deletion
+  openstack.cloud.port_info:
+    cloud: "{{ professional_host_cloud }}"
+    filters:
+      project_id: "{{ professional_host.project_id }}"
+  register: professional_host_remaining_ports
+  no_log: true
+
+- name: Check group membership without the SDK's exact-list filter
+  ansible.builtin.import_tasks: cleanup-ports.yml
+
+- name: Delete the owned security group and its rules
+  openstack.cloud.security_group:
+    cloud: "{{ professional_host_cloud }}"
+    name: "{{ item.id }}"
+    state: absent
+  loop: "{{ professional_host_groups.security_groups }}"
+  no_log: true
+
+- name: Delete the matching keypair
+  openstack.cloud.keypair:
+    cloud: "{{ professional_host_cloud }}"
+    name: "{{ item.name }}"
+    state: absent
+  loop: "{{ professional_host_keypairs.keypairs }}"
+  no_log: true
+
+- name: Verify deletion through fresh provider reads
+  ansible.builtin.import_tasks: inspect.yml
+
+- name: Require no remaining resource for this run
+  ansible.builtin.assert:
+    that:
+      - professional_host_servers.servers | length == 0
+      - professional_host_groups.security_groups | length == 0
+      - professional_host_keypairs.keypairs | length == 0
+    quiet: true
+
+- name: Record completed cleanup without deleting remote state history
+  ansible.builtin.copy:
+    dest: "{{ professional_host_root }}/.local/qualification-cleanup.json"
+    content: "{{ {'run_id': professional_host.qualification.run_id, 'resources_absent': true} | to_nice_json }}\n"
+    mode: "0600"
+
+- name: Disarm expiry only after provider deletion is verified
+  ansible.builtin.systemd_service:
+    name: engineering-office-qualification-expiry.timer
+    scope: user
+    enabled: false
+    state: stopped

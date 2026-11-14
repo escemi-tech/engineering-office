@@ -1,0 +1,59 @@
+---
+- name: Validate the resource scope
+  ansible.builtin.import_tasks: policy.yml
+
+- name: Inspect the independent native OpenStack profile
+  ansible.builtin.stat:
+    path: "{{ professional_host_clouds_file }}"
+    follow: false
+  register: professional_host_cloud_file
+
+- name: Require a canonical operator-owned private profile
+  ansible.builtin.assert:
+    that:
+      - professional_host_clouds_file is match('^/')
+      - professional_host_clouds_file == professional_host_clouds_file | realpath
+      - professional_host_cloud_file.stat.isreg | default(false)
+      - professional_host_cloud_file.stat.mode | default('') == '0600'
+      - professional_host_cloud_file.stat.uid | default(-1) == lookup('ansible.builtin.pipe', 'id -u') | int
+    quiet: true
+
+- name: Load only the dedicated cloud configuration
+  ansible.builtin.set_fact:
+    # The collection accepts connection options inside a complete cloud dict,
+    # not alongside it as module arguments.
+    professional_host_cloud: "{{ (lookup('ansible.builtin.file', professional_host_clouds_file) | from_yaml).clouds['engineering-office-provisioner'] | combine({'api_timeout': 30}) }}"
+  no_log: true
+
+- name: Require the approved project and region with verified TLS
+  ansible.builtin.assert:
+    that:
+      - professional_host_cloud.auth.project_id == professional_host.project_id
+      - professional_host_cloud.region_name == 'GRA11'
+      - professional_host_cloud.auth.auth_url == 'https://auth.cloud.ovh.net/v3'
+      - professional_host_cloud.verify | default(true) | bool
+    quiet: true
+  no_log: true
+
+- name: Refuse ambient provider identities and diagnostic credential logging
+  ansible.builtin.assert:
+    that: lookup('ansible.builtin.env', item) | length == 0
+    fail_msg: Use a fresh controller shell without ambient OpenStack credentials or provider debug logging.
+    quiet: true
+  loop:
+    - OS_AUTH_URL
+    - OS_USERNAME
+    - OS_USER_ID
+    - OS_PASSWORD
+    - OS_TOKEN
+    - OS_PROJECT_ID
+    - OS_TENANT_ID
+    - OS_PROJECT_NAME
+    - OS_TENANT_NAME
+    - OS_APPLICATION_CREDENTIAL_ID
+    - OS_APPLICATION_CREDENTIAL_NAME
+    - OS_APPLICATION_CREDENTIAL_SECRET
+    - OS_DEBUG
+    - TF_LOG
+    - TF_LOG_PROVIDER
+    - TF_LOG_CORE

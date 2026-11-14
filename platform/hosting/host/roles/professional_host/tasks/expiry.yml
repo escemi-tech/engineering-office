@@ -1,0 +1,103 @@
+---
+- name: Validate the dedicated profile and campaign configuration
+  ansible.builtin.import_tasks: cloud.yml
+
+- name: Refuse automatic expiry for a retained host
+  ansible.builtin.assert:
+    that: professional_host.qualification is not none
+    quiet: true
+
+- name: Check the fixed qualification deadline
+  ansible.builtin.import_tasks: deadline.yml
+
+- name: Check that the user manager survives logout
+  ansible.builtin.command:
+    argv:
+      [
+        loginctl,
+        show-user,
+        "{{ lookup('ansible.builtin.pipe', 'id -u') }}",
+        --property=Linger,
+        --value,
+      ]
+  changed_when: false
+  register: professional_host_linger
+
+- name: Require a persistent independently running controller
+  ansible.builtin.assert:
+    that:
+      - professional_host_linger.stdout == 'yes'
+      - professional_host_root is match('^/[A-Za-z0-9_./-]+$')
+    fail_msg: Enable user lingering and keep this controller online for the approved campaign. Use a checkout path without spaces or systemd specifiers.
+    quiet: true
+
+- name: Read the existing run reservation and cleanup record
+  ansible.builtin.set_fact:
+    professional_host_previous_run: "{{ lookup('ansible.builtin.file', professional_host_root + '/.local/qualification-expiry.yml', errors='ignore') | default('{}', true) | from_yaml }}"
+    professional_host_cleanup_record: "{{ lookup('ansible.builtin.file', professional_host_root + '/.local/qualification-cleanup.json', errors='ignore') | default('{}', true) | from_json }}"
+    professional_host_campaign: "{{ lookup('ansible.builtin.file', professional_host_root + '/.local/qualification-campaign.json', errors='ignore') | default('[]', true) | from_json }}"
+
+- name: Validate the campaign reservation before modifying timers
+  ansible.builtin.import_tasks: campaign.yml
+
+- name: Inspect the reserved user units before installation
+  ansible.builtin.stat:
+    path: "{{ lookup('ansible.builtin.env', 'HOME') }}/.config/systemd/user/engineering-office-qualification-expiry.{{ item }}"
+    follow: false
+  loop: [service, timer]
+  register: professional_host_units
+
+- name: Refuse to replace unmanaged or indirect user units
+  ansible.builtin.assert:
+    that:
+      - not item.stat.islnk | default(false)
+      - not item.stat.exists or lookup('ansible.builtin.file', item.stat.path).startswith('# Managed by engineering-office qualification')
+    quiet: true
+  loop: "{{ professional_host_units.results }}"
+
+- name: Create the standard user unit directory
+  ansible.builtin.file:
+    path: "{{ lookup('ansible.builtin.env', 'HOME') }}/.config/systemd/user"
+    state: directory
+    mode: "0700"
+
+- name: Reserve this campaign allocation before installing the timer
+  ansible.builtin.copy:
+    dest: "{{ professional_host_root }}/.local/qualification-campaign.json"
+    content: "{{ (professional_host_campaign + [professional_host.qualification.run_id]) | unique | list | to_nice_json }}\n"
+    mode: "0600"
+
+- name: Save the protected cleanup inputs independently of the provider state
+  ansible.builtin.copy:
+    dest: "{{ professional_host_root }}/.local/qualification-expiry.yml"
+    content: "{{ {'professional_host': professional_host, 'professional_host_clouds_file': professional_host_clouds_file} | to_nice_yaml }}"
+    mode: "0600"
+
+- name: Install the native cleanup service and fixed expiry timer
+  ansible.builtin.template:
+    src: "expiry.{{ item }}.j2"
+    dest: "{{ lookup('ansible.builtin.env', 'HOME') }}/.config/systemd/user/engineering-office-qualification-expiry.{{ item }}"
+    mode: "0600"
+  loop: [service, timer]
+
+- name: Reset the retry counter only for a new run after verified cleanup
+  ansible.builtin.command:
+    argv:
+      [
+        systemctl,
+        --user,
+        reset-failed,
+        engineering-office-qualification-expiry.service,
+      ]
+  changed_when: true
+  when:
+    - professional_host_previous_run | length > 0
+    - professional_host_previous_run.professional_host.qualification.run_id != professional_host.qualification.run_id
+
+- name: Arm the persistent timer independently of the test process
+  ansible.builtin.systemd_service:
+    name: engineering-office-qualification-expiry.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: restarted

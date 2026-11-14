@@ -63,6 +63,22 @@ preserve SSH host-key verification. Reserve `wg-mgmt`, its configuration and the
 is refused. Do not use Ansible verbosity of three or more: the upstream role's
 verbose mode can disclose keys, so the entrypoint rejects it.
 
+The Ubuntu cloud image needs a password for console login. Through the verified
+bootstrap SSH connection, set one for the `ubuntu` account:
+
+```sh
+sudo passwd ubuntu
+```
+
+Keep this credential in the professional Bitwarden boundary. Use a strong
+passphrase that you can type without clipboard support. Check the console's
+keyboard layout with non-secret characters before entering it; a US layout can
+differ from the operator's keyboard. In OVH Manager, open this instance's VNC
+console, log in as `ubuntu` and run `hostname` to verify the target. Setting this
+password does not enable SSH password authentication. Keep the working console
+available throughout cutover and reboot. See OVH's
+[console access guide](https://github.com/ovh/ovhcloud-docs/blob/develop/docs/en/guides/public-cloud/compute/getting-started.mdx).
+
 ## Establish the tunnel before enforcing it
 
 ```sh

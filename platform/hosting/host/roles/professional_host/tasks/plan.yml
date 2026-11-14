@@ -1,0 +1,59 @@
+---
+- name: Validate the approved inputs and independent state
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Write only public configuration to the private variables file
+  ansible.builtin.copy:
+    dest: "{{ professional_host_stack }}/.local/host.auto.tfvars.json"
+    content: "{{ professional_host | to_nice_json }}\n"
+    mode: "0600"
+
+- name: Initialize with the committed provider lock and qualified backend
+  ansible.builtin.command:
+    argv:
+      [
+        tofu,
+        "-chdir={{ professional_host_stack }}",
+        init,
+        -input=false,
+        -lockfile=readonly,
+        -backend-config=.local/backend.hcl,
+      ]
+  environment: "{{ professional_host_environment }}"
+  changed_when: false
+  no_log: true
+
+- name: Create an encrypted native plan without applying it
+  ansible.builtin.command:
+    argv: >-
+      {{ ['tofu', '-chdir=' + professional_host_stack, 'plan', '-input=false', '-no-color',
+          '-lock-timeout=30s', '-var-file=.local/host.auto.tfvars.json', '-out=.local/reviewed.tfplan']
+          + (['-destroy'] if professional_host_destroy_plan | bool else []) }}
+  environment: "{{ professional_host_environment }}"
+  changed_when: false
+  register: professional_host_plan
+  no_log: true
+
+- name: Save the private human-readable review
+  ansible.builtin.copy:
+    dest: "{{ professional_host_stack }}/.local/reviewed-plan.txt"
+    content: "{{ professional_host_plan.stdout }}\n"
+    mode: "0600"
+  no_log: true
+
+- name: Protect and fingerprint the encrypted plan
+  ansible.builtin.file:
+    path: "{{ professional_host_stack }}/.local/reviewed.tfplan"
+    mode: "0600"
+
+- name: Read the plan fingerprint
+  ansible.builtin.stat:
+    path: "{{ professional_host_stack }}/.local/reviewed.tfplan"
+    checksum_algorithm: sha256
+  register: professional_host_plan_file
+
+- name: Show the exact artifact requiring review
+  ansible.builtin.debug:
+    msg:
+      - "Review {{ professional_host_stack }}/.local/reviewed-plan.txt and the complete quote."
+      - "Plan SHA256: {{ professional_host_plan_file.stat.checksum }}"
