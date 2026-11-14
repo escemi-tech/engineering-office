@@ -105,7 +105,31 @@ hermes-stop: hermes-backup-disable ## Disable backup automation and Hermes resta
 hermes-logs: ## Show recent Hermes logs
 	$(HERMES_COMPOSE) logs --tail 100
 
-plan provision configure deploy verify backup:
+.PHONY: plan destroy-plan provision qualification-expiry qualification-cleanup
+plan: ## Prepare an encrypted host plan and its review fingerprint without applying it
+	ansible-playbook ansible/professional-host-plan.yml --extra-vars @.local/professional-host.yml
+
+destroy-plan: ## Prepare an encrypted destruction plan for review
+	ansible-playbook ansible/professional-host-plan.yml --extra-vars @.local/professional-host.yml --extra-vars '{"professional_host_destroy_plan": true}'
+
+qualification-expiry: ## Reserve one disposable run and arm independent fixed-deadline cleanup
+	ansible-playbook ansible/professional-host-expiry.yml --extra-vars @.local/professional-host.yml
+
+provision: ## Apply the exact plan fingerprint approved in .local/professional-host-approval.yml
+	systemd-run --user --unit=engineering-office-provisioning --collect --wait --pipe \
+		--property=Conflicts=engineering-office-qualification-expiry.service \
+		--property=Before=engineering-office-qualification-expiry.service \
+		--property=RuntimeMaxSec=30min --property=KillSignal=SIGINT --property=TimeoutStopSec=90s \
+		--property=UMask=0077 --working-directory="$(CURDIR)" \
+		--setenv="PATH=$(PATH)" --setenv="ANSIBLE_COLLECTIONS_PATH=$(CURDIR)/.local/ansible/collections" \
+		--setenv="ANSIBLE_LOCAL_TEMP=$(CURDIR)/.local/ansible-tmp" \
+		"$(CURDIR)/.local/ansible/bin/ansible-playbook" ansible/professional-host-apply.yml \
+		--extra-vars @.local/professional-host.yml --extra-vars @.local/professional-host-approval.yml
+
+qualification-cleanup: ## Independently reconcile and remove the explicitly selected disposable run
+	systemctl --user start engineering-office-qualification-expiry.service
+
+configure deploy verify backup:
 	@printf '%s\n' '$@ is unavailable: infrastructure implementation and deployment preflight are required.' >&2
 	@exit 2
 

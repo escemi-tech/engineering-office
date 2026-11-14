@@ -1,0 +1,10 @@
+---
+- name: Apply only the reviewed professional host plan
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Apply the selected plan after preflight
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: apply

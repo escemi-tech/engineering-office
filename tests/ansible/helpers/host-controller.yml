@@ -1,0 +1,210 @@
+---
+# Arrange: use the production Make target and unit templates without cloud calls.
+- name: Require the disposable hosted runner before changing its user services
+  ansible.builtin.assert:
+    that: lookup('ansible.builtin.env', 'FIXTURE_RUNNER_ENVIRONMENT') == 'github-hosted'
+    quiet: true
+
+- name: Select the runner's native user unit directory
+  ansible.builtin.set_fact:
+    controller_unit_directory: "{{ lookup('ansible.builtin.env', 'XDG_RUNTIME_DIR') }}/systemd/user"
+
+- name: Refuse to adopt an existing controller
+  ansible.builtin.command:
+    argv: [systemctl, --user, show, "{{ item }}", --property=LoadState, --value]
+  loop:
+    - engineering-office-provisioning.service
+    - engineering-office-qualification-expiry.service
+    - engineering-office-qualification-expiry.timer
+  register: controller_existing_unit
+  changed_when: false
+  failed_when: controller_existing_unit.stdout != 'not-found'
+
+- name: Create an isolated controller checkout
+  ansible.builtin.tempfile:
+    state: directory
+    path: "{{ playbook_dir }}/../../.local"
+    prefix: controller-test-
+  register: controller_fixture
+
+- name: Qualify repeated applies and expiry ordering
+  block:
+    - name: Create the native runtime and user-unit directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop:
+        - "{{ controller_fixture.path }}/.local/ansible/bin"
+        - "{{ controller_unit_directory }}"
+
+    - name: Use the actual provisioning entrypoint
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../Makefile"
+        dest: "{{ controller_fixture.path }}/Makefile"
+        mode: "0600"
+
+    - name: Replace provider execution with a successful native command
+      ansible.builtin.file:
+        src: /usr/bin/true
+        dest: "{{ controller_fixture.path }}/.local/ansible/bin/ansible-playbook"
+        state: link
+
+    - name: Render the production cleanup service and timer
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../ansible/roles/professional_host/templates/expiry.{{ item }}.j2"
+        dest: "{{ controller_unit_directory }}/engineering-office-qualification-expiry.{{ item }}"
+        mode: "0600"
+      vars:
+        professional_host_root: "{{ controller_fixture.path }}"
+      loop: [service, timer]
+
+    - name: Arm the timer so its dependencies stay loaded between applies
+      ansible.builtin.systemd_service:
+        name: engineering-office-qualification-expiry.timer
+        scope: user
+        daemon_reload: true
+        state: started
+
+    # Act / Assert: the second invocation must succeed while expiry remains armed.
+    - name: Run two consecutive applies through the real Make target
+      ansible.builtin.command:
+        argv: [make, --directory, "{{ controller_fixture.path }}", provision]
+      loop: [first, second]
+      changed_when: true
+
+    - name: Require the independent timer to remain active
+      ansible.builtin.command:
+        argv:
+          [
+            systemctl,
+            --user,
+            is-active,
+            engineering-office-qualification-expiry.timer,
+          ]
+      changed_when: false
+
+    # Arrange: a blocked writer must finish before the cleanup command can run.
+    - name: Remove the successful provider stand-in
+      ansible.builtin.file:
+        path: "{{ controller_fixture.path }}/.local/ansible/bin/ansible-playbook"
+        state: absent
+
+    - name: Simulate a blocked provider and observe cleanup ordering
+      ansible.builtin.copy:
+        dest: "{{ controller_fixture.path }}/.local/ansible/bin/ansible-playbook"
+        mode: "0700"
+        content: |
+          #!/bin/sh
+          set -eu
+          case "$1" in
+            ansible/professional-host-apply.yml) exec sleep 120 ;;
+            ansible/professional-host-cleanup.yml)
+              state="$(systemctl --user show engineering-office-provisioning.service --property=ActiveState --value)"
+              test "$state" = inactive || test "$state" = failed
+              touch cleanup-observed
+              ;;
+            *) exit 1 ;;
+          esac
+
+    # Act
+    - name: Start the blocked writer through the production entrypoint
+      ansible.builtin.command:
+        argv: [make, --directory, "{{ controller_fixture.path }}", provision]
+      async: 60
+      poll: 0
+      changed_when: true
+      register: controller_writer
+
+    - name: Wait for the writer to be running before expiring it
+      ansible.builtin.command:
+        argv:
+          [
+            systemctl,
+            --user,
+            is-active,
+            engineering-office-provisioning.service,
+          ]
+      changed_when: false
+      register: controller_writer_running
+      until: controller_writer_running.rc == 0
+      retries: 10
+      delay: 1
+
+    - name: Select a near deadline for the synthetic timer
+      ansible.builtin.command:
+        argv: [date, -u, --date=+5seconds, "+%Y-%m-%dT%H:%M:%SZ"]
+      changed_when: false
+      register: controller_deadline
+
+    - name: Set the production timer's synthetic deadline
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../ansible/roles/professional_host/templates/expiry.timer.j2"
+        dest: "{{ controller_unit_directory }}/engineering-office-qualification-expiry.timer"
+        mode: "0600"
+      vars:
+        professional_host:
+          qualification:
+            expires_at: "{{ controller_deadline.stdout }}"
+
+    - name: Let native expiry stop the writer and run cleanup
+      ansible.builtin.systemd_service:
+        name: engineering-office-qualification-expiry.timer
+        scope: user
+        daemon_reload: true
+        state: restarted
+
+    # Assert
+    - name: Require cleanup to observe the writer already stopped
+      ansible.builtin.wait_for:
+        path: "{{ controller_fixture.path }}/cleanup-observed"
+        timeout: 20
+
+  rescue:
+    - name: Keep the lifecycle failure visible after fixture teardown
+      ansible.builtin.fail:
+        msg: "Native controller lifecycle failed at {{ ansible_failed_task.name }}."
+
+  always:
+    - name: Stop only the fixture's user services and timer
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        scope: user
+        state: stopped
+      loop:
+        - engineering-office-qualification-expiry.timer
+        - engineering-office-qualification-expiry.service
+        - engineering-office-provisioning.service
+      failed_when: false
+
+    - name: Reap the asynchronous writer before removing its directory
+      ansible.builtin.async_status:
+        jid: "{{ controller_writer.ansible_job_id }}"
+      register: controller_writer_finished
+      until: controller_writer_finished.finished
+      retries: 10
+      delay: 1
+      failed_when: false
+      when: controller_writer.ansible_job_id is defined
+
+    - name: Remove the completed worker's result
+      ansible.builtin.async_status:
+        jid: "{{ controller_writer.ansible_job_id }}"
+        mode: cleanup
+      when: controller_writer.ansible_job_id is defined
+
+    - name: Remove the fixture's unit files
+      ansible.builtin.file:
+        path: "{{ controller_unit_directory }}/engineering-office-qualification-expiry.{{ item }}"
+        state: absent
+      loop: [service, timer]
+
+    - name: Unload only the removed fixture configuration
+      ansible.builtin.systemd_service:
+        scope: user
+        daemon_reload: true
+
+    - name: Remove the disposable controller checkout
+      ansible.builtin.file:
+        path: "{{ controller_fixture.path }}"
+        state: absent

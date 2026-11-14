@@ -164,6 +164,14 @@ checks formatting with the pinned OpenTofu binary; native initialization and the
 state lifecycle validate the configuration. Terraform-specific parsers do not
 own this source.
 
+The professional-host workflow runs native mocked provider tests and the Ansible
+campaign reservation and cleanup ownership guards. It has no cloud credentials and creates no real cloud
+resources. Keep provider plans and live qualification evidence private. Run the
+production OpenStack lifecycle only through the reviewed plan and independent
+cleanup procedure in the [host guide](docs/usage/host-provisioning.md). Renovate's
+native Terraform manager owns the provider pin and lockfile; its Galaxy manager
+owns `openstack.cloud`. Dependabot owns `openstacksdk` through the pip manifest.
+
 The Hermes workflow uses the released `ci-github-iac/actions/ansible/test` action
 in three parallel scenarios: runtime/deployment, manual backup/retention and
 scheduled backup/host-loss recovery. Each owns a fresh Ubuntu VM and prepares

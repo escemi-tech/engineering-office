@@ -46,6 +46,11 @@ jobs:
     permissions:
       contents: read
 
+  test-professional-host:
+    uses: $/.github/workflows/test-professional-host.yml
+    permissions:
+      contents: read
+
   reports:
     needs:
       [
@@ -55,6 +60,7 @@ jobs:
         test-github-briefing,
         test-infrastructure-state,
         test-management,
+        test-professional-host,
       ]
     if: always()
     uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@d07ee49b460ae2f3815804b5153fe918092aa321 # 4.2.0

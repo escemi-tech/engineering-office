@@ -1,0 +1,35 @@
+---
+# Arrange
+- name: Reset the refusal result for this candidate
+  ansible.builtin.set_fact:
+    host_cleanup_refused: false
+
+# Act
+- name: Exercise the production safety boundary without a cloud call
+  block:
+    - name: Validate the synthetic candidate
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: "{{ cleanup_case.tasks_from | default('cleanup-ownership') }}"
+      vars:
+        professional_host_previous_run: "{{ cleanup_case.previous_run | default({}) }}"
+        professional_host_cleanup_record: "{{ cleanup_case.cleanup_record | default({}) }}"
+        professional_host_campaign: "{{ cleanup_case.campaign | default([]) }}"
+        professional_host_remaining_ports:
+          { ports: "{{ cleanup_case.ports | default([]) }}" }
+        professional_host_servers:
+          { servers: "{{ cleanup_case.servers | default([]) }}" }
+        professional_host_groups:
+          { security_groups: "{{ cleanup_case.groups | default([]) }}" }
+        professional_host_keypairs:
+          { keypairs: "{{ cleanup_case.keypairs | default([]) }}" }
+  rescue:
+    - name: Record the rejected candidate
+      ansible.builtin.set_fact:
+        host_cleanup_refused: true
+
+# Assert
+- name: Require refusal before any provider mutation could begin
+  ansible.builtin.assert:
+    that: host_cleanup_refused
+    quiet: true

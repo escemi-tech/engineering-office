@@ -1,0 +1,148 @@
+---
+- name: Test qualification reservations and cleanup before any provider mutation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    professional_host:
+      project_id: 10000000-0000-4000-8000-000000000001
+      ssh_public_key: ssh-ed25519 SYNTHETICPUBLICKEY
+      quote: { hourly_eur_with_tax: 0.074, monthly_eur_with_tax: 57 }
+      qualification:
+        run_id: 20000000-0000-4000-8000-000000000001
+        expires_at: "2099-01-01T12:00:00Z"
+    professional_host_previous_run: {}
+    professional_host_cleanup_record: {}
+    professional_host_campaign: []
+    professional_host_servers: { servers: [] }
+    professional_host_groups: { security_groups: [] }
+    professional_host_keypairs: { keypairs: [] }
+  tasks:
+    # Arrange
+    - name: Derive the production run scope for synthetic inputs
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: policy
+
+    - name: Prepare owned provider responses
+      ansible.builtin.set_fact:
+        host_fixture_server:
+          name: "{{ professional_host_name }}"
+          project_id: "{{ professional_host.project_id }}"
+          metadata: "{{ professional_host_ownership }}"
+          attached_volumes: []
+        host_fixture_group:
+          id: qualification-group
+          name: "{{ professional_host_name }}"
+          project_id: "{{ professional_host.project_id }}"
+          description: "{{ professional_host_ownership | to_json }}"
+        host_fixture_key:
+          name: "{{ professional_host_name }}"
+          public_key: "{{ professional_host.ssh_public_key }}"
+
+    # Act / Assert: reserve a new run or rearm its unchanged active deadline.
+    - name: Accept the first campaign reservation
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: campaign
+
+    - name: Accept rearming the unchanged active run
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: campaign
+      vars:
+        professional_host_previous_run:
+          { professional_host: "{{ professional_host }}" }
+        professional_host_campaign:
+          ["{{ professional_host.qualification.run_id }}"]
+
+    # Act / Assert: empty and partially created runs remain safely cleanable.
+    - name: Accept an already absent run
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: cleanup-ownership
+
+    - name: Accept a partial run containing only its matching keypair
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: cleanup-ownership
+      vars:
+        professional_host_keypairs: { keypairs: ["{{ host_fixture_key }}"] }
+
+    - name: Accept a fully owned server and security group
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: cleanup-ownership
+      vars:
+        professional_host_servers: { servers: ["{{ host_fixture_server }}"] }
+        professional_host_groups:
+          { security_groups: ["{{ host_fixture_group }}"] }
+        professional_host_keypairs: { keypairs: ["{{ host_fixture_key }}"] }
+
+    - name: Accept removal of an unused group while unrelated ports remain
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: cleanup-ports
+      vars:
+        professional_host_groups:
+          { security_groups: ["{{ host_fixture_group }}"] }
+        professional_host_remaining_ports:
+          ports: [{ security_group_ids: [another-group] }]
+
+    # Act / Assert: foreign resources and unsafe campaign state stop mutations.
+    - name: Reject unsafe cleanup candidates
+      ansible.builtin.include_tasks: helpers/expect-host-cleanup-refusal.yml
+      loop:
+        - name: Completed run cannot be reused
+          tasks_from: campaign
+          previous_run: { professional_host: "{{ professional_host }}" }
+          campaign: ["{{ professional_host.qualification.run_id }}"]
+          cleanup_record:
+            run_id: "{{ professional_host.qualification.run_id }}"
+            resources_absent: true
+        - name: Fourth campaign run
+          tasks_from: campaign
+          campaign: [earlier-run-one, earlier-run-two, earlier-run-three]
+        - name: Previous run has no cleanup receipt
+          tasks_from: campaign
+          previous_run:
+            professional_host: "{{ professional_host | combine({'qualification': {'run_id': 'previous-run', 'expires_at': professional_host.qualification.expires_at}}) }}"
+        - name: Active deadline cannot change
+          tasks_from: campaign
+          previous_run:
+            professional_host: "{{ professional_host | combine({'qualification': {'run_id': professional_host.qualification.run_id, 'expires_at': '2099-01-01T11:00:00Z'}}) }}"
+          campaign: ["{{ professional_host.qualification.run_id }}"]
+        - name: Foreign project
+          servers:
+            ["{{ host_fixture_server | combine({'project_id': 'foreign'}) }}"]
+        - name: Orphan port also uses another security group
+          tasks_from: cleanup-ports
+          groups: ["{{ host_fixture_group }}"]
+          ports:
+            - security_group_ids: [qualification-group, another-group]
+        - name: Different run ownership
+          servers:
+            [
+              "{{ host_fixture_server | combine({'metadata': {'owner': 'another-run'}}) }}",
+            ]
+        - name: Retained volume
+          servers:
+            [
+              "{{ host_fixture_server | combine({'attached_volumes': [{'id': 'retained'}]}) }}",
+            ]
+        - name: Ambiguous matching servers
+          servers: ["{{ host_fixture_server }}", "{{ host_fixture_server }}"]
+        - name: Foreign group
+          groups: ["{{ host_fixture_group | combine({'description': '{}'}) }}"]
+        - name: Foreign public key
+          keypairs:
+            [
+              "{{ host_fixture_key | combine({'public_key': 'ssh-ed25519 OTHERKEY'}) }}",
+            ]
+      loop_control:
+        loop_var: cleanup_case
+        label: "{{ cleanup_case.name }}"
+
+    - name: Exercise the real service manager only on the disposable hosted runner
+      ansible.builtin.include_tasks: helpers/host-controller.yml
+      when: lookup('ansible.builtin.env', 'FIXTURE_RUNNER_ENVIRONMENT') == 'github-hosted'

@@ -1,0 +1,22 @@
+---
+- name: Inspect the exact server name in the selected project
+  openstack.cloud.server_info:
+    cloud: "{{ professional_host_cloud }}"
+    name: "{{ professional_host_name }}"
+  register: professional_host_servers
+  no_log: true
+
+- name: Inspect the named security group in the selected project
+  openstack.cloud.security_group_info:
+    cloud: "{{ professional_host_cloud }}"
+    name: "{{ professional_host_name }}"
+    project_id: "{{ professional_host.project_id }}"
+  register: professional_host_groups
+  no_log: true
+
+- name: Inspect the dedicated operator keypair
+  openstack.cloud.keypair_info:
+    cloud: "{{ professional_host_cloud }}"
+    name: "{{ professional_host_name }}"
+  register: professional_host_keypairs
+  no_log: true
