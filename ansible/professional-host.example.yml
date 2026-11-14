@@ -1,0 +1,17 @@
+---
+# Protected controller settings, not credentials. Copy into .local/ and chmod 0600.
+professional_host_clouds_file: /absolute/path/to/clouds.yaml
+professional_host_state_credentials_file: /absolute/path/to/state-operator-credentials
+professional_host_state_password_file: /absolute/path/to/state-password
+professional_host:
+  project_id: REPLACE_WITH_OPENSTACK_PROJECT_UUID
+  image_id: REPLACE_WITH_REVIEWED_UBUNTU_IMAGE_UUID
+  ssh_public_key: REPLACE_WITH_OPERATOR_PUBLIC_KEY
+  bootstrap_ssh_cidr: 192.0.2.10/32
+  quote:
+    hourly_eur_with_tax: 0
+    monthly_eur_with_tax: 0
+  # Set null only for a separately approved retained host.
+  qualification:
+    run_id: REPLACE_WITH_UNIQUE_RUN_UUID
+    expires_at: REPLACE_WITH_UTC_DEADLINE

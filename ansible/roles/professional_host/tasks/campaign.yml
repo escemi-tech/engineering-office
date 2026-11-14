@@ -1,0 +1,18 @@
+---
+- name: Refuse overlap, deadline extension or a fourth campaign run
+  ansible.builtin.assert:
+    that:
+      - professional_host_previous_run | length == 0 or professional_host_previous_run.professional_host.qualification == professional_host.qualification or (professional_host_cleanup_record.resources_absent | default(false) and professional_host_cleanup_record.run_id | default('') == professional_host_previous_run.professional_host.qualification.run_id)
+      - professional_host.qualification.run_id in professional_host_campaign or professional_host_campaign | length < 3
+      - not (professional_host_cleanup_record.resources_absent | default(false) and professional_host_cleanup_record.run_id | default('') == professional_host.qualification.run_id)
+      - professional_host.qualification.run_id not in professional_host_campaign or professional_host_previous_run.professional_host.qualification == professional_host.qualification
+    fail_msg: Finish cleanup before another run; never reuse a completed run or extend its fixed deadline. The campaign allows three runs.
+    quiet: true
+
+- name: Preserve immutable run ownership on rearming
+  ansible.builtin.assert:
+    that:
+      - professional_host_previous_run.professional_host.project_id == professional_host.project_id
+      - professional_host_previous_run.professional_host.ssh_public_key == professional_host.ssh_public_key
+    quiet: true
+  when: professional_host.qualification.run_id in professional_host_campaign

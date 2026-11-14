@@ -5,6 +5,7 @@
 - [Read GitHub work for a private briefing](usage/github-briefing.md)
 - [Qualify the OVHcloud host](usage/ovh-qualification.md)
 - [Prepare and recover infrastructure state](usage/infrastructure-state.md)
+- [Provision and remove an approved host](usage/host-provisioning.md)
 - [Administer an approved host privately](usage/management-access.md)
 - [Deploy Hermes to an approved host](usage/hermes-deployment.md)
 - [Back up and recover Hermes state](usage/hermes-backup.md)
@@ -21,3 +22,4 @@
 - [ADR 0006: Account-wide scoped GitHub evidence](development/adr/0006-account-github-briefing.md)
 - [ADR 0007: Independently recoverable infrastructure state](development/adr/0007-recoverable-infrastructure-state.md)
 - [ADR 0008: Native WireGuard for private administration](development/adr/0008-private-administration.md)
+- [ADR 0009: Bounded native host provisioning](development/adr/0009-bounded-host-provisioning.md)

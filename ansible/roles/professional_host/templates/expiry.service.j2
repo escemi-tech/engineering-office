@@ -1,0 +1,18 @@
+# Managed by engineering-office qualification
+[Unit]
+Description=Clean the approved engineering-office qualification run
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=1h
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ professional_host_root }}
+Environment=ANSIBLE_COLLECTIONS_PATH={{ professional_host_root }}/.local/ansible/collections
+Environment=ANSIBLE_LOCAL_TEMP={{ professional_host_root }}/.local/ansible-tmp
+UMask=0077
+ExecStart={{ professional_host_root }}/.local/ansible/bin/ansible-playbook ansible/professional-host-cleanup.yml --extra-vars @.local/qualification-expiry.yml
+TimeoutStartSec=18min
+Restart=on-failure
+RestartSec=60s

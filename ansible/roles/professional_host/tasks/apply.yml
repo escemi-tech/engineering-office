@@ -1,0 +1,132 @@
+---
+- name: Revalidate credentials and scope at the point of use
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Fingerprint the selected private plan
+  ansible.builtin.stat:
+    path: "{{ professional_host_stack }}/.local/reviewed.tfplan"
+    checksum_algorithm: sha256
+    follow: false
+  register: professional_host_plan_file
+
+- name: Require approval of this exact encrypted artifact
+  ansible.builtin.assert:
+    that:
+      - professional_host_plan_file.stat.isreg | default(false)
+      - not professional_host_plan_file.stat.islnk | default(true)
+      - professional_host_plan_file.stat.mode | default('') == '0600'
+      - professional_host_approved_plan_sha256 is defined
+      - professional_host_approved_plan_sha256 is match('^[a-f0-9]{64}$')
+      - professional_host_plan_file.stat.checksum == professional_host_approved_plan_sha256
+    fail_msg: Review the complete quote and approve the current plan SHA256. Any replan requires new approval.
+    quiet: true
+
+- name: Inspect the saved plan through native OpenTofu
+  ansible.builtin.command:
+    argv:
+      [
+        tofu,
+        "-chdir={{ professional_host_stack }}",
+        show,
+        -json,
+        .local/reviewed.tfplan,
+      ]
+  environment: "{{ professional_host_environment }}"
+  changed_when: false
+  register: professional_host_saved_plan
+  no_log: true
+
+- name: Require the reviewed variables to match the current configuration
+  ansible.builtin.assert:
+    that: (professional_host_saved_plan.stdout | from_json).variables[item.key].value == item.value
+    fail_msg: The saved plan belongs to different inputs. Replan and review before applying.
+    quiet: true
+  loop: "{{ professional_host | dict2items }}"
+  no_log: true
+
+- name: Identify a destruction-only plan
+  ansible.builtin.set_fact:
+    professional_host_deletion_only: >-
+      {{ ((professional_host_saved_plan.stdout | from_json).resource_changes | default([])
+          | selectattr('mode', 'equalto', 'managed') | map(attribute='change.actions')
+          | flatten | unique | list) == ['delete'] }}
+  no_log: true
+
+- name: Verify the fixed deadline before creating or updating a test host
+  ansible.builtin.include_tasks: deadline.yml
+  when: professional_host.qualification is not none and not professional_host_deletion_only
+
+- name: Require the independently armed expiry timer for a paid test
+  ansible.builtin.command:
+    argv:
+      [
+        systemctl,
+        --user,
+        is-active,
+        engineering-office-qualification-expiry.timer,
+      ]
+  changed_when: false
+  when: professional_host.qualification is not none and not professional_host_deletion_only
+
+- name: Inspect the writer unit that expiry can stop before deleting resources
+  ansible.builtin.command:
+    argv:
+      [
+        systemctl,
+        --user,
+        show,
+        engineering-office-provisioning.service,
+        --property=InvocationID,
+        --value,
+      ]
+  changed_when: false
+  register: professional_host_invocation
+  when: professional_host.qualification is not none and not professional_host_deletion_only
+
+- name: Require the paid writer to run inside its independently stoppable unit
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.env', 'INVOCATION_ID') | length > 0
+      - professional_host_invocation.stdout == lookup('ansible.builtin.env', 'INVOCATION_ID')
+    fail_msg: Use make provision so the independent expiry service can stop the writer before cleanup.
+    quiet: true
+  when: professional_host.qualification is not none and not professional_host_deletion_only
+
+- name: Require the timer's protected configuration to match this run
+  ansible.builtin.assert:
+    that:
+      - (lookup('ansible.builtin.file', professional_host_root + '/.local/qualification-expiry.yml') | from_yaml).professional_host == professional_host
+    fail_msg: Arm cleanup with the exact reviewed configuration before the first apply or a changed cutover plan.
+    quiet: true
+  when: professional_host.qualification is not none and not professional_host_deletion_only
+
+- name: Apply the approved saved plan without replanning
+  ansible.builtin.command:
+    argv:
+      [
+        tofu,
+        "-chdir={{ professional_host_stack }}",
+        apply,
+        -input=false,
+        -no-color,
+        -lock-timeout=30s,
+        .local/reviewed.tfplan,
+      ]
+  environment: "{{ professional_host_environment }}"
+  changed_when: true
+  no_log: true
+
+- name: Read the native resource outputs
+  ansible.builtin.command:
+    argv: [tofu, "-chdir={{ professional_host_stack }}", output, -json]
+  environment: "{{ professional_host_environment }}"
+  changed_when: false
+  register: professional_host_outputs
+  no_log: true
+
+- name: Retain the private resource inventory for configuration and recovery
+  ansible.builtin.copy:
+    dest: "{{ professional_host_stack }}/.local/outputs.json"
+    content: "{{ professional_host_outputs.stdout }}\n"
+    mode: "0600"
+  no_log: true

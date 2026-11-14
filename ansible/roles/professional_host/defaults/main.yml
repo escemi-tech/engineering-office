@@ -1,0 +1,4 @@
+---
+professional_host_root: "{{ (role_path + '/../../..') | realpath }}"
+professional_host_stack: "{{ professional_host_root }}/tofu/professional-host"
+professional_host_destroy_plan: false

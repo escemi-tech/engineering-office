@@ -1,0 +1,79 @@
+---
+- name: Validate the native cloud profile and resource scope
+  ansible.builtin.import_tasks: cloud.yml
+
+- name: Inspect the separately held state credentials and encryption key
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ professional_host_state_credentials_file }}"
+    - "{{ professional_host_state_password_file }}"
+  register: professional_host_state_files
+  no_log: true
+
+- name: Require distinct private state files
+  ansible.builtin.assert:
+    that:
+      - item.item is match('^/')
+      - item.item == item.item | realpath
+      - item.stat.isreg | default(false)
+      - item.stat.mode | default('') == '0600'
+      - item.stat.uid | default(-1) == lookup('ansible.builtin.pipe', 'id -u') | int
+      - item.stat.size | default(0) > 0
+      - professional_host_state_credentials_file != professional_host_state_password_file
+      - item.item != professional_host_clouds_file
+    quiet: true
+  loop: "{{ professional_host_state_files.results }}"
+  no_log: true
+
+- name: Read the native runtime version
+  ansible.builtin.command:
+    argv: [tofu, version, -json]
+  changed_when: false
+  check_mode: false
+  register: professional_host_tofu
+
+- name: Require the maintained OpenTofu version
+  ansible.builtin.assert:
+    that:
+      - (professional_host_tofu.stdout | from_json).terraform_version == lookup('ansible.builtin.file', professional_host_root + '/tofu/.opentofu-version') | trim
+    quiet: true
+
+- name: Select independent credentials through native environment variables
+  ansible.builtin.set_fact:
+    professional_host_environment:
+      OS_CLIENT_CONFIG_FILE: "{{ professional_host_clouds_file }}"
+      OS_CLOUD: engineering-office-provisioner
+      AWS_SHARED_CREDENTIALS_FILE: "{{ professional_host_state_credentials_file }}"
+      AWS_CONFIG_FILE: /dev/null
+      AWS_SHARED_CONFIG_FILE: /dev/null
+      AWS_PROFILE: default
+      AWS_ACCESS_KEY_ID: ""
+      AWS_SECRET_ACCESS_KEY: ""
+      AWS_SESSION_TOKEN: ""
+      AWS_ROLE_ARN: ""
+      AWS_WEB_IDENTITY_TOKEN_FILE: ""
+      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: ""
+      AWS_CONTAINER_CREDENTIALS_FULL_URI: ""
+      AWS_CONTAINER_AUTHORIZATION_TOKEN: ""
+      AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE: ""
+      AWS_EC2_METADATA_DISABLED: "true"
+      TF_VAR_state_password_file: "{{ professional_host_state_password_file }}"
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+
+- name: Inspect the qualified backend location
+  ansible.builtin.stat:
+    path: "{{ professional_host_stack }}/.local/backend.hcl"
+    follow: false
+  register: professional_host_backend
+
+- name: Require the previously qualified backend
+  ansible.builtin.assert:
+    that:
+      - professional_host_backend.stat.isreg | default(false)
+      - not professional_host_backend.stat.islnk | default(true)
+      - professional_host_backend.stat.mode | default('') == '0600'
+    fail_msg: Qualify and initialize the independent state backend before provisioning.
+    quiet: true
