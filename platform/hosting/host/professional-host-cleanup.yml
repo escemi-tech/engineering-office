@@ -1,0 +1,10 @@
+---
+- name: Remove only one owned disposable qualification run
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Reconcile the expired or explicitly selected run without OpenTofu state
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: cleanup

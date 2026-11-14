@@ -1,0 +1,44 @@
+---
+- name: Refuse retained hosts and ambiguous resource matches
+  ansible.builtin.assert:
+    that:
+      - professional_host.qualification is not none
+      - professional_host_name == 'engineering-office-q-' + professional_host.qualification.run_id
+      - professional_host_servers.servers | length <= 1
+      - professional_host_groups.security_groups | length <= 1
+      - professional_host_keypairs.keypairs | length <= 1
+    fail_msg: Cleanup accepts one exact qualification run, never a retained host or ambiguous match.
+    quiet: true
+
+- name: Require exact server ownership before any deletion
+  ansible.builtin.assert:
+    that:
+      - item.name == professional_host_name
+      - item.project_id == professional_host.project_id
+      - item.metadata == professional_host_ownership
+      - item.attached_volumes | default([]) | length == 0
+    fail_msg: Refusing a server with foreign ownership or separately retained storage.
+    quiet: true
+  loop: "{{ professional_host_servers.servers }}"
+  no_log: true
+
+- name: Require exact security group ownership before any deletion
+  ansible.builtin.assert:
+    that:
+      - item.name == professional_host_name
+      - item.project_id == professional_host.project_id
+      - item.description | from_json == professional_host_ownership
+    fail_msg: Refusing a foreign security group.
+    quiet: true
+  loop: "{{ professional_host_groups.security_groups }}"
+  no_log: true
+
+- name: Require the expected public key before any deletion
+  ansible.builtin.assert:
+    that:
+      - item.name == professional_host_name
+      - item.public_key.split()[:2] == professional_host.ssh_public_key.split()[:2]
+    fail_msg: Refusing a foreign keypair.
+    quiet: true
+  loop: "{{ professional_host_keypairs.keypairs }}"
+  no_log: true

@@ -1,0 +1,10 @@
+---
+- name: Arm independent cleanup before a paid qualification run
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Register the bounded run and its persistent user timer
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: expiry

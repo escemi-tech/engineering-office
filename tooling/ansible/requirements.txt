@@ -1,4 +1,5 @@
 ansible-core==2.22.0
+openstacksdk==4.22.0
 boto3==1.44.1
 netaddr==1.3.0
 requests==2.34.2

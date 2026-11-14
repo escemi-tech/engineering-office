@@ -1,0 +1,8 @@
+---
+- name: Refuse to hide an orphan port or retained public address
+  ansible.builtin.assert:
+    that: professional_host_remaining_ports.ports | selectattr('security_group_ids', 'contains', item.id) | list | length == 0
+    fail_msg: A port still references the run's group. Inspect the provider before retrying; cleanup is incomplete.
+    quiet: true
+  loop: "{{ professional_host_groups.security_groups }}"
+  no_log: true

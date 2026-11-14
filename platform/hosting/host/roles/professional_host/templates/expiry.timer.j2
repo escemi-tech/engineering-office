@@ -1,0 +1,11 @@
+# Managed by engineering-office qualification
+[Unit]
+Description=Expire the approved engineering-office qualification run
+
+[Timer]
+OnCalendar={{ professional_host.qualification.expires_at | regex_replace('T', ' ') | regex_replace('Z$', ' UTC') }}
+AccuracySec=1s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

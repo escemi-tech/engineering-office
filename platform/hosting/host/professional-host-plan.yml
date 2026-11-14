@@ -1,0 +1,10 @@
+---
+- name: Plan the approved professional host without applying changes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Prepare the encrypted native plan
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: plan
