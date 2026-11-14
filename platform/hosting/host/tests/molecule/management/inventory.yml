@@ -1,0 +1,33 @@
+---
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  vars:
+    fixture_directory: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    fixture_compose: "{{ lookup('ansible.builtin.env', 'MOLECULE_PROJECT_DIRECTORY') }}/platform/hosting/host/tests"
+  children:
+    management:
+      hosts:
+        management-server:
+          ansible_user: root
+          ansible_ssh_common_args: "-F {{ fixture_directory }}/ssh.config"
+          ansible_ssh_private_key_file: "{{ fixture_directory }}/ssh-key"
+          ansible_python_interpreter: /usr/bin/python3
+          management_address: 10.253.0.1/32
+          management_operator_address: 10.253.0.2/32
+          management_operator_public_key: "{{ lookup('ansible.builtin.file', fixture_directory ~ '/operator.pub') }}"
+          # Containers share the runner kernel; workflow setup loads its module.
+          wireguard_install_kernel_module: false
+    fixture_containers:
+      vars:
+        ansible_connection: community.docker.docker
+        ansible_python_interpreter: /usr/bin/python3
+      hosts:
+        server-console:
+          ansible_host: management-fixture-server
+        operator-console:
+          ansible_host: management-fixture-operator
+        neighbour-console:
+          ansible_host: management-fixture-neighbour

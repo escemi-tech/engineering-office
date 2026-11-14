@@ -1,6 +1,6 @@
 # Writing policy
 
-The [canonical policy](../../packages/writing-policy/.apm/instructions/writing.instructions.md)
+The [canonical policy](../../features/writing/policy/.apm/instructions/writing.instructions.md)
 defines shared writing rules, English and French profiles, and guidance for
 messages, reviews, briefings and personal communication. It protects raw evidence,
 code, quotations, citations and factual uncertainty.
@@ -27,7 +27,7 @@ implemented here; do not assume that placing a file in a directory activates it.
 
 ## Package ownership and coverage
 
-The [manifest](../../packages/writing-policy/apm.yml) versions the policy package.
+The [manifest](../../features/writing/policy/apm.yml) versions the policy package.
 Review the policy and its version together. Consumers must select a reviewed Git
 revision; the package version alone does not pin content. There are no external
 package dependencies and no generated client files committed beside this source.

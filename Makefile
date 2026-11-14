@@ -1,10 +1,11 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
+export ANSIBLE_CONFIG := $(CURDIR)/tooling/ansible/ansible.cfg
 
 HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
 HERMES_PROJECT := engineering-office-hermes
-HERMES_COMPOSE := docker compose --env-file .local/hermes.env --project-name $(HERMES_PROJECT) -f services/hermes/compose.yml
+HERMES_COMPOSE := docker compose --env-file .local/hermes.env --project-name $(HERMES_PROJECT) -f platform/assistant/runtime/compose.yml
 
 .PHONY: help lint-fix ci lint github-briefing hermes-policy hermes-start hermes-stop hermes-logs hermes-host hermes-deploy hermes-health hermes-backup hermes-backup-check hermes-backup-prune hermes-backup-schedule hermes-backup-disable hermes-restore plan provision configure deploy verify backup
 help: ## Display help
@@ -29,45 +30,45 @@ ci: ## Execute local CI tasks
 	$(MAKE) lint-fix
 
 github-briefing: ## Show a scoped GitHub work briefing using the protected local source policy
-	@npm run --silent --prefix packages/github-briefing briefing -- --source "$(CURDIR)/.local/github-briefing/source.json" --token-file "$(CURDIR)/.local/github-briefing/token" --format text
+	@npm run --silent --prefix features/briefing/github briefing -- --source "$(CURDIR)/.local/github-briefing/source.json" --token-file "$(CURDIR)/.local/github-briefing/token" --format text
 
 .PHONY: management management-enforce
 management: ## Configure the approved host's WireGuard interface without closing bootstrap SSH
-	ANSIBLE_ROLES_PATH="$(CURDIR)/.local/ansible/roles:$(CURDIR)/ansible/roles" ansible-playbook -i .local/management-inventory.yml ansible/management.yml --extra-vars @.local/management.yml
+	ansible-playbook -i .local/management-inventory.yml platform/hosting/host/management.yml --extra-vars @.local/management.yml
 
 management-enforce: ## Require the verified WireGuard path for new SSH connections
-	ANSIBLE_ROLES_PATH="$(CURDIR)/.local/ansible/roles:$(CURDIR)/ansible/roles" ansible-playbook -i .local/management-inventory.yml ansible/management-enforce.yml --extra-vars @.local/management.yml
+	ansible-playbook -i .local/management-inventory.yml platform/hosting/host/management-enforce.yml --extra-vars @.local/management.yml
 
 .PHONY: infrastructure-state
 infrastructure-state: ## Bootstrap approved private state storage and initialize the encrypted workspace
-	ansible-playbook ansible/infrastructure-state.yml --extra-vars @.local/infrastructure-state.yml
+	ansible-playbook platform/hosting/state/infrastructure-state.yml --extra-vars @.local/infrastructure-state.yml
 
 hermes-policy: ## Build the canonical writing policy with the qualified APM compiler
-	bash services/hermes/build-policy.sh
+	bash platform/assistant/runtime/build-policy.sh
 
 hermes-start: hermes-policy ## Rebuild policy and recreate Hermes while preserving sessions
 	$(HERMES_COMPOSE) up -d --force-recreate --wait --wait-timeout 180
 
 hermes-host: ## Prepare Docker prerequisites on the explicitly configured approved Ubuntu host
-	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-host.yml
+	ansible-playbook -i .local/hermes-inventory.yml platform/assistant/deployment/hermes-host.yml
 
 hermes-deploy: hermes-policy ## Deploy Hermes to the explicitly configured approved host
-	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes.yml --extra-vars @.local/hermes-deployment.yml
+	ansible-playbook -i .local/hermes-inventory.yml platform/assistant/deployment/hermes.yml --extra-vars @.local/hermes-deployment.yml
 
 hermes-health: ## Check the deployed gateway without credentials or service changes
-	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-health.yml
+	ansible-playbook -i .local/hermes-inventory.yml platform/assistant/deployment/hermes-health.yml
 
 hermes-backup: ## Encrypt and verify stopped Hermes state in the configured repository
-	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-backup.yml --extra-vars @.local/hermes-backup.yml
+	ansible-playbook -i .local/hermes-inventory.yml platform/assistant/backup/hermes-backup.yml --extra-vars @.local/hermes-backup.yml
 
 hermes-backup-check: ## Verify backup integrity and a matching recovery point within 24 hours
-	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-backup-check.yml --extra-vars @.local/hermes-backup.yml
+	ansible-playbook -i .local/hermes-inventory.yml platform/assistant/backup/hermes-backup-check.yml --extra-vars @.local/hermes-backup.yml
 
 hermes-backup-prune: ## Create a verified backup, then enforce recovery-point retention
-	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-backup-prune.yml --extra-vars @.local/hermes-backup.yml
+	ansible-playbook -i .local/hermes-inventory.yml platform/assistant/backup/hermes-backup-prune.yml --extra-vars @.local/hermes-backup.yml
 
 hermes-backup-schedule: ## Configure or remove automatic backups on the explicitly approved host
-	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-backup-schedule.yml --extra-vars @.local/hermes-backup-schedule.yml
+	ansible-playbook -i .local/hermes-inventory.yml platform/assistant/backup/hermes-backup-schedule.yml --extra-vars @.local/hermes-backup-schedule.yml
 
 hermes-backup-disable: ## On the target host, stop automatic backups without loading credentials
 	@set -euo pipefail; \
@@ -80,7 +81,7 @@ hermes-backup-disable: ## On the target host, stop automatic backups without loa
 	fi
 
 hermes-restore: ## Restore the selected snapshot into a new volume without starting Hermes
-	ansible-playbook -i .local/hermes-inventory.yml ansible/hermes-restore.yml --extra-vars @.local/hermes-backup.yml
+	ansible-playbook -i .local/hermes-inventory.yml platform/assistant/backup/hermes-restore.yml --extra-vars @.local/hermes-backup.yml
 
 hermes-stop: hermes-backup-disable ## Disable backup automation and Hermes restart, then stop without credentials
 	@set -euo pipefail; \
@@ -124,6 +125,8 @@ define run_linter
 	docker run --platform=linux/amd64 \
 		-v "$$VOLUME" --rm \
 		-e RUN_LOCAL=true \
+		-e ANSIBLE_DIRECTORY=platform \
+		-e ANSIBLE_HOME=/github/home/.ansible \
 		-e DEFAULT_WORKSPACE="$$DEFAULT_WORKSPACE" \
 		-e USE_FIND_ALGORITHM=true \
 		-e STRIP_DEFAULT_WORKSPACE_FOR_REGEX=true \

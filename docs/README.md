@@ -11,7 +11,7 @@
 - [Review drafts with the shared writing policy](usage/writing-policy.md)
 - [Normalize classified draft prose locally](usage/writing-normalizer.md)
 - [Make and workflow conventions](../CONTRIBUTING.md)
-- [Infrastructure boundaries](development/architecture.md)
+- [Repository architecture and domain boundaries](development/architecture.md)
 - [Professional assistant authority and source policy](development/assistant-security.md)
 - [ADR 0001: Public source and separate deployment domains](development/adr/0001-domain-boundaries.md)
 - [ADR 0002: Professional assistant runtime boundary](development/adr/0002-assistant-runtime-boundary.md)
@@ -21,3 +21,4 @@
 - [ADR 0006: Account-wide scoped GitHub evidence](development/adr/0006-account-github-briefing.md)
 - [ADR 0007: Independently recoverable infrastructure state](development/adr/0007-recoverable-infrastructure-state.md)
 - [ADR 0008: Native WireGuard for private administration](development/adr/0008-private-administration.md)
+- [ADR 0009: Domain-oriented source and inward dependencies](development/adr/0009-domain-oriented-architecture.md)

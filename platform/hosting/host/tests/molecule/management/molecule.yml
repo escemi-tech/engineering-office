@@ -1,0 +1,33 @@
+---
+dependency:
+  name: galaxy
+  options:
+    role-file: ${MOLECULE_PROJECT_DIRECTORY}/tooling/ansible/collections/requirements.yml
+    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/tooling/ansible/collections/requirements.yml
+ansible:
+  cfg:
+    ssh_connection:
+      pipelining: true
+  executor:
+    args:
+      ansible_playbook:
+        - --inventory=${MOLECULE_SCENARIO_DIRECTORY}/inventory.yml
+  playbooks:
+    create: create.yml
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+    destroy: destroy.yml
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - destroy
+shared_state: false
+verifier:
+  name: ansible

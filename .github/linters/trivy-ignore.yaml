@@ -5,8 +5,8 @@ misconfigurations:
   - id: AVD-AWS-0089
     paths:
       # Trivy reports this role path without its .yml extension.
-      - ansible/roles/infrastructure_state/tasks/main
-      - tests/ansible/helpers/infrastructure-state-lifecycle.yml
+      - platform/hosting/state/roles/infrastructure_state/tasks/main
+      - platform/hosting/state/tests/ansible/helpers/infrastructure-state-lifecycle.yml
     expired_at: 2026-12-12
     statement: >-
       Logging is configured and tested, but the bundled Ansible adapter ignores
@@ -18,8 +18,8 @@ misconfigurations:
   # https://docs.ovhcloud.com/en/guides/storage-and-backup/object-storage/s3-s3-compliancy
   - id: AVD-AWS-0086
     paths: &ovh-state-paths
-      - ansible/roles/infrastructure_state/tasks/main
-      - tests/ansible/helpers/infrastructure-state-lifecycle.yml
+      - platform/hosting/state/roles/infrastructure_state/tasks/main
+      - platform/hosting/state/tests/ansible/helpers/infrastructure-state-lifecycle.yml
     statement: &ovh-state-access >-
       The target is OVH S3, where Block Public Access is unsupported. Private
       state ACLs are read back and validated; audit ACLs reject additional

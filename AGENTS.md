@@ -16,3 +16,7 @@
   preflight exist. Production changes require environment approval.
 - Keep root readme for end users, detailed guides in docs/ and decisions in ADRs.
   Use Conventional Commits and reviewed pull requests.
+
+- Follow the [architecture boundaries](docs/development/architecture.md): features
+  own business rules, platform owns operations, and dependencies point inward.
+  Keep native tool layouts and add layers only for an existing responsibility.

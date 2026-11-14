@@ -21,11 +21,11 @@ local environment:
 ```sh
 python3 -m venv .local/ansible
 . .local/ansible/bin/activate
-python -m pip install -r ansible/requirements.txt
-ansible-galaxy collection install -r ansible/collections/requirements.yml
-ansible-galaxy role install -r ansible/collections/requirements.yml --roles-path .local/ansible/roles
+python -m pip install -r tooling/ansible/requirements.txt
+ansible-galaxy collection install -r tooling/ansible/collections/requirements.yml
+ansible-galaxy role install -r tooling/ansible/collections/requirements.yml --roles-path .local/ansible/roles
 install -d -m 0700 .local
-install -m 0600 ansible/management.example.yml .local/management.yml
+install -m 0600 platform/hosting/host/management.example.yml .local/management.yml
 ```
 
 Install the distribution's `wireguard-tools` on the operator's Linux device.

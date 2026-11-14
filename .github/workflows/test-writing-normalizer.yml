@@ -22,7 +22,7 @@ jobs:
       - name: Test normalization and publish reports
         uses: hoverkraft-tech/ci-github-nodejs/actions/test@a60704c5e9902675a1b4a5141411d95733e80ff5 # 3.0.2
         with:
-          working-directory: packages/writing-normalizer
+          working-directory: features/writing/normalizer
           report-file: |
             .reports/junit.xml
             .reports/lcov.info

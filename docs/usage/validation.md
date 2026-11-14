@@ -53,7 +53,7 @@ All inputs are synthetic; the module has no external service or model dependency
 Use the package's `.node-version` runtime, then run:
 
 ```sh
-cd packages/writing-normalizer
+cd features/writing/normalizer
 npm ci --ignore-scripts
 npm run test:ci
 ```
@@ -102,7 +102,7 @@ formats through the protected entrypoint.
 Use the package's `.node-version` runtime:
 
 ```sh
-cd packages/github-briefing
+cd features/briefing/github
 npm ci --ignore-scripts
 npm run test:ci
 ```
@@ -131,19 +131,19 @@ does not cancel the others; all scenarios must pass. Cleanup runs after success
 or failure. No checkout or Docker socket is mounted inside Hermes.
 
 The pinned upstream APM Action sets up the CLI version declared in
-`services/hermes/.apm-version`. The workflow copies that complete distribution
+`platform/assistant/runtime/.apm-version`. The workflow copies that complete distribution
 and the public build sources into the VM, then invokes Goss through the shared
 test action. The VM uses `make hermes-policy`, the same build required by normal
 startup. Generated instructions stay in its `.build/` directory. There are no
 external APM packages, shared build homes or workstation skill changes.
 
-Assertions belong to the Goss scenarios. [Policy build checks](../../tests/hermes/policy-build.goss.yaml)
+Assertions belong to the Goss scenarios. [Policy build checks](../../platform/assistant/tests/runtime/policy-build.goss.yaml)
 use a temporary project per command, prepared and cleaned by an explicit fixture
 helper. Concurrent tests cannot change each other's source or generated files.
-[Preflight checks](../../tests/hermes/preflight.goss.yaml) run before Hermes starts
+[Preflight checks](../../platform/assistant/tests/runtime/preflight.goss.yaml) run before Hermes starts
 and restore the deployment artifact after testing its absence.
-[Startup](../../tests/hermes/goss.yaml) and [recovery](../../tests/hermes/recovery.goss.yaml)
-scenarios check the running gateway. [Revocation checks](../../tests/hermes/revocation.goss.yaml)
+[Startup](../../platform/assistant/tests/runtime/goss.yaml) and [recovery](../../platform/assistant/tests/runtime/recovery.goss.yaml)
+scenarios check the running gateway. [Revocation checks](../../platform/assistant/tests/runtime/revocation.goss.yaml)
 then exercise independent shutdown and key rotation. Each invocation publishes its own named
 JUnit report through the same shared action; workflow steps only prepare assets,
 invoke scenarios and manage the service lifecycle.
@@ -194,22 +194,22 @@ revocation. Host reboot recovery is checked separately below.
 ## Host preparation and deployment
 
 The workflow starts with a fresh Ubuntu image without Docker. The released
-`ansible/test` action runs the [host preparation scenario](../../tests/ansible/hermes-host.yml)
-against the production [host playbook](../../ansible/hermes-host.yml). Native
+`ansible/test` action runs the [host preparation scenario](../../platform/assistant/tests/ansible/hermes-host.yml)
+against the production [host playbook](../../platform/assistant/deployment/hermes-host.yml). Native
 assertions require an initial package installation, an unchanged second run and
 preservation of the SSH operator's privileges. Only the disposable fixture then
-grants that user Docker access for the Compose demo. [Goss host checks](../../tests/hermes/host.goss.yaml)
+grants that user Docker access for the Compose demo. [Goss host checks](../../platform/assistant/tests/runtime/host.goss.yaml)
 verify installed packages, Compose availability, the Docker socket and its enabled,
 running service.
 
 After the Compose lifecycle, the same disposable VM receives the actual
-[Ansible deployment](../../ansible/hermes.yml). The released `ansible/test`
-action runs [native test playbooks](../../tests/ansible/hermes.yml) with pinned
+[Ansible deployment](../../platform/assistant/deployment/hermes.yml). The released `ansible/test`
+action runs [native test playbooks](../../platform/assistant/tests/ansible/hermes.yml) with pinned
 Ansible and Galaxy dependencies. Missing or excess credentials must fail before creating
 the deployment directory. A valid deployment starts Hermes, and repeating it
 must preserve the container identity with no asset or Compose changes.
 
-[Goss](../../tests/hermes/deployment.goss.yaml) then verifies root-only credential
+[Goss](../../platform/assistant/tests/runtime/deployment.goss.yaml) then verifies root-only credential
 storage, policy permissions, absence of controller/operator credentials in the
 gateway, exact preservation of special characters in a synthetic key, and a real
 conversation. The fake inference service shares the deployed gateway's network
@@ -217,7 +217,7 @@ namespace and is accessed through loopback; it holds no provider credentials. Th
 does not qualify production egress restrictions. Native Ansible reports and Goss
 reports remain separate; see [CONTRIBUTING](../../CONTRIBUTING.md#ansible-validation).
 
-After that conversation, the [health scenario](../../tests/ansible/hermes-health.yml)
+After that conversation, the [health scenario](../../platform/assistant/tests/ansible/hermes-health.yml)
 runs the operator's public health-check playbook against the same deployment.
 It verifies healthy output, absent/ambiguous services, paused and stopped gateways,
 a failed native health check and an HTTP failure despite a passing native check.
@@ -226,15 +226,15 @@ must stay out of captured diagnostics. Checks must report zero changes and prese
 the kill switch; only fixture cleanup deliberately resumes the disposable service.
 The scenario retains the original container identity and restart policy.
 
-The [reboot scenario](../../tests/ansible/hermes-reboot.yml)
+The [reboot scenario](../../platform/assistant/tests/ansible/hermes-reboot.yml)
 uses Ansible's reboot module to restart the whole guest and wait for SSH and the
 gateway health endpoint. It does not rerun host preparation or deployment.
-Goss repeats the host checks and [reads the original conversation](../../tests/hermes/session.goss.yaml)
+Goss repeats the host checks and [reads the original conversation](../../platform/assistant/tests/runtime/session.goss.yaml)
 without submitting another inference request. This verifies automatic runtime
 startup and persistent session storage. It does not test a new model request
 after reboot or qualify provider availability.
 
-The [backup scenario](../../tests/ansible/hermes-backup.yml) initializes
+The [backup scenario](../../platform/assistant/tests/ansible/hermes-backup.yml) initializes
 a disposable Restic repository with a synthetic password outside Hermes. It
 exercises the public backup and restore playbooks, including missing/wrong keys,
 refusal to back up a live source, refusal of ambiguous snapshot selection and
@@ -247,7 +247,7 @@ despite fresh snapshots with another host/path/tag, wrong keys, future timestamp
 and a separately corrupted repository copy. A successful check preserves the
 stopped container, disabled restart policy and every existing snapshot. Failure
 reports must exclude the synthetic password and plaintext state canary.
-The [automatic backup scenario](../../tests/ansible/hermes-backup-schedule.yml)
+The [automatic backup scenario](../../platform/assistant/tests/ansible/hermes-backup-schedule.yml)
 uses a real SeaweedFS S3 service outside the guest and a synthetic heartbeat
 recorder. It exercises a native systemd calendar tick, stopped/running state
 preservation, verification and retention, rejected credentials, unavailable
@@ -262,7 +262,7 @@ fixture checks the HTTP contract and failure propagation, not real notification
 routing or the upstream service's missed-run scheduler. Those require live
 acceptance with the chosen monitoring service and recipient.
 
-The [host-loss recovery scenario](../../tests/ansible/hermes-recovery.yml) repeats
+The [host-loss recovery scenario](../../platform/assistant/tests/ansible/hermes-recovery.yml) repeats
 production host preparation and convergence checks. It requires a different
 machine identity and no inherited deployment or recovery files. The public
 fixture supplies its synthetic key independently of the lost host. Native
@@ -271,7 +271,7 @@ entrypoint, verifies integrity and restores the exact snapshot. Recovery must re
 until the scenario explicitly deploys reviewed assets and synthetic credentials.
 The public backup check then runs against the restored repository while Hermes
 is live; the running container identity and restart policy must remain unchanged.
-[Goss](../../tests/hermes/backup.goss.yaml) reads the original session, checks a
+[Goss](../../platform/assistant/tests/runtime/backup.goss.yaml) reads the original session, checks a
 restored file's content/ownership/mode, rejects an unrelated key, and verifies
 recovery credentials stay outside Hermes. The manual filesystem scenario also
 rejects plaintext canary leakage into encrypted storage. There is no inference fixture on the recovery host to

@@ -1,5 +1,12 @@
 # Make and workflow conventions
 
+Follow the [repository architecture](docs/development/architecture.md) for context
+ownership, dependency direction and placement of code and tests.
+
+The Ansible linter scans `platform/` and resolves dependencies from
+`tooling/ansible/`. Its native `ANSIBLE_HOME` stays inside the disposable linter
+container, outside the scanned checkout.
+
 Follow the [workstation-manager Makefile](https://github.com/neilime/workstation-manager/blob/main/Makefile)
 and [workflow layout](https://github.com/neilime/workstation-manager/tree/main/.github/workflows).
 Use annotated targets for `make help` and a shared `run_linter` helper for
@@ -51,7 +58,7 @@ repository with the permissions requested by the token-generation step.
 Keep the token scoped to this repository and the repository configuration in
 `.github/renovate.json`. Dependabot owns Actions, Dockerfile, Docker Compose and
 APM, npm and pip dependency updates, grouped per ecosystem with weekly checks and a seven-day
-cooldown. The APM entry covers `packages/writing-policy/apm.yml`; this source
+cooldown. The APM entry covers `features/writing/policy/apm.yml`; this source
 package currently has no dependencies to update. When introducing another APM
 consumer, add its manifest directory and commit its native lockfile. Dependabot
 regenerates existing lockfiles but does not create them.
@@ -108,7 +115,7 @@ deprecation notices when maintaining the adapter; dependency bots do not update
 that header. See the [source tests](docs/usage/validation.md#github-briefing-source).
 
 The Hermes build and fixture share the compiler pin in
-[`services/hermes/.apm-version`](services/hermes/.apm-version). The upstream APM
+[`platform/assistant/runtime/.apm-version`](platform/assistant/runtime/.apm-version). The upstream APM
 Action installs that release in CI; Dependabot updates the Action reference.
 Renovate's scoped regular-expression manager updates the version file from
 `microsoft/apm` releases; it does not manage APM package dependencies. Compiler
@@ -121,12 +128,12 @@ through the shared VM test action, alongside startup and recovery checks. The
 workflow transfers the compiler distribution returned by the upstream setup
 Action into the existing disposable VM; the shared test action owns Goss setup
 and reporting. Build probes use isolated temporary projects, with fixture setup
-and cleanup in `tests/hermes/helpers/`.
+and cleanup in `platform/assistant/tests/runtime/helpers/`.
 
 ## Ansible validation
 
 Private administration uses the released native Molecule action in
-`test-management.yml`. The scenario lives in `tests/molecule/management` and
+`test-management.yml`. The scenario lives in `platform/hosting/host/tests/molecule/management` and
 exercises the production playbooks over real SSH and WireGuard. Run its privileged
 network fixtures only on a disposable GitHub-hosted runner. The scenario owns
 creation and destruction; never run it against the workstation or an operational
@@ -134,7 +141,7 @@ inventory. The shared publisher collects its native JUnit reports.
 
 Renovate maintains the WireGuard role and its collection dependencies in the
 mixed Galaxy manifest. Install roles into `.local/ansible/roles` as documented in
-the administration guide; the Make targets add that path explicitly. Dependabot
+the administration guide; the shared Ansible configuration includes that path. Dependabot
 maintains controller dependencies and the systemd fixture's Compose digest.
 
 The independent infrastructure-state scenario runs native Ansible and OpenTofu
@@ -142,18 +149,18 @@ against a pinned Moto S3 fixture, without a VM. The shared OpenTofu test action
 executes native tests and owns runtime setup and reports; the Ansible test action
 executes the consumer-specific backend and recovery lifecycle. Both feed the
 common report publisher. Assertions stay in
-`tests/ansible/infrastructure-state.yml` and its explicit helper. The synthetic
-Terraform resource exists only under `tests/infrastructure-state`; production
+`platform/hosting/state/tests/ansible/infrastructure-state.yml` and its explicit helper. The synthetic
+Terraform resource exists only under `platform/hosting/state/tests`; production
 bootstrap manages the backend bucket with the maintained S3 collection.
 
-Renovate updates `tofu/.opentofu-version` from OpenTofu releases and the
+Renovate updates `tooling/opentofu/.opentofu-version` from OpenTofu releases and the
 `amazon.aws` collection through its existing Galaxy manager. Dependabot owns
-the SDK pin in `ansible/requirements.txt` and shared Action references. The native state
+the SDK pin in `tooling/ansible/requirements.txt` and shared Action references. The native state
 lifecycle must pass when any of these change. Dependabot also maintains the Moto and official AWS CLI images in the fixture
 Compose manifest. Recursive Dependabot directory matching discovers Compose
 fixtures without adding a directory entry for each one. The CLI prepares the independently managed audit destination.
 
-Run `tofu fmt -check -recursive tofu tests/infrastructure-state` with the pinned
+Run `tofu fmt -check -recursive tofu platform/hosting/state/tests` with the pinned
 binary, then the isolated Ansible scenario. Its fixture requires a disposable S3
 service; do not point it at an operational bucket. Bootstrap check mode is tested
 to make no bucket changes. Wrong-key recovery, actual concurrent locking,
@@ -175,12 +182,12 @@ executes the test playbook and publishes native JUnit reports. Goss separately
 checks the deployed service and filesystem boundaries. Assertions stay in these
 test files; workflow steps only prepare and invoke the scenarios.
 
-Keep the production entrypoints in `ansible/hermes-host.yml` and `ansible/hermes.yml`,
-with their respective roles in `ansible/roles/hermes_host` and `ansible/roles/hermes`.
+Keep the production entrypoints in `platform/assistant/deployment/hermes-host.yml` and `platform/assistant/deployment/hermes.yml`,
+with their respective roles in `platform/assistant/deployment/roles/hermes_host` and `platform/assistant/deployment/roles/hermes`.
 The tests exercise those entrypoints and repeat each role to verify convergence.
 Keep the Lima fixture free of runtime installation logic. Reboot the deployed
 guest through Ansible, then assert persistent state in Goss without redeploying.
-Shared test inventory setup belongs in `tests/ansible/helpers/`. The test-only
+Shared test inventory setup belongs in `platform/assistant/tests/ansible/helpers/`. The test-only
 Ansible configuration enables SSH pipelining and uses native connection reuse.
 Reset the connection after fixture group changes; keep the independent reverse
 SSH tunnel separate so resets cannot disconnect storage. Use distinct matrix
@@ -208,11 +215,11 @@ Supply only synthetic inputs and the shared VM's
 SSH configuration; never connect this test to an operational inventory. No generic
 Ansible target-discovery job is needed for this concrete integration.
 
-Dependabot updates the exact Ansible Core pin in `ansible/requirements.txt` through
+Dependabot updates the exact Ansible Core pin in `tooling/ansible/requirements.txt` through
 its grouped pip configuration. Renovate's `ansible-galaxy` manager updates the exact
-collection pins in `ansible/collections/requirements.yml`, including the Docker
+collection pins in `tooling/ansible/collections/requirements.yml`, including the Docker
 collection's inventory-filtering dependency. Its `pyenv` manager updates
-`ansible/.python-version`, supplied to the shared test actions through
+`tooling/ansible/.python-version`, supplied to the shared test actions through
 `python-version-file`. Those actions compose the official Python setup Action;
 consumer workflows do not repeat controller setup.
 Keep controller Python compatible with the pinned Core version. Linting and
@@ -222,21 +229,21 @@ For local syntax validation, install the pinned tools in an isolated environment
 as described in the [deployment guide](docs/usage/hermes-deployment.md), then run:
 
 ```sh
-ansible-playbook --syntax-check ansible/hermes-host.yml
-ansible-playbook --syntax-check ansible/hermes.yml
-ansible-playbook --syntax-check ansible/hermes-health.yml
-ansible-playbook --syntax-check ansible/hermes-backup.yml
-ansible-playbook --syntax-check ansible/hermes-backup-check.yml
-ansible-playbook --syntax-check ansible/hermes-backup-prune.yml
-ansible-playbook --syntax-check ansible/hermes-restore.yml
-ansible-playbook --syntax-check ansible/hermes-backup-schedule.yml
-ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-host.yml
-ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes.yml
-ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-health.yml
-ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-reboot.yml
-ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-backup.yml
-ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-recovery.yml
-ANSIBLE_CONFIG=tests/ansible/ansible.cfg ansible-playbook --syntax-check tests/ansible/hermes-backup-schedule.yml
+ansible-playbook --syntax-check platform/assistant/deployment/hermes-host.yml
+ansible-playbook --syntax-check platform/assistant/deployment/hermes.yml
+ansible-playbook --syntax-check platform/assistant/deployment/hermes-health.yml
+ansible-playbook --syntax-check platform/assistant/backup/hermes-backup.yml
+ansible-playbook --syntax-check platform/assistant/backup/hermes-backup-check.yml
+ansible-playbook --syntax-check platform/assistant/backup/hermes-backup-prune.yml
+ansible-playbook --syntax-check platform/assistant/backup/hermes-restore.yml
+ansible-playbook --syntax-check platform/assistant/backup/hermes-backup-schedule.yml
+ANSIBLE_CONFIG=tooling/ansible/ansible.cfg ansible-playbook --syntax-check platform/assistant/tests/ansible/hermes-host.yml
+ANSIBLE_CONFIG=tooling/ansible/ansible.cfg ansible-playbook --syntax-check platform/assistant/tests/ansible/hermes.yml
+ANSIBLE_CONFIG=tooling/ansible/ansible.cfg ansible-playbook --syntax-check platform/assistant/tests/ansible/hermes-health.yml
+ANSIBLE_CONFIG=tooling/ansible/ansible.cfg ansible-playbook --syntax-check platform/assistant/tests/ansible/hermes-reboot.yml
+ANSIBLE_CONFIG=tooling/ansible/ansible.cfg ansible-playbook --syntax-check platform/assistant/tests/ansible/hermes-backup.yml
+ANSIBLE_CONFIG=tooling/ansible/ansible.cfg ansible-playbook --syntax-check platform/assistant/tests/ansible/hermes-recovery.yml
+ANSIBLE_CONFIG=tooling/ansible/ansible.cfg ansible-playbook --syntax-check platform/assistant/tests/ansible/hermes-backup-schedule.yml
 ```
 
 The actual deployment scenarios require the disposable VM and run in hosted CI.

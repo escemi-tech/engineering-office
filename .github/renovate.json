@@ -12,7 +12,7 @@
 	"customManagers": [
 		{
 			"customType": "regex",
-			"managerFilePatterns": ["/^tofu/\\.opentofu-version$/"],
+			"managerFilePatterns": ["/^tooling/opentofu/\\.opentofu-version$/"],
 			"matchStrings": ["^(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*$"],
 			"depNameTemplate": "opentofu/opentofu",
 			"datasourceTemplate": "github-releases",
@@ -20,7 +20,7 @@
 		},
 		{
 			"customType": "regex",
-			"managerFilePatterns": ["/^services/hermes/\\.apm-version$/"],
+			"managerFilePatterns": ["/^platform/assistant/runtime/\\.apm-version$/"],
 			"matchStrings": ["^(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*$"],
 			"depNameTemplate": "microsoft/apm",
 			"datasourceTemplate": "github-releases",

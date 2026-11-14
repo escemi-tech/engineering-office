@@ -12,12 +12,12 @@ The commands below operate a Compose deployment from a local checkout.
 Use Linux with Docker Engine, Docker Compose v2 or later, and GNU Make. Allow
 2 CPUs, 4 GiB RAM and at least 10 GiB free Docker storage. The upstream image uses
 a root supervisor and runs the gateway as UID 10000. The image pin lives in
-[compose.yml](../../services/hermes/compose.yml); Dependabot proposes updates.
+[compose.yml](../../platform/assistant/runtime/compose.yml); Dependabot proposes updates.
 
 ## Try the synthetic demo
 
 Install the APM CLI release selected by the
-[compiler version file](../../services/hermes/.apm-version), following the
+[compiler version file](../../platform/assistant/runtime/.apm-version), following the
 [upstream installation guide](https://microsoft.github.io/apm/getting-started/installation/).
 Both the demo and configured gateway require this compiler. Compilation uses
 a fresh temporary project and writes only `.build/hermes/AGENTS.md`;
@@ -27,7 +27,7 @@ From the repository root:
 
 ```sh
 make hermes-policy
-bash tests/hermes/helpers/compose.sh up -d --force-recreate --wait --wait-timeout 180
+bash platform/assistant/tests/runtime/helpers/compose.sh up -d --force-recreate --wait --wait-timeout 180
 ```
 
 This starts the real Hermes runtime and a fake inference endpoint on an internal
@@ -41,7 +41,7 @@ Missing or stale compiled content fails the fixture. Rebuild after editing the
 canonical writing policy, then recreate the fixture containers.
 
 ```sh
-bash tests/hermes/helpers/compose.sh exec -T hermes sh -c '
+bash platform/assistant/tests/runtime/helpers/compose.sh exec -T hermes sh -c '
   curl --fail http://127.0.0.1:8642/v1/chat/completions \
     -H "Authorization: Bearer $API_SERVER_KEY" \
     -H "Content-Type: application/json" --data-binary @-
@@ -56,7 +56,7 @@ quality or generate intelligent answers. Remove the demo and its disposable
 conversations when finished:
 
 ```sh
-bash tests/hermes/helpers/compose.sh down --volumes
+bash platform/assistant/tests/runtime/helpers/compose.sh down --volumes
 ```
 
 ## Configure a model endpoint
@@ -68,7 +68,7 @@ Only synthetic inference is currently covered by the repository's CI.
 
 ```sh
 install -d -m 0700 .local
-install -m 0600 services/hermes/runtime.env.example .local/hermes.env
+install -m 0600 platform/assistant/runtime/runtime.env.example .local/hermes.env
 ```
 
 Edit `.local/hermes.env` with the model name, endpoint URL ending in `/v1`, inference
@@ -157,7 +157,7 @@ stopped. Restore into a new isolated volume with the matching image and reviewed
 configuration before opening access. The commands preserve native state and
 ownership while excluding the source-managed `config.yaml`.
 
-The Compose-only [restore fixture](../../tests/hermes/restore.sh) uses synthetic
+The Compose-only [restore fixture](../../platform/assistant/tests/runtime/restore.sh) uses synthetic
 state and destroys its test volume; operators use the Ansible recovery commands.
 Independent storage and key recovery, retention, credential delivery and a private
 recovery drill remain required before private use.

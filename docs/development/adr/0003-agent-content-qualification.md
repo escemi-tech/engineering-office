@@ -13,7 +13,7 @@ with equivalent recovery and preservation of user files. Workstation-manager
 already manages skills with Skillshare. Installing a second permanent manager
 would not meet that goal.
 
-Own one public [writing-policy package](../../../packages/writing-policy/apm.yml)
+Own one public [writing-policy package](../../../features/writing/policy/apm.yml)
 here. Its source covers English, French, channels and protected content without
 private preferences. Keep domain overlays private. APM metadata prepares the
 source for qualification; it does not activate runtime distribution. Do not add

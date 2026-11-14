@@ -26,9 +26,9 @@ jobs:
         env:
           FIXTURE_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         with:
-          molecule-scenario: tests/molecule/management
-          ansible-requirements: ansible/requirements.txt
-          python-version-file: ansible/.python-version
+          molecule-scenario: platform/hosting/host/tests/molecule/management
+          ansible-requirements: tooling/ansible/requirements.txt
+          python-version-file: tooling/ansible/.python-version
           test-timeout-minutes: "10"
           comment: "false"
           report-name: engineering-office - Private administration

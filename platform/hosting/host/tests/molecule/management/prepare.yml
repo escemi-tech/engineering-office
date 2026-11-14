@@ -1,0 +1,196 @@
+---
+# Arrange: prove the public entrypoints reject unsafe inputs without adopting state.
+- name: Place an unmanaged interface fixture
+  hosts: server-console
+  gather_facts: false
+  tasks:
+    - name: Reserve the unmanaged directory
+      ansible.builtin.file:
+        path: /etc/wireguard
+        state: directory
+        mode: "0700"
+    - name: Write the unmanaged canary
+      ansible.builtin.copy:
+        dest: /etc/wireguard/wg-mgmt.conf
+        content: "unmanaged configuration must survive\n"
+        mode: "0600"
+
+- name: Verify admission boundaries through the production commands
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    # Act: expected failures do not enter the parent JUnit callback.
+    - name: Attempt unsafe administration changes
+      ansible.builtin.command:
+        argv:
+          - env
+          - -u
+          - ANSIBLE_CALLBACKS_ENABLED
+          - "{{ ansible_playbook_python | dirname }}/ansible-playbook"
+          - "{{ lookup('ansible.builtin.env', 'MOLECULE_PROJECT_DIRECTORY') }}/platform/hosting/host/{{ item.playbook }}.yml"
+          - -i
+          - "{{ playbook_dir }}/inventory.yml"
+          - --extra-vars
+          - "{{ item.variables | to_json }}"
+      loop:
+        - playbook: management
+          variables: {}
+          message: reserved wg-mgmt interface already has unmanaged configuration
+        - playbook: management
+          variables:
+            management_operator_address: 0.0.0.0/0
+          message: Use distinct private IPv4 /32 addresses
+        - playbook: management
+          variables:
+            management_operator_address: 127.0.0.2/32
+          message: Use distinct private IPv4 /32 addresses
+        - playbook: management-enforce
+          variables: {}
+          message: Connect over WireGuard before enforcing private SSH
+      changed_when: false
+      failed_when: false
+      register: management_rejections
+    # Assert
+    - name: Require refusal at each intended boundary
+      ansible.builtin.assert:
+        that:
+          - item.rc == 2
+          - item.item.message in (item.stdout ~ item.stderr)
+        quiet: true
+      loop: "{{ management_rejections.results }}"
+      loop_control:
+        label: "{{ item.item.playbook }}"
+
+- name: Verify preservation and remove only the unmanaged fixture
+  hosts: server-console
+  gather_facts: false
+  tasks:
+    - name: Read the preserved canary
+      ansible.builtin.slurp:
+        src: /etc/wireguard/wg-mgmt.conf
+      register: unmanaged_canary
+    - name: Require byte-for-byte preservation
+      ansible.builtin.assert:
+        that:
+          - unmanaged_canary.content | b64decode == 'unmanaged configuration must survive\n'
+        quiet: true
+    - name: Remove the synthetic unmanaged file
+      ansible.builtin.file:
+        path: /etc/wireguard/wg-mgmt.conf
+        state: absent
+
+# Act: configure the server through its normal operator entrypoint.
+- name: Prepare the approved private interface
+  ansible.builtin.import_playbook: ../../../management.yml
+
+- name: Preserve an unrelated native firewall table
+  hosts: server-console
+  gather_facts: false
+  tasks:
+    - name: Create an independently owned firewall canary
+      ansible.builtin.command:
+        argv: [nft, add, table, inet, fixture_unrelated]
+      changed_when: true
+
+- name: Record the real fixture topology
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Inspect the independent neighbour
+      community.docker.docker_container_info:
+        name: management-fixture-neighbour
+      register: management_neighbour
+    - name: Retain the neighbour address for verification
+      ansible.builtin.copy:
+        dest: "{{ fixture_directory }}/neighbour-address"
+        content: "{{ management_neighbour.container.NetworkSettings.Networks['management-fixture_default'].IPAddress }}"
+        mode: "0600"
+
+- name: Connect the independently configured operator
+  hosts: operator-console
+  gather_facts: false
+  tasks:
+    - name: Read the operator's fixture key without publishing it
+      ansible.builtin.slurp:
+        src: /etc/wireguard/operator.key
+      register: operator_private_key
+      no_log: true
+    - name: Write the native client configuration
+      ansible.builtin.copy:
+        dest: /etc/wireguard/operator.conf
+        mode: "0600"
+        content: |
+          [Interface]
+          Address = 10.253.0.2/32
+          PrivateKey = {{ operator_private_key.content | b64decode | trim }}
+          [Peer]
+          PublicKey = {{ hostvars['management-server'].management_public_key.stdout }}
+          Endpoint = server:51820
+          AllowedIPs = 10.253.0.1/32, {{ lookup('ansible.builtin.file', fixture_directory ~ '/neighbour-address') }}/32
+      no_log: true
+    - name: Bring up the real WireGuard client
+      ansible.builtin.command:
+        argv: [wg-quick, up, operator]
+      changed_when: true
+
+- name: Make the lateral-flow probe routable before enforcement
+  hosts: neighbour-console
+  gather_facts: false
+  tasks:
+    - name: Provide the canary's return route through the server
+      ansible.builtin.command:
+        argv:
+          - ip
+          - route
+          - add
+          - 10.253.0.2/32
+          - via
+          - "{{ lookup('ansible.builtin.file', fixture_directory ~ '/bootstrap-address') }}"
+      changed_when: true
+
+- name: Verify the probe works before applying the policy
+  hosts: operator-console
+  gather_facts: false
+  tasks:
+    # Assert: a later denial cannot merely be an absent service or return route.
+    - name: Reach the neighbour through the unrestricted tunnel
+      ansible.builtin.command:
+        argv:
+          [
+            curl,
+            --fail,
+            --silent,
+            --max-time,
+            "3",
+            "http://{{ lookup('ansible.builtin.file', fixture_directory ~ '/neighbour-address') }}:8000/",
+          ]
+      changed_when: false
+      register: routed_canary
+      until: routed_canary.rc == 0
+      retries: 10
+      delay: 1
+
+- name: Close the controller's bootstrap connection before switching transport
+  hosts: management
+  gather_facts: false
+  tasks:
+    - name: Reset the bootstrap SSH connection
+      ansible.builtin.meta: reset_connection
+
+- name: Switch normal Ansible traffic to the operator's tunnel
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Write the private SSH transport
+      ansible.builtin.copy:
+        dest: "{{ fixture_directory }}/ssh.config"
+        mode: "0600"
+        content: |
+          Host management-server
+            HostName 10.253.0.1
+            User root
+            IdentityFile {{ fixture_directory }}/ssh-key
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            ProxyCommand docker exec -i management-fixture-operator nc %h %p

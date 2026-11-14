@@ -1,0 +1,13 @@
+---
+- name: Require explicit recovery targets
+  ansible.builtin.import_playbook: ../deployment/helpers/hermes-inventory.yml
+
+- name: Restore Hermes state into a new volume
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Recover the explicitly selected snapshot without starting Hermes
+      ansible.builtin.include_role:
+        name: hermes_backup
+        tasks_from: restore

@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: pip
     commit-message:
       prefix: build
-    directory: /ansible
+    directory: /tooling/ansible
     groups:
       pip-dependencies:
         patterns:
@@ -16,8 +16,8 @@ updates:
     commit-message:
       prefix: build
     directories:
-      - /packages/writing-normalizer
-      - /packages/github-briefing
+      - /features/writing/normalizer
+      - /features/briefing/github
     groups:
       npm-dependencies:
         patterns:
@@ -66,7 +66,7 @@ updates:
   - package-ecosystem: apm
     commit-message:
       prefix: build
-    directory: /packages/writing-policy
+    directory: /features/writing/policy
     groups:
       apm-dependencies:
         patterns:

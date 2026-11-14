@@ -29,7 +29,7 @@ jobs:
         with:
           script: |
             const { readFile } = require('node:fs/promises');
-            core.setOutput('version', (await readFile('services/hermes/.apm-version', 'utf8')).trim());
+            core.setOutput('version', (await readFile('platform/assistant/runtime/.apm-version', 'utf8')).trim());
       - name: Set up qualified APM compiler
         id: compiler
         uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
@@ -40,7 +40,7 @@ jobs:
         id: vm
         uses: hoverkraft-tech/ci-github-iac/actions/vm/create@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
-          vm-config: tests/lima.yml
+          vm-config: platform/assistant/tests/lima.yml
       # Act and Assert: install prerequisites through the production playbook.
       - name: Test host preparation and convergence
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
@@ -48,17 +48,17 @@ jobs:
           VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
           VM_NAME: ${{ steps.vm.outputs.name }}
         with:
-          ansible-requirements: ansible/requirements.txt
-          ansible-config: tests/ansible/ansible.cfg
-          test-playbook: tests/ansible/hermes-host.yml
-          python-version-file: ansible/.python-version
+          ansible-requirements: tooling/ansible/requirements.txt
+          ansible-config: tooling/ansible/ansible.cfg
+          test-playbook: platform/assistant/tests/ansible/hermes-host.yml
+          python-version-file: tooling/ansible/.python-version
           comment: "false"
           report-name: engineering-office - Hermes host preparation (${{ matrix.scenario }})
       - name: Verify Docker host prerequisites
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/host.goss.yaml
+          goss-file: platform/assistant/tests/runtime/host.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes host prerequisites (${{ matrix.scenario }})
       # Arrange
@@ -70,7 +70,7 @@ jobs:
           APM_PATH: ${{ steps.compiler.outputs.apm-path }}
         run: |
           # Fresh sessions pick up the Docker group granted by the test fixture.
-          tar -czf - Makefile AGENTS.md services/hermes tests/hermes packages/writing-policy | \
+          tar -czf - Makefile AGENTS.md platform/assistant/runtime platform/assistant/tests/runtime features/writing/policy | \
             ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'tar -xzf - -C /opt/engineering-office'
           # The released compiler needs its adjacent runtime files.
           tar -czf - -C "$(dirname "$APM_PATH")" . | \
@@ -81,7 +81,7 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/policy-build.goss.yaml
+          goss-file: platform/assistant/tests/runtime/policy-build.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes policy build (${{ matrix.scenario }})
       # Act
@@ -98,21 +98,21 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/preflight.goss.yaml
+          goss-file: platform/assistant/tests/runtime/preflight.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes preflight (${{ matrix.scenario }})
       # Act
       - name: Start Hermes with isolated synthetic inference
         if: matrix.scenario == 'runtime'
         env: *vm-connection
-        run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && bash tests/hermes/helpers/compose.sh up -d --wait --wait-timeout 180'
+        run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && bash platform/assistant/tests/runtime/helpers/compose.sh up -d --wait --wait-timeout 180'
       # Assert
       - name: Verify startup, authentication and synthetic conversation
         if: matrix.scenario == 'runtime'
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/goss.yaml
+          goss-file: platform/assistant/tests/runtime/goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes startup (${{ matrix.scenario }})
       # Act
@@ -121,22 +121,22 @@ jobs:
         env: *vm-connection
         run: |
           ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office &&
-            bash tests/hermes/helpers/compose.sh restart hermes &&
-            bash tests/hermes/helpers/compose.sh up -d --wait --wait-timeout 180'
+            bash platform/assistant/tests/runtime/helpers/compose.sh restart hermes &&
+            bash platform/assistant/tests/runtime/helpers/compose.sh up -d --wait --wait-timeout 180'
       # Assert
       - name: Verify session after restart
         if: matrix.scenario == 'runtime'
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/recovery.goss.yaml
+          goss-file: platform/assistant/tests/runtime/recovery.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes restart (${{ matrix.scenario }})
       # Act
       - name: Restore a stopped backup into a new volume
         if: matrix.scenario == 'runtime'
         env: *vm-connection
-        run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'bash /opt/engineering-office/tests/hermes/restore.sh'
+        run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'bash /opt/engineering-office/platform/assistant/tests/runtime/restore.sh'
       # Assert
       - name: Verify session after restore
         if: matrix.scenario == 'runtime'
@@ -145,7 +145,7 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/recovery.goss.yaml
+          goss-file: platform/assistant/tests/runtime/recovery.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes restore (${{ matrix.scenario }})
         # jscpd:ignore-end
@@ -154,14 +154,14 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/revocation.goss.yaml
+          goss-file: platform/assistant/tests/runtime/revocation.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes revocation (${{ matrix.scenario }})
       # Arrange: release the demo's port and disposable state before host deployment.
       - name: Remove the completed synthetic demo
         if: matrix.scenario == 'runtime'
         env: *vm-connection
-        run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && bash tests/hermes/helpers/compose.sh down --volumes'
+        run: ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" 'cd /opt/engineering-office && bash platform/assistant/tests/runtime/helpers/compose.sh down --volumes'
       # Act and Assert: native Ansible checks preflight and convergence.
       - name: Test scoped host deployment
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
@@ -170,11 +170,11 @@ jobs:
           VM_NAME: ${{ steps.vm.outputs.name }}
           DEPLOYER_CANARY: synthetic-controller-credential-never-for-hermes
         with:
-          ansible-requirements: ansible/requirements.txt
-          galaxy-requirements: ansible/collections/requirements.yml
-          ansible-config: tests/ansible/ansible.cfg
-          test-playbook: tests/ansible/hermes.yml
-          python-version-file: ansible/.python-version
+          ansible-requirements: tooling/ansible/requirements.txt
+          galaxy-requirements: tooling/ansible/collections/requirements.yml
+          ansible-config: tooling/ansible/ansible.cfg
+          test-playbook: platform/assistant/tests/ansible/hermes.yml
+          python-version-file: tooling/ansible/.python-version
           comment: "false"
           report-name: engineering-office - Hermes Ansible deployment (${{ matrix.scenario }})
       # Assert: Goss checks the deployed service and filesystem boundaries.
@@ -182,7 +182,7 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/deployment.goss.yaml
+          goss-file: platform/assistant/tests/runtime/deployment.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes deployed boundary (${{ matrix.scenario }})
       # Act and Assert: inspect failures without exposing content or restarting the service.
@@ -191,23 +191,23 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         env: *vm-connection
         with:
-          test-playbook: tests/ansible/hermes-health.yml
-          python-version-file: ansible/.python-version
+          test-playbook: platform/assistant/tests/ansible/hermes-health.yml
+          python-version-file: tooling/ansible/.python-version
           comment: "false"
           report-name: engineering-office - Hermes gateway health (${{ matrix.scenario }})
-          ansible-requirements: ansible/requirements.txt
-          galaxy-requirements: ansible/collections/requirements.yml
-          ansible-config: tests/ansible/ansible.cfg
+          ansible-requirements: tooling/ansible/requirements.txt
+          galaxy-requirements: tooling/ansible/collections/requirements.yml
+          ansible-config: tooling/ansible/ansible.cfg
       # Act and Assert: reboot without reapplying either production playbook.
       - name: Test automatic recovery after host reboot
         if: matrix.scenario == 'runtime'
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         env: *vm-connection
         with:
-          ansible-requirements: ansible/requirements.txt
-          ansible-config: tests/ansible/ansible.cfg
-          test-playbook: tests/ansible/hermes-reboot.yml
-          python-version-file: ansible/.python-version
+          ansible-requirements: tooling/ansible/requirements.txt
+          ansible-config: tooling/ansible/ansible.cfg
+          test-playbook: platform/assistant/tests/ansible/hermes-reboot.yml
+          python-version-file: tooling/ansible/.python-version
           comment: "false"
           report-name: engineering-office - Hermes host reboot (${{ matrix.scenario }})
       # Assert
@@ -218,7 +218,7 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/host.goss.yaml
+          goss-file: platform/assistant/tests/runtime/host.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes host after reboot (${{ matrix.scenario }})
         # jscpd:ignore-end
@@ -227,7 +227,7 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.vm.outputs.vm }}
-          goss-file: tests/hermes/session.goss.yaml
+          goss-file: platform/assistant/tests/runtime/session.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes session after host reboot (${{ matrix.scenario }})
       # Act and Assert: retain an encrypted copy outside the source VM.
@@ -236,11 +236,11 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         env: *vm-connection
         with:
-          ansible-requirements: ansible/requirements.txt
-          galaxy-requirements: ansible/collections/requirements.yml
-          ansible-config: tests/ansible/ansible.cfg
-          test-playbook: tests/ansible/hermes-backup.yml
-          python-version-file: ansible/.python-version
+          ansible-requirements: tooling/ansible/requirements.txt
+          galaxy-requirements: tooling/ansible/collections/requirements.yml
+          ansible-config: tooling/ansible/ansible.cfg
+          test-playbook: platform/assistant/tests/ansible/hermes-backup.yml
+          python-version-file: tooling/ansible/.python-version
           comment: "false"
           report-name: engineering-office - Hermes backup retention (${{ matrix.scenario }})
       # Arrange: storage and monitoring are outside both disposable guests.
@@ -250,7 +250,7 @@ jobs:
         with:
           script: |
             await exec.exec('docker', ['compose', '-p', 'hermes-backup-fixture', '-f',
-              'tests/hermes/backup-services/compose.yml', 'up', '-d', '--wait', '--wait-timeout', '180']);
+              'platform/assistant/tests/runtime/backup-services/compose.yml', 'up', '-d', '--wait', '--wait-timeout', '180']);
       # Act and Assert
       - name: Test scheduled backups and failure boundaries
         if: matrix.scenario == 'recovery'
@@ -259,11 +259,11 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         env: *vm-connection
         with:
-          ansible-requirements: ansible/requirements.txt
-          galaxy-requirements: ansible/collections/requirements.yml
-          ansible-config: tests/ansible/ansible.cfg
-          test-playbook: tests/ansible/hermes-backup-schedule.yml
-          python-version-file: ansible/.python-version
+          ansible-requirements: tooling/ansible/requirements.txt
+          galaxy-requirements: tooling/ansible/collections/requirements.yml
+          ansible-config: tooling/ansible/ansible.cfg
+          test-playbook: platform/assistant/tests/ansible/hermes-backup-schedule.yml
+          python-version-file: tooling/ansible/.python-version
           comment: "false"
           report-name: engineering-office - Hermes automatic backups (${{ matrix.scenario }})
         # jscpd:ignore-end
@@ -279,7 +279,7 @@ jobs:
         id: recovery
         uses: hoverkraft-tech/ci-github-iac/actions/vm/create@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
-          vm-config: tests/lima.yml
+          vm-config: platform/assistant/tests/lima.yml
       # Act and Assert: restore directly from S3 with an independently supplied key.
       - name: Test recovery after complete host loss
         if: matrix.scenario == 'recovery'
@@ -288,11 +288,11 @@ jobs:
           VM_SSH_CONFIG: ${{ steps.recovery.outputs.ssh-config }}
           VM_NAME: ${{ steps.recovery.outputs.name }}
         with:
-          ansible-requirements: ansible/requirements.txt
-          galaxy-requirements: ansible/collections/requirements.yml
-          ansible-config: tests/ansible/ansible.cfg
-          test-playbook: tests/ansible/hermes-recovery.yml
-          python-version-file: ansible/.python-version
+          ansible-requirements: tooling/ansible/requirements.txt
+          galaxy-requirements: tooling/ansible/collections/requirements.yml
+          ansible-config: tooling/ansible/ansible.cfg
+          test-playbook: platform/assistant/tests/ansible/hermes-recovery.yml
+          python-version-file: tooling/ansible/.python-version
           comment: "false"
           report-name: engineering-office - Hermes host loss recovery (${{ matrix.scenario }})
       # Assert
@@ -301,7 +301,7 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.recovery.outputs.vm }}
-          goss-file: tests/hermes/host.goss.yaml
+          goss-file: platform/assistant/tests/runtime/host.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes recovery host (${{ matrix.scenario }})
       - name: Verify original conversation and credential separation on the new host
@@ -309,7 +309,7 @@ jobs:
         uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
           vm: ${{ steps.recovery.outputs.vm }}
-          goss-file: tests/hermes/backup.goss.yaml
+          goss-file: platform/assistant/tests/runtime/backup.goss.yaml
           comment: "false"
           report-name: engineering-office - Hermes recovered conversation (${{ matrix.scenario }})
       - name: Ensure the original host is removed
@@ -328,7 +328,7 @@ jobs:
         with:
           script: |
             await exec.exec('docker', ['compose', '-p', 'hermes-backup-fixture', '-f',
-              'tests/hermes/backup-services/compose.yml', 'down', '--volumes']);
+              'platform/assistant/tests/runtime/backup-services/compose.yml', 'down', '--volumes']);
       - name: Remove the runner recovery record
         if: ${{ always() && matrix.scenario == 'recovery' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0

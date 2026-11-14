@@ -28,7 +28,7 @@ jobs:
             await io.mkdirP('.local');
             const root = fs.mkdtempSync(path.join(process.env.GITHUB_WORKSPACE, '.local/native-tofu-'));
             fs.mkdirSync(path.join(root, 'module'), { mode: 0o700 });
-            for (const source of ['tofu/professional-host/state.tofu', 'tests/infrastructure-state/contract.tofu', 'tests/infrastructure-state/native.tofutest.hcl'])
+            for (const source of ['platform/hosting/host/tofu/state.tofu', 'platform/hosting/state/tests/contract.tofu', 'platform/hosting/state/tests/native.tofutest.hcl'])
               fs.copyFileSync(source, path.join(root, 'module', path.basename(source)));
             fs.writeFileSync(path.join(root, 'key'), 'synthetic-independent-native-state-test-password', { mode: 0o600 });
             core.setOutput('directory', path.relative(process.env.GITHUB_WORKSPACE, root));
@@ -39,29 +39,29 @@ jobs:
           TF_VAR_state_password_file: ${{ steps.native.outputs.key }}
         with:
           working-directory: ${{ steps.native.outputs.directory }}/module
-          tofu-version-file: tofu/.opentofu-version
+          tofu-version-file: tooling/opentofu/.opentofu-version
           comment: "false"
           report-name: engineering-office - Native OpenTofu
       - name: Check native OpenTofu formatting
-        run: tofu fmt -check -recursive tofu tests/infrastructure-state
+        run: tofu fmt -check -recursive platform/hosting/host/tofu platform/hosting/state/tests
       - name: Start isolated independent storage
         run: |
-          docker compose -p infrastructure-state-fixture -f tests/infrastructure-state/compose.yml up -d --wait storage
-          docker compose -p infrastructure-state-fixture -f tests/infrastructure-state/compose.yml run --rm audit
+          docker compose -p infrastructure-state-fixture -f platform/hosting/state/tests/compose.yml up -d --wait storage
+          docker compose -p infrastructure-state-fixture -f platform/hosting/state/tests/compose.yml run --rm audit
       # Act and Assert: assertions use real native encryption, S3 and concurrent writers.
       - name: Test state bootstrap, locking and recovery
         uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
         with:
-          ansible-requirements: ansible/requirements.txt
-          python-version-file: ansible/.python-version
-          ansible-config: tests/ansible/ansible.cfg
-          galaxy-requirements: ansible/collections/requirements.yml
-          test-playbook: tests/ansible/infrastructure-state.yml
+          ansible-requirements: tooling/ansible/requirements.txt
+          python-version-file: tooling/ansible/.python-version
+          ansible-config: tooling/ansible/ansible.cfg
+          galaxy-requirements: tooling/ansible/collections/requirements.yml
+          test-playbook: platform/hosting/state/tests/ansible/infrastructure-state.yml
           comment: "false"
           report-name: engineering-office - Infrastructure state
       - name: Remove isolated storage and every fixture object version
         if: always()
-        run: docker compose -p infrastructure-state-fixture -f tests/infrastructure-state/compose.yml down --volumes
+        run: docker compose -p infrastructure-state-fixture -f platform/hosting/state/tests/compose.yml down --volumes
       - name: Remove disposable native state and key files
         if: ${{ always() && steps.native.outputs.directory != '' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0

@@ -1,6 +1,6 @@
 # Normalize draft typography locally
 
-The [writing normalizer](../../packages/writing-normalizer) uses
+The [writing normalizer](../../features/writing/normalizer) uses
 [polytypo](https://polytypo.dev/docs/) to normalize English and French typography
 in plain text, Markdown and HTML. Processing stays in the Node.js process without
 network requests, logging or publication. It does not rewrite sentences, check
@@ -26,13 +26,13 @@ Supply complete format fragments, including separators. Do not split inside
 Markdown constructs or HTML elements; each prose part is parsed independently.
 The module does not insert separators or reconstruct a document tree.
 
-Use the runtime in the package's [.node-version](../../packages/writing-normalizer/.node-version).
+Use the runtime in the package's [.node-version](../../features/writing/normalizer/.node-version).
 From the repository root, install the locked dependency with
-`npm ci --ignore-scripts --prefix packages/writing-normalizer`, then run:
+`npm ci --ignore-scripts --prefix features/writing/normalizer`, then run:
 
 ```sh
 node --input-type=module <<'JS'
-import { WritingNormalizer } from './packages/writing-normalizer/src/writing-normalizer.js';
+import { WritingNormalizer } from './features/writing/normalizer/src/writing-normalizer.js';
 
 const result = new WritingNormalizer().normalize({
   format: 'text/markdown',

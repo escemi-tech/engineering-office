@@ -1,0 +1,70 @@
+---
+# Arrange
+- name: Select the disposable host
+  ansible.builtin.import_playbook: helpers/inventory.yml
+
+- name: Verify the fresh image needs host preparation
+  hosts: hermes
+  gather_facts: false
+  tasks:
+    - name: Inspect Docker before preparation
+      ansible.builtin.stat:
+        path: /usr/bin/docker
+      register: initial_docker
+    - name: Require an image without Docker
+      ansible.builtin.assert:
+        that:
+          - not initial_docker.stat.exists
+        quiet: true
+
+# Act
+- name: Prepare through the public entrypoint
+  ansible.builtin.import_playbook: ../../deployment/hermes-host.yml
+
+- name: Verify host convergence and prepare the Compose fixtures
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Assert
+    - name: Require the first preparation to install prerequisites
+      ansible.builtin.assert:
+        that:
+          - hermes_host_packages.changed
+        quiet: true
+    # Act
+    - name: Repeat host preparation
+      ansible.builtin.include_role:
+        name: hermes_host
+    # Assert
+    - name: Require unchanged packages and service on repeat
+      ansible.builtin.assert:
+        that:
+          - not hermes_host_packages.changed
+          - not hermes_host_service.changed
+        quiet: true
+    - name: Read the SSH operator identity and groups
+      ansible.builtin.command:
+        argv: [id]
+      become: false
+      changed_when: false
+      register: host_operator
+    - name: Require preparation to preserve operator privileges
+      ansible.builtin.assert:
+        that:
+          - "'(docker)' not in host_operator.stdout"
+        quiet: true
+    # Arrange: only the disposable Compose demo needs an unprivileged Docker client.
+    - name: Read the fixture operator name
+      ansible.builtin.command:
+        argv: [id, -un]
+      become: false
+      changed_when: false
+      register: fixture_operator
+    - name: Grant Docker access only inside this disposable test host
+      ansible.builtin.user:
+        name: "{{ fixture_operator.stdout }}"
+        groups: docker
+        append: true
+    - name: Reconnect after the fixture operator's group membership changes
+      ansible.builtin.meta: reset_connection
