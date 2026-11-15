@@ -66,6 +66,19 @@ and a scoped inference credential. Processor selection, private-source admission
 and cloud hosting remain open gates; see the [permission policy](../development/assistant-security.md).
 Only synthetic inference is currently covered by the repository's CI.
 
+The endpoint must support Chat Completions with `max_completion_tokens`,
+`reasoning_effort`, `service_tier` and `store`. The runtime requests at most 2,048
+completion tokens, no reasoning, the default service tier and `store: false`.
+This is the initial short-answer profile; an endpoint that does not support these
+fields requires separate qualification. Model-generated session titles are disabled;
+Hermes keeps its local titles derived from the conversation. Provider outages return
+control without the automatic recovery cycles. See the native settings in
+[config.yaml](../../platform/assistant/runtime/config.yaml).
+
+These settings limit individual responses, not total spending. Configure the
+provider's project spending limit and approve its data-processing conditions before
+real use. `store: false` does not establish zero retention by the provider.
+
 ```sh
 install -d -m 0700 .local
 install -m 0600 platform/assistant/runtime/runtime.env.example .local/hermes.env

@@ -53,6 +53,36 @@ Private-source admission and operational isolation/recovery remain acceptance
 gates. Review runtime qualification alongside each concrete dependency update;
 a generic metadata schema is not required to deliver this initial deployment.
 
+## Bounded inference profile: 2026-11-15
+
+An isolated probe of the pinned image sent two Chat Completions requests for one
+synthetic conversation: the answer and a model-generated session title. The answer
+had no explicit completion-token cap and selected medium reasoning. Existing CI
+validated instruction loading and the answer, but did not check those parameters.
+
+Use Hermes' native named provider configuration and `extra_body` to request 2,048
+completion tokens, no reasoning, the default service tier and `store: false`.
+Select Chat Completions explicitly. Disable model upgrades of locally derived
+session titles and automatic recovery cycles after exhausted provider attempts.
+Keep the existing single-attempt and empty-fallback settings. This adds neither a
+proxy nor a custom model client. The initial endpoint must support these fields;
+other providers require separate qualification. Native project spending controls
+and processor acceptance remain necessary before real use.
+
+The existing inference fixture now checks the request parameters. Its unavailable
+provider case checks that a transient failure returns control after one request,
+without the delayed recovery ladder. Preserve the policy-loading rejection case
+with otherwise valid request parameters so it still tests the intended boundary.
+See upstream [provider configuration](https://hermes-agent.nousresearch.com/docs/integrations/providers)
+and [runtime configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration).
+
+Local qualification against the pinned image passed the startup scenario's 11
+assertions in 0.96 seconds, excluding image/policy preparation and gateway startup.
+The captured successful turn emitted one inference request with the selected
+limits. Replaying the original uncapped request against the strengthened fixture
+returned HTTP 400. These are synthetic transport checks, not live OpenAI or
+private-data qualification.
+
 ## Independent shutdown and gateway rotation: 2026-11-05
 
 The Compose stop command requires successful configuration interpolation, including
