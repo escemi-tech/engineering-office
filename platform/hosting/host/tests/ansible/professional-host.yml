@@ -44,12 +44,12 @@
     - name: Accept the first campaign reservation
       ansible.builtin.include_role:
         name: professional_host
-        tasks_from: campaign
+        tasks_from: reservation
 
     - name: Accept rearming the unchanged active run
       ansible.builtin.include_role:
         name: professional_host
-        tasks_from: campaign
+        tasks_from: reservation
       vars:
         professional_host_previous_run:
           { professional_host: "{{ professional_host }}" }
@@ -94,21 +94,21 @@
       ansible.builtin.include_tasks: helpers/expect-host-cleanup-refusal.yml
       loop:
         - name: Completed run cannot be reused
-          tasks_from: campaign
+          tasks_from: reservation
           previous_run: { professional_host: "{{ professional_host }}" }
           campaign: ["{{ professional_host.qualification.run_id }}"]
           cleanup_record:
             run_id: "{{ professional_host.qualification.run_id }}"
             resources_absent: true
         - name: Fourth campaign run
-          tasks_from: campaign
+          tasks_from: reservation
           campaign: [earlier-run-one, earlier-run-two, earlier-run-three]
         - name: Previous run has no cleanup receipt
-          tasks_from: campaign
+          tasks_from: reservation
           previous_run:
             professional_host: "{{ professional_host | combine({'qualification': {'run_id': 'previous-run', 'expires_at': professional_host.qualification.expires_at}}) }}"
         - name: Active deadline cannot change
-          tasks_from: campaign
+          tasks_from: reservation
           previous_run:
             professional_host: "{{ professional_host | combine({'qualification': {'run_id': professional_host.qualification.run_id, 'expires_at': '2099-01-01T11:00:00Z'}}) }}"
           campaign: ["{{ professional_host.qualification.run_id }}"]
@@ -145,4 +145,132 @@
 
     - name: Exercise the real service manager only on the disposable hosted runner
       ansible.builtin.include_tasks: helpers/host-controller.yml
+      loop: [qualification, recovery]
+      loop_control:
+        loop_var: controller_lifecycle
       when: lookup('ansible.builtin.env', 'FIXTURE_RUNNER_ENVIRONMENT') == 'github-hosted'
+
+- name: Test recovery isolation without provider access or workstation mutations
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    professional_host:
+      project_id: 10000000-0000-4000-8000-000000000001
+      ssh_public_key: ssh-ed25519 SYNTHETICPUBLICKEY
+      quote: { hourly_eur_with_tax: 0.074, monthly_eur_with_tax: 57 }
+      qualification: null
+      recovery:
+        run_id: 40000000-0000-4000-8000-000000000001
+        expires_at: "2099-01-01T12:00:00Z"
+  tasks:
+    # Arrange
+    - name: Reset controller facts left by the hosted lifecycle scenarios
+      ansible.builtin.set_fact:
+        professional_host_previous_run: {}
+        professional_host_cleanup_record: {}
+        professional_host_campaign:
+          [first-completed, second-completed, third-completed]
+
+    - name: Select the recovery identity through the production policy
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: policy
+
+    # Act: a separate recovery exercise does not reserve a fourth campaign run.
+    - name: Accept a new recovery reservation with a closed provider campaign
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: reservation
+
+    # Assert: neither retained nor campaign resources may enter recovery cleanup.
+    - name: Reject cross-scope resources and recovery deadline changes
+      ansible.builtin.include_tasks: helpers/expect-host-cleanup-refusal.yml
+      loop:
+        - name: Retained primary server
+          servers:
+            - name: engineering-office
+              project_id: "{{ professional_host.project_id }}"
+              metadata:
+                {
+                  owner: engineering-office,
+                  purpose: professional-host,
+                  managed_by: opentofu,
+                }
+              attached_volumes: []
+        - name: Provider qualification server
+          servers:
+            - name: "engineering-office-q-{{ professional_host_run.run_id }}"
+              project_id: "{{ professional_host.project_id }}"
+              metadata: "{{ professional_host_ownership | combine({'purpose': 'qualification'}) }}"
+              attached_volumes: []
+        - name: Active recovery deadline cannot change
+          tasks_from: reservation
+          previous_run:
+            professional_host: "{{ professional_host | combine({'recovery': professional_host.recovery | combine({'expires_at': '2099-01-01T11:00:00Z'})}) }}"
+        - name: Completed recovery cannot be reused
+          tasks_from: reservation
+          previous_run: { professional_host: "{{ professional_host }}" }
+          cleanup_record:
+            run_id: "{{ professional_host.recovery.run_id }}"
+            resources_absent: true
+      loop_control:
+        loop_var: cleanup_case
+        label: "{{ cleanup_case.name }}"
+
+    # Arrange: native backend metadata in a disposable directory, never real state.
+    - name: Create an isolated backend fixture
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: office-recovery-scope-
+      register: recovery_backend_fixture
+
+    - name: Verify initialized backend selection before any remote operation
+      vars:
+        professional_host_stack: "{{ recovery_backend_fixture.path }}"
+      block:
+        - name: Create the native metadata directory
+          ansible.builtin.file:
+            path: "{{ recovery_backend_fixture.path }}/.terraform"
+            state: directory
+            mode: "0700"
+
+        - name: Represent a controller already initialized for the primary host
+          ansible.builtin.copy:
+            dest: "{{ recovery_backend_fixture.path }}/.terraform/terraform.tfstate"
+            content: '{"backend":{"type":"s3","config":{"key":"professional-host.tfstate"}}}'
+            mode: "0600"
+
+        # Act / Assert
+        - name: Refuse the primary backend without migration or mutation
+          ansible.builtin.include_tasks: helpers/expect-host-cleanup-refusal.yml
+          vars:
+            cleanup_case:
+              name: Recovery may not use the primary backend
+              tasks_from: state-scope
+
+        - name: Verify the original metadata is preserved
+          ansible.builtin.assert:
+            that: (lookup('ansible.builtin.file', recovery_backend_fixture.path + '/.terraform/terraform.tfstate') | from_json).backend.config.key == 'professional-host.tfstate'
+            quiet: true
+
+        # Arrange / Act: accept a separately initialized controller for this UUID.
+        - name: Represent the approved independent recovery backend
+          ansible.builtin.copy:
+            dest: "{{ recovery_backend_fixture.path }}/.terraform/terraform.tfstate"
+            content: "{{ {'backend': {'type': 's3', 'config': {'key': 'recovery/' + professional_host.recovery.run_id + '/professional-host.tfstate'}}} | to_json }}"
+            mode: "0600"
+
+        - name: Accept the matching recovery backend
+          ansible.builtin.include_role:
+            name: professional_host
+            tasks_from: state-scope
+      rescue:
+        - name: Preserve the backend isolation failure after fixture cleanup
+          ansible.builtin.fail:
+            msg: "Recovery backend validation failed at {{ ansible_failed_task.name }}."
+      always:
+        - name: Remove only the synthetic backend fixture
+          ansible.builtin.file:
+            path: "{{ recovery_backend_fixture.path }}"
+            state: absent

@@ -62,6 +62,8 @@
       TF_VAR_state_password_file: "{{ professional_host_state_password_file }}"
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
+      TF_WORKSPACE: default
+      TF_DATA_DIR: "{{ professional_host_stack }}/.terraform"
 
 - name: Inspect the qualified backend location
   ansible.builtin.stat:
@@ -77,3 +79,6 @@
       - professional_host_backend.stat.mode | default('') == '0600'
     fail_msg: Qualify and initialize the independent state backend before provisioning.
     quiet: true
+
+- name: Preserve the primary backend when selecting a recovery scope
+  ansible.builtin.import_tasks: state-scope.yml

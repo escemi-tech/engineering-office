@@ -1,6 +1,7 @@
 # ADR 0010: Bounded native OVH host provisioning
 
-Status: Proposed; provider qualification and deployment approval remain open.
+Status: Accepted for the qualified provider lifecycle; retained-host and recovery
+deployment approvals remain separate.
 
 ## Decision
 
@@ -27,6 +28,43 @@ current inputs match the saved plan.
 Disposable runs require an independently armed timer with the same run data and
 cannot extend the fixed deadline. A retained host uses separate approval and is
 ineligible for qualification cleanup.
+
+## Isolated replacement-host lifecycle on 2026-11-15
+
+A restore exercise must preserve the primary host and independent backup until
+the recovered session is accepted. The original fixed retained name and backend
+key could not provide that simultaneous target. CLI workspaces alone separate
+state but do not isolate resource names, credentials, deadlines or cleanup.
+
+Reuse the same native OpenStack resources and Ansible role with an explicit
+`recovery` UUID/expiry, mutually exclusive with `qualification`. Recovery gets
+its own resource names, metadata, encrypted S3 key/lock and systemd writer/expiry
+units. The `engineering-office-restore-<UUID>` resource name stays within 63
+characters, preserving its complete UUID when Nova derives the guest hostname.
+See the [native hostname limit](https://docs.openstack.org/nova/2026.1/user/launch-instance-from-image.html).
+Native init selects the exact key; preflight refuses a checkout initialized
+for another state. The controller selects the default native workspace explicitly.
+No backend migration or reset of the provider campaign is introduced. The caller
+must supply a qualified recovery identity that cannot modify primary state;
+code does not create IAM users or claim that a filename proves permission scope.
+
+The lifecycle reuses the existing fixed-deadline and ownership checks. Recovery
+requires a separately approved EUR 0.60 exercise allowance and never consumes another
+entry in the closed provider campaign. One recovery controller can operate at a
+time; its units refuse takeover by another checkout. The retained host and its
+normal commands keep their existing names and state key.
+
+Native mocked plans cover distinct recovery resources and reject mixed lifecycle
+or excessive cost inputs. Synthetic Ansible tests exercise primary/campaign
+cleanup refusal, immutable reservations and wrong-backend refusal without changing
+the original metadata. The existing hosted systemd fixture runs both namespaces
+through repeated Make applies and timer interruption, verifying ledger preservation.
+The extra hosted case is required for actual service-manager names and ordering;
+no additional VM recovery scenario or third-party dependency is introduced.
+
+Full live restore still requires its exact approved plan, real scoped credentials,
+private access, independently recovered keys and measured recovery evidence. These
+configuration tests do not authorize or qualify another paid VM.
 
 ## Trade-offs and boundaries
 

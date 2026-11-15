@@ -301,7 +301,9 @@ operational qualification.
 
 Prepare a fresh, isolated Ubuntu recovery host and make the encrypted repository
 and independently recovered password available there. Keep external integrations
-disconnected. Set the controller inventory to that host and update the recovery
+disconnected. For OVH, use the [isolated recovery lifecycle](host-provisioning.md#isolated-recovery-host),
+which preserves the primary deployment and uses separate state and expiry.
+Set the recovery controller inventory to that host and update the recovery
 paths in `.local/hermes-backup.yml`. Add `hermes_restore_snapshot` with the full
 64-character snapshot ID selected from the private recovery record. Short IDs
 and `latest` are rejected.

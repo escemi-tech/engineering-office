@@ -9,7 +9,7 @@
         systemctl,
         --user,
         show,
-        engineering-office-provisioning.service,
+        "{{ professional_host_writer_unit }}.service",
         --property=ActiveState,
         --value,
       ]
@@ -79,13 +79,13 @@
 
 - name: Record completed cleanup without deleting remote state history
   ansible.builtin.copy:
-    dest: "{{ professional_host_root }}/.local/qualification-cleanup.json"
-    content: "{{ {'run_id': professional_host.qualification.run_id, 'resources_absent': true} | to_nice_json }}\n"
+    dest: "{{ professional_host_root }}/.local/{{ professional_host_scope }}-cleanup.json"
+    content: "{{ {'run_id': professional_host_run.run_id, 'resources_absent': true} | to_nice_json }}\n"
     mode: "0600"
 
 - name: Disarm expiry only after provider deletion is verified
   ansible.builtin.systemd_service:
-    name: engineering-office-qualification-expiry.timer
+    name: "{{ professional_host_expiry_unit }}.timer"
     scope: user
     enabled: false
     state: stopped

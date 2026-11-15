@@ -1,0 +1,18 @@
+---
+- name: Inspect the local native backend metadata without reading remote state
+  ansible.builtin.stat:
+    path: "{{ professional_host_stack }}/.terraform/terraform.tfstate"
+    follow: false
+  register: professional_host_backend_metadata
+
+- name: Refuse a controller initialized for a different state
+  ansible.builtin.assert:
+    that:
+      - professional_host_backend_metadata.stat.isreg | default(false)
+      - not professional_host_backend_metadata.stat.islnk | default(true)
+      - (lookup('ansible.builtin.file', professional_host_backend_metadata.stat.path) | from_json).backend.type == 's3'
+      - (lookup('ansible.builtin.file', professional_host_backend_metadata.stat.path) | from_json).backend.config.key == professional_host_state_key
+    fail_msg: Use a fresh dedicated checkout for this recovery exercise. Never reconfigure or migrate the primary backend.
+    quiet: true
+  when: professional_host_backend_metadata.stat.exists
+  no_log: true

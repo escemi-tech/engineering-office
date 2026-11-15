@@ -61,6 +61,54 @@ run "private_only_cutover" {
   }
 }
 
+# Act: plan a simultaneous recovery host outside the closed campaign.
+run "isolated_recovery" {
+  command = plan
+  variables {
+    qualification = null
+    recovery = {
+      run_id     = "20000000-0000-4000-8000-000000000001"
+      expires_at = "2099-01-01T12:00:00Z"
+    }
+  }
+  # Assert: every named provider resource has a distinct recovery identity.
+  assert {
+    condition = (
+      openstack_compute_instance_v2.host.name == "engineering-office-restore-${var.recovery.run_id}" &&
+      openstack_compute_keypair_v2.operator.name == openstack_compute_instance_v2.host.name &&
+      openstack_networking_secgroup_v2.host.name == openstack_compute_instance_v2.host.name &&
+      openstack_compute_instance_v2.host.metadata["purpose"] == "recovery" &&
+      openstack_compute_instance_v2.host.metadata["expires_at"] == var.recovery.expires_at
+    )
+    error_message = "Recovery must not reuse the retained host or qualification resources."
+  }
+}
+
+# Act / Assert: one host cannot consume two separately approved lifecycles.
+run "reject_mixed_lifecycles" {
+  command = plan
+  variables {
+    recovery = {
+      run_id     = "20000000-0000-4000-8000-000000000001"
+      expires_at = "2099-01-01T12:00:00Z"
+    }
+  }
+  expect_failures = [var.recovery]
+}
+
+run "reject_expensive_recovery" {
+  command = plan
+  variables {
+    qualification = null
+    recovery = {
+      run_id     = "20000000-0000-4000-8000-000000000001"
+      expires_at = "2099-01-01T12:00:00Z"
+    }
+    quote = { hourly_eur_with_tax = 0.25, monthly_eur_with_tax = 57 }
+  }
+  expect_failures = [openstack_compute_instance_v2.host]
+}
+
 # Act / Assert: reject unsafe scope, unreviewed image drift and over-budget runs.
 run "reject_broad_ssh" {
   command = plan
