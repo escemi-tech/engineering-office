@@ -15,3 +15,7 @@ professional_host:
   qualification:
     run_id: REPLACE_WITH_UNIQUE_RUN_UUID
     expires_at: REPLACE_WITH_UTC_DEADLINE
+  # For an isolated restore exercise, set qualification to null and supply
+  # recovery: {run_id: <new UUID>, expires_at: <fixed UTC deadline>} instead.
+  # See docs/usage/host-provisioning.md#isolated-recovery-host.
+  recovery: null

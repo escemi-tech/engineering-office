@@ -1,9 +1,10 @@
-# Managed by engineering-office qualification
+# Managed by engineering-office {{ professional_host_scope }}
+# Controller: {{ professional_host_root }}
 [Unit]
-Description=Expire the approved engineering-office qualification run
+Description=Expire the approved engineering-office {{ professional_host_scope }} run
 
 [Timer]
-OnCalendar={{ professional_host.qualification.expires_at | regex_replace('T', ' ') | regex_replace('Z$', ' UTC') }}
+OnCalendar={{ professional_host_run.expires_at | regex_replace('T', ' ') | regex_replace('Z$', ' UTC') }}
 AccuracySec=1s
 Persistent=true
 

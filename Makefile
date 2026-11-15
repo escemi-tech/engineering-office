@@ -106,20 +106,24 @@ hermes-stop: hermes-backup-disable ## Disable backup automation and Hermes resta
 hermes-logs: ## Show recent Hermes logs
 	$(HERMES_COMPOSE) logs --tail 100
 
-.PHONY: plan destroy-plan provision qualification-expiry qualification-cleanup
+.PHONY: plan destroy-plan provision qualification-expiry qualification-cleanup recovery-expiry recovery-provision recovery-cleanup
 plan: ## Prepare an encrypted host plan and its review fingerprint without applying it
 	ansible-playbook platform/hosting/host/professional-host-plan.yml --extra-vars @.local/professional-host.yml
 
 destroy-plan: ## Prepare an encrypted destruction plan for review
 	ansible-playbook platform/hosting/host/professional-host-plan.yml --extra-vars @.local/professional-host.yml --extra-vars '{"professional_host_destroy_plan": true}'
 
-qualification-expiry: ## Reserve one disposable run and arm independent fixed-deadline cleanup
+qualification-expiry: ## Reserve a provider campaign run and arm its independent expiry
+recovery-expiry: ## Arm independent expiry for a separately approved recovery exercise
+qualification-expiry recovery-expiry:
 	ansible-playbook platform/hosting/host/professional-host-expiry.yml --extra-vars @.local/professional-host.yml
 
-provision: ## Apply the exact plan fingerprint approved in .local/professional-host-approval.yml
-	systemd-run --user --unit=engineering-office-provisioning --collect --wait --pipe \
-		--property=Conflicts=engineering-office-qualification-expiry.service \
-		--property=Before=engineering-office-qualification-expiry.service \
+provision: ## Apply the exact approved primary or qualification plan
+recovery-provision: ## Apply the exact approved recovery plan with its own bounded writer
+provision recovery-provision:
+	systemd-run --user --unit=$(if $(filter recovery-provision,$@),engineering-office-recovery-provisioning,engineering-office-provisioning) --collect --wait --pipe \
+		--property=Conflicts=engineering-office-$(if $(filter recovery-provision,$@),recovery,qualification)-expiry.service \
+		--property=Before=engineering-office-$(if $(filter recovery-provision,$@),recovery,qualification)-expiry.service \
 		--property=RuntimeMaxSec=30min --property=KillSignal=SIGINT --property=TimeoutStopSec=90s \
 		--property=UMask=0077 --working-directory="$(CURDIR)" \
 		--setenv="PATH=$(PATH)" --setenv="ANSIBLE_COLLECTIONS_PATH=$(CURDIR)/.local/ansible/collections" \
@@ -129,6 +133,9 @@ provision: ## Apply the exact plan fingerprint approved in .local/professional-h
 
 qualification-cleanup: ## Independently reconcile and remove the explicitly selected disposable run
 	systemctl --user start engineering-office-qualification-expiry.service
+
+recovery-cleanup: ## Independently remove only the selected recovery host
+	systemctl --user start engineering-office-recovery-expiry.service
 
 configure deploy verify backup:
 	@printf '%s\n' '$@ is unavailable: infrastructure implementation and deployment preflight are required.' >&2

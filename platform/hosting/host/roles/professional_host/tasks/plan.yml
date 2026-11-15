@@ -18,6 +18,7 @@
         -input=false,
         -lockfile=readonly,
         -backend-config=.local/backend.hcl,
+        "-backend-config=key={{ professional_host_state_key }}",
       ]
   environment: "{{ professional_host_environment }}"
   changed_when: false

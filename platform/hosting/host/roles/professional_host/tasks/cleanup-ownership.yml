@@ -2,12 +2,13 @@
 - name: Refuse retained hosts and ambiguous resource matches
   ansible.builtin.assert:
     that:
-      - professional_host.qualification is not none
-      - professional_host_name == 'engineering-office-q-' + professional_host.qualification.run_id
+      - professional_host_run is not none
+      - professional_host_scope in ['qualification', 'recovery']
+      - professional_host_name == 'engineering-office-' + ('restore-' if professional_host_scope == 'recovery' else 'q-') + professional_host_run.run_id
       - professional_host_servers.servers | length <= 1
       - professional_host_groups.security_groups | length <= 1
       - professional_host_keypairs.keypairs | length <= 1
-    fail_msg: Cleanup accepts one exact qualification run, never a retained host or ambiguous match.
+    fail_msg: Cleanup accepts one exact temporary run, never a retained host or ambiguous match.
     quiet: true
 
 - name: Require exact server ownership before any deletion

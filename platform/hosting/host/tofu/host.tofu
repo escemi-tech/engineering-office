@@ -1,10 +1,12 @@
 locals {
-  host_name = var.qualification == null ? "engineering-office" : "engineering-office-q-${var.qualification.run_id}"
+  temporary_run = var.recovery != null ? var.recovery : var.qualification
+  purpose       = var.recovery != null ? "recovery" : (var.qualification != null ? "qualification" : "professional-host")
+  host_name     = var.recovery != null ? "engineering-office-restore-${var.recovery.run_id}" : (var.qualification == null ? "engineering-office" : "engineering-office-q-${var.qualification.run_id}")
   ownership = merge({
     owner      = "engineering-office"
     managed_by = "opentofu"
-    purpose    = var.qualification == null ? "professional-host" : "qualification"
-  }, var.qualification == null ? {} : var.qualification)
+    purpose    = local.purpose
+  }, local.temporary_run == null ? {} : local.temporary_run)
 }
 
 data "openstack_images_image_v2" "ubuntu" {
@@ -103,8 +105,8 @@ resource "openstack_compute_instance_v2" "host" {
       error_message = "Only the reviewed public Ubuntu 26.04 image is supported."
     }
     precondition {
-      condition     = var.qualification == null ? true : var.quote.hourly_eur_with_tax * 3 <= 0.60
-      error_message = "A qualification run reserves three billed hours and must fit EUR 0.60 including tax."
+      condition     = local.temporary_run == null ? true : var.quote.hourly_eur_with_tax * 3 <= 0.60
+      error_message = "A temporary host reserves three billed hours and must fit its separately approved EUR 0.60 allowance including tax."
     }
   }
 }

@@ -171,6 +171,12 @@ checks formatting with the pinned OpenTofu binary; native initialization and the
 state lifecycle validate the configuration. Terraform-specific parsers do not
 own this source.
 
+The same host tests cover the isolated recovery scope. Keep backend selection and
+ownership failures in the cheap Ansible tests; the hosted-only controller fixture
+checks real systemd interruption and ledger preservation for each namespace.
+Never run that fixture against the workstation's user manager. Recovery must not
+read/write the qualification ledger or reuse the primary backend, writer or expiry.
+
 The professional-host workflow runs native mocked provider tests and the Ansible
 campaign reservation and cleanup ownership guards. It has no cloud credentials and creates no real cloud
 resources. Keep provider plans and live qualification evidence private. Run the

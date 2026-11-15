@@ -61,3 +61,22 @@ variable "qualification" {
     error_message = "Use a unique run UUID and RFC3339 UTC expiry."
   }
 }
+
+variable "recovery" {
+  type = object({
+    run_id     = string
+    expires_at = string
+  })
+  default     = null
+  nullable    = true
+  description = "Separately approved recovery exercise, outside the provider qualification campaign."
+  validation {
+    condition = var.recovery == null ? true : (
+      var.qualification == null &&
+      can(regex("^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$", var.recovery.run_id)) &&
+      can(formatdate("YYYY-MM-DD'T'hh:mm:ss'Z'", var.recovery.expires_at)) &&
+      endswith(var.recovery.expires_at, "Z")
+    )
+    error_message = "Use a recovery UUID and fixed UTC expiry with qualification set to null."
+  }
+}
