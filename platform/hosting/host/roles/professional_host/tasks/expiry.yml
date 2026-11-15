@@ -80,14 +80,16 @@
     mode: "0600"
   loop: [service, timer]
 
-- name: Reset the retry counter only for a new run after verified cleanup
+- name: Reset loaded qualification units only for a new run after verified cleanup
+  # Native patterns skip unloaded units, whose counters no longer exist.
+  # Restrict the reset to this feature's service and timer.
   ansible.builtin.command:
     argv:
       [
         systemctl,
         --user,
         reset-failed,
-        engineering-office-qualification-expiry.service,
+        "engineering-office-qualification-expiry.*",
       ]
   changed_when: true
   when:

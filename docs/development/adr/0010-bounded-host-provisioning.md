@@ -108,6 +108,21 @@ cloud scenarios remain unqualified. Passing the hosted regression test will not
 close those live acceptance requirements. Keep this feature in draft until they
 are completed under a separately approved run.
 
+## Recreating removed controller units on 2026-11-15
+
+The second approved run exposed a failure before provider creation. Its previous
+run record remained, but the completed run's service and timer had been removed.
+Calling `systemctl reset-failed` with the exact unloaded service name failed
+before the next timer could be armed. Native daemon reload and same-run rearming
+recovered the controller without changing the plan, deadline or campaign allocation.
+
+Use systemctl's native pattern selection for this feature's qualification units.
+Unloaded units have no counters to reset; loaded service/timer counters still
+reset only for a new run after verified cleanup. Do not suppress command failures
+or reset unrelated units. Extend the existing hosted controller scenario to call
+the production expiry role with a completed prior reservation and absent units,
+then verify the active timer and retained campaign allocations before writer tests.
+
 ## References
 
 - [OpenStack provider](https://github.com/terraform-provider-openstack/terraform-provider-openstack)

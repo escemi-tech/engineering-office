@@ -306,8 +306,14 @@ partially created runs are accepted, while foreign projects, mismatched run
 markers, retained volumes, duplicate resources, foreign SSH keys and orphan ports are rejected
 before any mutation.
 
-These checks do not prove live provider permissions, address release, timer
-execution or interruption cleanup. The bounded real campaign in the
+On its disposable runner, the workflow also arms the production expiry role
+after a completed run's units have been removed. It checks the active timer and
+preserved campaign allocations, then runs consecutive native writers and verifies
+that timer-driven cleanup observes the interrupted writer already stopped.
+This service-manager fixture must not run on a developer or operational controller.
+
+These checks do not prove live provider permissions, address release or real
+cloud cleanup at expiry or after interruption. The bounded real campaign in the
 [provisioning guide](host-provisioning.md) must qualify those boundaries before
 retaining an operational host. `make plan` prepares an encrypted review artifact;
 `make provision` requires its exact approved fingerprint and an independent
