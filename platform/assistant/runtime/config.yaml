@@ -1,15 +1,27 @@
 model:
   default: ${HERMES_MODEL}
-  provider: custom
-  base_url: ${HERMES_INFERENCE_URL}
-  api_key: ${HERMES_INFERENCE_API_KEY}
+  provider: office
   streaming: false
+providers:
+  office:
+    api: ${HERMES_INFERENCE_URL}
+    key_env: HERMES_INFERENCE_API_KEY
+    transport: chat_completions
+    extra_body:
+      max_completion_tokens: 2048
+      reasoning_effort: none
+      service_tier: default
+      store: false
 platform_toolsets:
   cli: []
   api_server: []
 agent:
   max_turns: 3
   api_max_retries: 1
+  auto_recovery_cycles: 0
+auxiliary:
+  title_generation:
+    model_upgrade_enabled: false
 max_concurrent_sessions: 1
 memory:
   memory_enabled: false

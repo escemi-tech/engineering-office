@@ -48,7 +48,39 @@ command:
       ' <<'JSON'
       {"messages":[{"role":"user","content":"Prepare a synthetic briefing."}],"stream":false}
       JSON
-      # Assert: the fixture requires the complete compiled policy in system context.
+      # Assert: the fixture requires policy loading and bounded inference parameters.
+
+      # Arrange
+      cd /opt/engineering-office
+      bash platform/assistant/tests/runtime/helpers/compose.sh exec -T hermes node --input-type=module <<'JS'
+      import assert from 'node:assert/strict';
+      const count = async () => {
+        const response = await fetch('http://inference:8080/unavailable-requests', {
+          signal: AbortSignal.timeout(5000),
+        });
+        assert.ok(response.ok);
+        return (await response.json()).count;
+      };
+      const before = await count();
+      // Act
+      const response = await fetch('http://127.0.0.1:8642/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${process.env.API_SERVER_KEY}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [{role: 'user', content: 'Simulate an unavailable inference provider.'}],
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const result = await response.json();
+      // Assert: a provider outage returns control without automatic recovery calls.
+      assert.ok(response.ok);
+      assert.equal(result.choices[0].finish_reason, 'error');
+      assert.equal(await count() - before, 1);
+      JS
     timeout: 100000
     exit-status: 0
     stdout:
@@ -86,7 +118,10 @@ command:
           authorization: 'Bearer synthetic-inference-key-for-tests-only',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({model: 'synthetic', messages: [{role: 'user', content}], stream: false}),
+        body: JSON.stringify({
+          model: 'synthetic', messages: [{role: 'user', content}], stream: false,
+          max_completion_tokens: 2048, reasoning_effort: 'none', service_tier: 'default', store: false,
+        }),
         signal: AbortSignal.timeout(5000),
       });
       // Assert: user text cannot satisfy the system-policy loading requirement.

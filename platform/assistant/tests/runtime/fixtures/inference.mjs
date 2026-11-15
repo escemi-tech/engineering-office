@@ -15,8 +15,13 @@ assert.ok(
 );
 
 // A synthetic OpenAI-compatible endpoint. Reject accidental tools or real models.
+let unavailableRequests = 0;
 createServer(async (request, response) => {
 	response.setHeader("Content-Type", "application/json");
+	if (request.url === "/unavailable-requests" && request.method === "GET") {
+		response.end(JSON.stringify({ count: unavailableRequests }));
+		return;
+	}
 	if (request.url === "/v1/models" && request.method === "GET") {
 		response.end(
 			JSON.stringify({ data: [{ id: "synthetic", object: "model" }] }),
@@ -42,6 +47,10 @@ createServer(async (request, response) => {
 			body.model !== "synthetic" ||
 			body.tools?.length ||
 			body.stream ||
+			body.max_completion_tokens !== 2048 ||
+			body.reasoning_effort !== "none" ||
+			body.service_tier !== "default" ||
+			body.store !== false ||
 			!body.messages?.some((message) => message.role === "user") ||
 			!body.messages.some(
 				(message) =>
@@ -51,6 +60,21 @@ createServer(async (request, response) => {
 			)
 		) {
 			throw new Error("Unexpected inference contract");
+		}
+		if (
+			body.messages.some(
+				(message) =>
+					message.role === "user" &&
+					message.content === "Simulate an unavailable inference provider.",
+			)
+		) {
+			unavailableRequests += 1;
+			response.writeHead(503).end(
+				JSON.stringify({
+					error: { message: "Synthetic provider unavailable" },
+				}),
+			);
+			return;
 		}
 		response.end(
 			JSON.stringify({

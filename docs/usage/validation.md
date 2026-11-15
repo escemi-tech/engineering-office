@@ -163,6 +163,10 @@ The scenario checks:
   models, credentials, tools or streaming requests. It also requires the entire
   compiled writing policy in system context and rejects user-supplied policy text
   as a substitute. The fixture checks compiled content against the canonical source.
+- Bounded completion tokens, disabled reasoning, the default service tier and
+  `store: false` in the actual inference request. An unavailable provider returns
+  control after one request. This runs after the successful conversation in the
+  same scenario command, respecting the gateway's single-session limit.
 - Read-only policy content and directory access for the gateway identity,
   inherited from the deployment without a test-only policy override.
 - The original session after a gateway restart.
