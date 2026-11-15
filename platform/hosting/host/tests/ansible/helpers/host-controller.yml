@@ -1,5 +1,5 @@
 ---
-# Arrange: use the production Make target and unit templates without cloud calls.
+# Arrange: use production reservation, Make and unit behavior without cloud calls.
 - name: Require the disposable hosted runner before changing its user services
   ansible.builtin.assert:
     that: lookup('ansible.builtin.env', 'FIXTURE_RUNNER_ENVIRONMENT') == 'github-hosted'
@@ -7,7 +7,7 @@
 
 - name: Select the runner's native user unit directory
   ansible.builtin.set_fact:
-    controller_unit_directory: "{{ lookup('ansible.builtin.env', 'XDG_RUNTIME_DIR') }}/systemd/user"
+    controller_unit_directory: "{{ lookup('ansible.builtin.env', 'HOME') }}/.config/systemd/user"
 
 - name: Refuse to adopt an existing controller
   ansible.builtin.command:
@@ -50,21 +50,72 @@
         dest: "{{ controller_fixture.path }}/.local/ansible/bin/ansible-playbook"
         state: link
 
-    - name: Render the production cleanup service and timer
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../roles/professional_host/templates/expiry.{{ item }}.j2"
-        dest: "{{ controller_unit_directory }}/engineering-office-qualification-expiry.{{ item }}"
+    - name: Prepare a synthetic native profile without provider access
+      ansible.builtin.copy:
+        dest: "{{ controller_fixture.path }}/clouds.yaml"
+        content: |
+          clouds:
+            engineering-office-provisioner:
+              auth:
+                auth_url: https://auth.cloud.ovh.net/v3
+                project_id: {{ professional_host.project_id }}
+              region_name: GRA11
+              verify: true
         mode: "0600"
-      vars:
-        professional_host_root: "{{ controller_fixture.path }}"
-      loop: [service, timer]
 
-    - name: Arm the timer so its dependencies stay loaded between applies
-      ansible.builtin.systemd_service:
-        name: engineering-office-qualification-expiry.timer
-        scope: user
-        daemon_reload: true
-        state: started
+    - name: Restore the completed reservation whose unit files were removed
+      ansible.builtin.copy:
+        dest: "{{ controller_fixture.path }}/.local/{{ item.name }}"
+        content: "{{ item.value | to_nice_json }}\n"
+        mode: "0600"
+      loop:
+        - name: qualification-expiry.yml
+          value:
+            professional_host: "{{ professional_host | combine({'qualification': {'run_id': '30000000-0000-4000-8000-000000000001', 'expires_at': '2000-01-01T00:00:00Z'}}) }}"
+        - name: qualification-campaign.json
+          value: [30000000-0000-4000-8000-000000000001]
+        - name: qualification-cleanup.json
+          value:
+            run_id: 30000000-0000-4000-8000-000000000001
+            resources_absent: true
+
+    - name: Select a bounded synthetic reservation deadline
+      ansible.builtin.command:
+        argv: [date, -u, --date=+5minutes, "+%Y-%m-%dT%H:%M:%SZ"]
+      changed_when: false
+      register: controller_reservation_deadline
+
+    - name: Prepare the next synthetic run
+      ansible.builtin.set_fact:
+        controller_host: "{{ professional_host | combine({'qualification': professional_host.qualification | combine({'expires_at': controller_reservation_deadline.stdout})}) }}"
+
+    # Act: a new reservation must work when the old service is no longer loaded.
+    - name: Arm the next run through the production expiry role
+      ansible.builtin.include_role:
+        name: professional_host
+        tasks_from: expiry
+      vars:
+        professional_host: "{{ controller_host }}"
+        professional_host_root: "{{ controller_fixture.path | realpath }}"
+        professional_host_clouds_file: "{{ (controller_fixture.path + '/clouds.yaml') | realpath }}"
+
+    # Assert: failed setup must not be mistaken for an armed cleanup timer.
+    - name: Require the new reservation's independent timer to be active
+      ansible.builtin.command:
+        argv:
+          [
+            systemctl,
+            --user,
+            is-active,
+            engineering-office-qualification-expiry.timer,
+          ]
+      changed_when: false
+
+    - name: Require both campaign allocations to remain recorded
+      ansible.builtin.assert:
+        that:
+          - (lookup('ansible.builtin.file', controller_fixture.path + '/.local/qualification-campaign.json') | from_json) == ['30000000-0000-4000-8000-000000000001', controller_host.qualification.run_id]
+        quiet: true
 
     # Act / Assert: the second invocation must succeed while expiry remains armed.
     - name: Run two consecutive applies through the real Make target
@@ -171,10 +222,24 @@
         name: "{{ item }}"
         scope: user
         state: stopped
+        enabled: "{{ false if item == 'engineering-office-qualification-expiry.timer' else omit }}"
       loop:
         - engineering-office-qualification-expiry.timer
         - engineering-office-qualification-expiry.service
         - engineering-office-provisioning.service
+      failed_when: false
+
+    - name: Remove the stopped fixture timer's persistent timestamp
+      ansible.builtin.command:
+        argv:
+          [
+            systemctl,
+            --user,
+            clean,
+            --what=state,
+            engineering-office-qualification-expiry.timer,
+          ]
+      changed_when: true
       failed_when: false
 
     - name: Reap the asynchronous writer before removing its directory
