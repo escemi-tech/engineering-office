@@ -111,8 +111,11 @@ Compose command. The file is not mounted into Hermes. The container receives
 only the two service credentials and its model settings through the existing
 Compose configuration. Docker administrators can still inspect that environment.
 
-An unchanged deployment artifact does not replace the running container. Updates
-to mounted configuration or policy recreate it so new conversations load them.
+An unchanged deployment artifact does not replace a running container with the
+expected `unless-stopped` restart policy. Redeploying after `hermes-stop` recreates
+the container and restores that policy, so Hermes starts automatically after a
+host reboot. Updates to mounted configuration or policy also recreate it so new
+conversations load them.
 Credential and image changes use Compose's normal change detection. Recreation
 interrupts service briefly and preserves the named state volume. Missing or invalid
 settings fail before host files change. A deployment failure requires operator

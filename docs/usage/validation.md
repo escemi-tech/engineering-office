@@ -227,8 +227,10 @@ It verifies healthy output, absent/ambiguous services, paused and stopped gatewa
 a failed native health check and an HTTP failure despite a passing native check.
 Public synthetic canaries in container settings, health logs and response bodies
 must stay out of captured diagnostics. Checks must report zero changes and preserve
-the kill switch; only fixture cleanup deliberately resumes the disposable service.
-The scenario retains the original container identity and restart policy.
+the original stopped container and its disabled restart policy. The scenario then
+redeploys unchanged assets through the production role and requires a healthy
+gateway with automatic restart restored. It reuses the existing shutdown instead
+of adding another stop/start cycle.
 
 The [reboot scenario](../../platform/assistant/tests/ansible/hermes-reboot.yml)
 uses Ansible's reboot module to restart the whole guest and wait for SSH and the
