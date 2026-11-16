@@ -175,31 +175,43 @@
           community.docker.docker_container:
             name: engineering-office-hermes-health-probe
             state: absent
-        - name: Resume only the disposable test gateway
-          community.docker.docker_container:
-            name: engineering-office-hermes-test-hermes-1
-            state: healthy
-            paused: false
-            restart_policy: unless-stopped
-            healthy_wait_timeout: 180
-          no_log: true
         - name: Remove the temporary controller inventory
           ansible.builtin.file:
             path: "{{ health_test_inventory.path }}"
             state: absent
           delegate_to: localhost
           become: false
-    # Assert: fixture arrangements must not replace the deployment or its volume.
+    # Assert: diagnostic fixtures must preserve the operator's stopped deployment.
     - name: Inspect the final deployment identity and restart policy
       community.docker.docker_container_info:
         name: engineering-office-hermes-test-hermes-1
       register: health_test_after
       no_log: true
-    - name: Require the same healthy container and restored restart policy
+    - name: Require the same stopped container with automatic restart disabled
       ansible.builtin.assert:
         that:
           - health_test_after.container.Id == health_test_before.container.Id
-          - health_test_after.container.State.Health.Status == 'healthy'
-          - health_test_after.container.HostConfig.RestartPolicy == health_test_before.container.HostConfig.RestartPolicy
+          - not health_test_after.container.State.Running
+          - health_test_after.container.HostConfig.RestartPolicy.Name == 'no'
+        quiet: true
+    # Act: recover the existing stopped service through the operator's deployment.
+    - name: Redeploy unchanged assets after the kill switch
+      ansible.builtin.include_role:
+        name: hermes
+      vars:
+        hermes_project_name: engineering-office-hermes-test
+        hermes_runtime: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/helpers/runtime.yml') | from_yaml }}"
+    # Assert: no test-only Docker update may repair the restart policy.
+    - name: Inspect the redeployed gateway
+      community.docker.docker_container_info:
+        name: engineering-office-hermes-test-hermes-1
+      register: health_test_redeployed
+      no_log: true
+    - name: Require healthy operation with the original restart policy restored
+      ansible.builtin.assert:
+        that:
+          - not hermes_assets.changed
+          - health_test_redeployed.container.State.Health.Status == 'healthy'
+          - health_test_redeployed.container.HostConfig.RestartPolicy == health_test_before.container.HostConfig.RestartPolicy
         quiet: true
 # The following reboot/session Goss scenario also reads the original conversation.

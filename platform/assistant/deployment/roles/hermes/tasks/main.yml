@@ -102,6 +102,13 @@
     group: root
     mode: "0444"
 
+- name: Inspect the restart policy before deployment
+  community.docker.docker_container_info:
+    docker_host: unix:///var/run/docker.sock
+    name: "{{ hermes_project_name }}-hermes-1"
+  no_log: true
+  register: hermes_existing_container
+
 - name: Converge Hermes with only its own credentials
   environment:
     HERMES_POLICY_FILE: /srv/engineering-office/.build/hermes/AGENTS.md
@@ -112,7 +119,12 @@
     files: [compose.yml]
     env_files: [/srv/engineering-office/.local/hermes.env]
     state: present
-    recreate: "{{ 'always' if hermes_assets.changed else 'auto' }}"
+    # Compose's config hash does not track docker update --restart=no from hermes-stop.
+    recreate: >-
+      {{ 'always' if hermes_assets.changed or
+         (hermes_existing_container.exists and
+          hermes_existing_container.container.HostConfig.RestartPolicy.Name != 'unless-stopped')
+         else 'auto' }}
     wait: true
     wait_timeout: 180
   no_log: true
