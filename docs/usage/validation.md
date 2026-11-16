@@ -94,8 +94,9 @@ review/check independence, unknown states, head changes, scoped fixed queries,
 GraphQL errors and rate limits. These tests do not qualify live Agent Tasks access
 or tasks created by other accounts.
 Presentation tests use collector-produced synthetic snapshots to cover bounded
-ordering, verified grouping across attempts, repository and identifier separation,
-unknown review/CI states, merged PRs, partial and empty results, terminal controls
+recent-activity ordering, verified grouping across attempts, repository and identifier
+separation, unknown review/CI states, exclusion of finished PRs and inactive history,
+preservation of active or uncertain tasks linked to finished PRs, partial and empty results, terminal controls
 and unchanged JSON evidence. CLI tests exercise both formats and reject unsupported
 formats through the protected entrypoint.
 

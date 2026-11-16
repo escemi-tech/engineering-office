@@ -19,7 +19,7 @@ suite("Readable GitHub briefing", () => {
 		repository = snapshot.repositories[0];
 	});
 
-	test("bounds the briefing and ranks explicit attention ahead of running and old open work", () => {
+	test("bounds the briefing and ranks attention, running work and recent open activity", () => {
 		// Arrange
 		const issue = repository.items[0];
 		repository.items.push(
@@ -41,10 +41,11 @@ suite("Readable GitHub briefing", () => {
 		assert.match(text, /1\. \[Needs attention\] work\/project/u);
 		assert.match(text, /2\. \[In progress\] work\/project/u);
 		assert.match(text, /3\. \[Open or unresolved work\] work\/project/u);
-		assert.doesNotMatch(text, /Backlog 7/u);
+		assert.match(text, /3\. \[Open or unresolved work\].*Backlog 7/u);
+		assert.doesNotMatch(text, /Backlog 0/u);
 		assert.match(text, /CI reports failure/u);
 		assert.match(text, /Classification: restricted/u);
-		assert.match(text, /Oldest source timestamp: 2020-01-01T00:00:00.000Z/u);
+		assert.match(text, /Latest source activity: 2020-01-09T00:00:00.000Z/u);
 		assert.match(text, /Use --format json/u);
 		assert.deepEqual(snapshot, before);
 	});
@@ -84,6 +85,7 @@ suite("Readable GitHub briefing", () => {
 		// Arrange
 		const pull = repository.pullRequests.items[0];
 		pull.taskIds = ["task-1", "task-2"];
+		pull.updatedAt = "2020-01-06T00:00:00Z";
 		repository.pullRequests.items.push({
 			...pull,
 			number: 9,
@@ -106,6 +108,7 @@ suite("Readable GitHub briefing", () => {
 		assert.equal(text.match(/Issue #1:/gu).length, 2);
 		assert.match(text, /PR #9:/u);
 		assert.match(text, /Copilot task waiting for you/u);
+		assert.match(text, /Latest source activity: 2020-01-06T00:00:00.000Z/u);
 	});
 
 	test("keeps attempts distinct and uses the newest attempt even when task state disagrees", () => {
@@ -118,6 +121,7 @@ suite("Readable GitHub briefing", () => {
 			id: "new-attempt",
 			state: "in_progress",
 			createdAt: "2020-01-02T00:00:00Z",
+			updatedAt: "2020-01-07T00:00:00Z",
 		});
 
 		// Act
@@ -127,6 +131,7 @@ suite("Readable GitHub briefing", () => {
 		assert.match(text, /1\. \[In progress\]/u);
 		assert.doesNotMatch(text, /Needs attention/u);
 		assert.match(text, /Task task-1: completed/u);
+		assert.match(text, /Latest source activity: 2020-01-07T00:00:00.000Z/u);
 		assert.match(
 			text,
 			/latest first: new-attempt=in_progress, session-1=failed/u,
@@ -153,25 +158,128 @@ suite("Readable GitHub briefing", () => {
 		assert.match(text, /same-time=timed_out/u);
 	});
 
-	test("does not treat historical failures on merged PRs as current attention", () => {
+	for (const [pullState, taskState, sessionState] of [
+		["MERGED", "failed", "failed"],
+		["CLOSED", "idle", "timed_out"],
+		["MERGED", "completed", "completed"],
+	]) {
+		test(`omits ${pullState} work and its historical ${taskState} Copilot evidence`, () => {
+			// Arrange
+			snapshot.repositories = [repository];
+			repository.items = [repository.items[1]];
+			const pull = repository.pullRequests.items[0];
+			pull.state = pullState;
+			pull.checks.state = "FAILURE";
+			pull.reviewDecision = "CHANGES_REQUESTED";
+			repository.items[0].reasons = ["review-requested"];
+			pull.taskIds = ["task-1"];
+			const task = repository.copilot.tasks[0];
+			task.state = taskState;
+			task.sessions[0].state = sessionState;
+			const before = structuredClone(snapshot);
+
+			// Act
+			const text = new GitHubBriefingText().render(snapshot);
+
+			// Assert
+			assert.doesNotMatch(text, /Needs attention|PR #1:|Task task-1:/u);
+			assert.match(text, /No current work in the admitted source reads/u);
+			assert.deepEqual(snapshot, before);
+		});
+	}
+
+	for (const evidence of [
+		"running attempt",
+		"waiting task",
+		"partial sessions",
+		"unresolved PR",
+	]) {
+		test(`preserves ${evidence} independently of a linked merged PR`, () => {
+			// Arrange
+			snapshot.repositories = [repository];
+			repository.items = [];
+			const pull = repository.pullRequests.items[0];
+			pull.state = "MERGED";
+			pull.taskIds = ["task-1"];
+			const task = repository.copilot.tasks[0];
+			task.state = evidence === "waiting task" ? "waiting_for_user" : "failed";
+			task.sessions[0].state =
+				evidence === "running attempt" ? "in_progress" : "failed";
+			if (evidence === "partial sessions")
+				task.sessionCoverage = {
+					status: "partial",
+					reason: "unverified-sessions",
+				};
+			if (evidence === "unresolved PR")
+				repository.pullRequests.unresolvedArtifacts = [
+					{ resourceId: "9999", taskIds: [task.id] },
+				];
+
+			// Act
+			const text = new GitHubBriefingText().render(snapshot);
+
+			// Assert
+			assert.match(text, /Task task-1:/u);
+			assert.doesNotMatch(text, /PR #1:|MERGED/u);
+		});
+	}
+
+	test("uses the open PR as the headline when a task also links completed work", () => {
 		// Arrange
-		const pull = repository.pullRequests.items[0];
-		pull.state = "MERGED";
-		pull.checks.state = "FAILURE";
-		pull.reviewDecision = "CHANGES_REQUESTED";
-		repository.items[1].reasons = ["review-requested"];
-		pull.taskIds = ["task-1"];
+		snapshot.repositories = [repository];
+		repository.items = [];
+		const previous = repository.pullRequests.items[0];
+		previous.state = "MERGED";
+		previous.title = "Historical proposal";
+		previous.taskIds = ["task-1"];
+		repository.pullRequests.items.push({
+			...previous,
+			number: 9,
+			resourceId: "9009",
+			url: "https://github.com/work/project/pull/9",
+			state: "OPEN",
+			title: "Current proposal",
+		});
 		const task = repository.copilot.tasks[0];
-		task.state = "completed";
-		task.sessions[0].state = "completed";
+		task.state = "failed";
+		task.sessions[0].state = "failed";
 
 		// Act
 		const text = new GitHubBriefingText().render(snapshot);
 
 		// Assert
-		assert.doesNotMatch(text, /Needs attention/u);
-		assert.match(text, /\[Completed or inactive\] work\/project/u);
-		assert.match(text, /PR #1: MERGED; review CHANGES_REQUESTED; CI FAILURE/u);
+		assert.match(
+			text,
+			/1\. \[Needs attention\] work\/project - Current proposal/u,
+		);
+		assert.match(text, /PR #9: OPEN/u);
+		assert.match(text, /Task task-1: failed/u);
+		assert.doesNotMatch(text, /Historical proposal|PR #1:|MERGED/u);
+	});
+
+	test("omits inactive standalone task history without erasing its evidence", () => {
+		// Arrange
+		snapshot.repositories = [repository];
+		repository.items = [];
+		repository.pullRequests.items = [];
+		const task = repository.copilot.tasks[0];
+		repository.copilot.tasks = ["idle", "completed", "cancelled"].map(
+			(state) => ({
+				...task,
+				id: state,
+				state,
+				sessions: [{ ...task.sessions[0], state: "completed" }],
+			}),
+		);
+		const before = structuredClone(snapshot);
+
+		// Act
+		const text = new GitHubBriefingText().render(snapshot);
+
+		// Assert
+		assert.match(text, /No current work in the admitted source reads/u);
+		assert.doesNotMatch(text, /\d\. \[|Task (idle|completed|cancelled):/u);
+		assert.deepEqual(snapshot, before);
 	});
 
 	test("keeps missing review and CI unknown and labels search-based review requests", () => {
@@ -231,7 +339,7 @@ suite("Readable GitHub briefing", () => {
 			text,
 			/0 collected \(unavailable\); latest first: none returned/u,
 		);
-		assert.match(text, /Oldest source timestamp: not available/u);
+		assert.match(text, /Latest source activity: not available/u);
 		assert.match(text, /Pull request #9/u);
 		assert.match(text, /CI unavailable \(not-accessible\)/u);
 		assert.doesNotMatch(text, /pull\/9999/u);
@@ -305,8 +413,8 @@ suite("Readable GitHub briefing", () => {
 			assert.match(
 				text,
 				complete
-					? /No matching work in the admitted source reads/u
-					: /No work could be summarized from the incomplete source reads/u,
+					? /No current work in the admitted source reads/u
+					: /No current work could be summarized from the incomplete source reads/u,
 			);
 			assert.match(
 				text,
