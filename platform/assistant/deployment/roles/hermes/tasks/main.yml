@@ -46,6 +46,13 @@
     fail_msg: Run make hermes-policy on the controller before deployment.
     quiet: true
 
+- name: Validate optional briefing access before changing the host
+  ansible.builtin.include_tasks: briefing-validate.yml
+
+- name: Remove source-derived conversations before disabling an existing capability
+  ansible.builtin.include_tasks: briefing-disable.yml
+  when: hermes_briefing | length == 0
+
 - name: Create deployment directories owned by the operator
   ansible.builtin.file:
     path: "{{ item }}"
@@ -78,7 +85,7 @@
   no_log: true
   diff: false
 
-- name: Deliver the reviewed runtime and compiled policy
+- name: Deliver the reviewed runtime
   ansible.builtin.copy:
     src: "{{ role_path }}/../../../../../{{ item.source }}"
     dest: "/srv/engineering-office/{{ item.destination }}"
@@ -88,11 +95,34 @@
   loop:
     - source: platform/assistant/runtime/compose.yml
       destination: services/hermes/compose.yml
-    - source: platform/assistant/runtime/config.yaml
-      destination: services/hermes/config.yaml
-    - source: .build/hermes/AGENTS.md
-      destination: .build/hermes/AGENTS.md
   register: hermes_assets
+
+- name: Deliver the minimum approved runtime capabilities
+  ansible.builtin.copy:
+    content: >-
+      {{ (lookup('ansible.builtin.file', role_path ~ '/../../../../../platform/assistant/runtime/config.yaml') | from_yaml)
+         | combine((lookup('ansible.builtin.file', role_path ~ '/../../../../../platform/assistant/runtime/briefing/config.yaml') | from_yaml)
+                   if hermes_briefing | length > 0 else {}, recursive=true) | to_nice_yaml }}
+    dest: /srv/engineering-office/services/hermes/config.yaml
+    owner: root
+    group: root
+    mode: "0444"
+  register: hermes_config
+
+- name: Deliver canonical writing instructions and the enabled feature policy
+  ansible.builtin.copy:
+    content: |
+      {{ lookup('ansible.builtin.file', role_path ~ '/../../../../../.build/hermes/AGENTS.md') }}
+      {{ lookup('ansible.builtin.file', role_path ~ '/../../../../../features/briefing/instructions.md') if hermes_briefing | length > 0 else '' }}
+    dest: /srv/engineering-office/.build/hermes/AGENTS.md
+    owner: root
+    group: root
+    mode: "0444"
+  register: hermes_policy
+
+- name: Deliver the isolated briefing capability when explicitly configured
+  ansible.builtin.include_tasks: briefing.yml
+  when: hermes_briefing | length > 0
 
 - name: Deliver the independent shutdown command
   ansible.builtin.copy:
@@ -112,16 +142,19 @@
 - name: Converge Hermes with only its own credentials
   environment:
     HERMES_POLICY_FILE: /srv/engineering-office/.build/hermes/AGENTS.md
+    HERMES_BRIEFING_DIRECTORY: /srv/engineering-office/.local/briefing
   community.docker.docker_compose_v2:
     docker_host: unix:///var/run/docker.sock
     project_src: /srv/engineering-office/services/hermes
     project_name: "{{ hermes_project_name }}"
-    files: [compose.yml]
+    files: "{{ ['compose.yml', 'briefing/compose.yml'] if hermes_briefing | length > 0 else ['compose.yml'] }}"
     env_files: [/srv/engineering-office/.local/hermes.env]
     state: present
+    remove_orphans: true
     # Compose's config hash does not track docker update --restart=no from hermes-stop.
     recreate: >-
-      {{ 'always' if hermes_assets.changed or
+      {{ 'always' if hermes_assets.changed or hermes_config.changed or hermes_policy.changed or
+         (hermes_briefing_proxy.changed | default(false)) or
          (hermes_existing_container.exists and
           hermes_existing_container.container.HostConfig.RestartPolicy.Name != 'unless-stopped')
          else 'auto' }}
@@ -129,3 +162,6 @@
     wait_timeout: 180
   no_log: true
   register: hermes_deployment
+
+- name: Converge briefing cleanup only after runtime health succeeds
+  ansible.builtin.include_tasks: briefing-cleanup.yml

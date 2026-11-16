@@ -1,0 +1,139 @@
+---
+name: Test - Hermes briefing
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  test-hermes-briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Reuse the qualified compiler and host preparation in this dedicated scenario.
+    # Native workflow inputs stay explicit rather than adding a wrapper action.
+    # jscpd:ignore-start
+    permissions:
+      contents: read
+    steps:
+      # Arrange
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read qualified compiler version
+        id: apm
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { readFile } = require('node:fs/promises');
+            core.setOutput('version', (await readFile('platform/assistant/runtime/.apm-version', 'utf8')).trim());
+      - name: Set up qualified policy compiler
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          setup-only: true
+          apm-version: ${{ steps.apm.outputs.version }}
+      - name: Build the canonical writing policy
+        run: make hermes-policy
+      - name: Create a disposable Ubuntu host
+        id: vm
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/create@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
+        with:
+          vm-config: platform/assistant/tests/lima.yml
+      - name: Prepare the disposable host
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
+        env: &vm-connection
+          VM_SSH_CONFIG: ${{ steps.vm.outputs.ssh-config }}
+          VM_NAME: ${{ steps.vm.outputs.name }}
+        with:
+          ansible-requirements: tooling/ansible/requirements.txt
+          ansible-config: tooling/ansible/ansible.cfg
+          test-playbook: platform/assistant/tests/ansible/hermes-host.yml
+          python-version-file: tooling/ansible/.python-version
+          comment: "false"
+          report-name: engineering-office - briefing host preparation
+      # Act and Assert: real deployment and idempotence, synthetic source/model only.
+      - name: Deploy the constrained briefing capability
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
+        env: *vm-connection
+        with:
+          ansible-requirements: tooling/ansible/requirements.txt
+          galaxy-requirements: tooling/ansible/collections/requirements.yml
+          ansible-config: tooling/ansible/ansible.cfg
+          test-playbook: platform/assistant/tests/ansible/hermes-briefing.yml
+          python-version-file: tooling/ansible/.python-version
+          comment: "false"
+          report-name: engineering-office - briefing deployment
+      # jscpd:ignore-end
+      # Assert
+      - name: Verify native briefing runs and security boundaries
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: platform/assistant/tests/briefing/goss.yaml
+          comment: "false"
+          report-name: engineering-office - briefing lifecycle
+      # Act
+      - name: Restart the runtime and wait for health
+        env: *vm-connection
+        run: |
+          ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" '
+            set -eu
+            sudo docker stop engineering-office-hermes-test-hermes-1 >/dev/null
+            sudo docker run --rm --network none --read-only --user 10000:10000 --cap-drop ALL --security-opt no-new-privileges \
+              --mount type=volume,src=engineering-office-hermes-test_state,dst=/state \
+              --mount type=bind,src=/opt/hermes-briefing-fixture,dst=/fixtures,readonly \
+              engineering-office-briefing:local node /fixtures/receipts.mjs age
+            sudo docker start engineering-office-hermes-test-hermes-1 >/dev/null
+            for attempt in $(seq 1 60); do
+              if curl --silent --fail http://127.0.0.1:8642/health >/dev/null; then exit 0; fi
+              sleep 2
+            done
+            exit 1'
+      # Assert
+      - name: Verify fresh collection after restart
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: platform/assistant/tests/briefing/restart.goss.yaml
+          comment: "false"
+          report-name: engineering-office - briefing restart
+      # Act and Assert: revocation must remove feature data without deleting other work.
+      # Native shared-action inputs intentionally match the deployment step above.
+      # jscpd:ignore-start
+      - name: Disable briefing access through the production role
+        uses: hoverkraft-tech/ci-github-iac/actions/ansible/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
+        env: *vm-connection
+        with:
+          ansible-requirements: tooling/ansible/requirements.txt
+          galaxy-requirements: tooling/ansible/collections/requirements.yml
+          ansible-config: tooling/ansible/ansible.cfg
+          test-playbook: platform/assistant/tests/ansible/hermes-briefing-disable.yml
+          python-version-file: tooling/ansible/.python-version
+          comment: "false"
+          report-name: engineering-office - briefing disable
+      # jscpd:ignore-end
+      - name: Verify source removal and continued receipt expiry
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/test@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}
+          goss-file: platform/assistant/tests/briefing/disabled.goss.yaml
+          comment: "false"
+          report-name: engineering-office - briefing disabled
+      - name: Inspect failed synthetic briefing assertions
+        if: ${{ failure() && steps.vm.outputs.vm != '' }}
+        env: *vm-connection
+        run: |
+          ssh -o ControlMaster=no -o ControlPath=none -F "$VM_SSH_CONFIG" "$VM_NAME" '
+            for report in /tmp/hermes-briefing-*.log; do
+              test ! -f "$report" || cat "$report"
+            done
+            sudo journalctl --unit hermes-briefing-cleanup-engineering-office-hermes-test.service --no-pager --lines 40
+            sudo docker logs --tail 40 engineering-office-hermes-test-hermes-1 2>&1 || true
+            sudo docker exec engineering-office-hermes-test-hermes-1 find /opt/data/logs -maxdepth 1 -type f -name "*.log" -exec tail -n 40 {} + || true
+            sudo docker logs engineering-office-hermes-test-inference 2>&1 || true'
+      - name: Destroy the disposable host and all fixture data
+        if: ${{ always() && steps.vm.outputs.vm != '' }}
+        uses: hoverkraft-tech/ci-github-iac/actions/vm/destroy@f8c074d2d45a37caa4a24e2dcdf6d2df034a2ae1 # 1.3.0
+        with:
+          vm: ${{ steps.vm.outputs.vm }}

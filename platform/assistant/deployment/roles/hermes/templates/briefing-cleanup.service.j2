@@ -1,0 +1,15 @@
+[Unit]
+Description=Remove abandoned briefing conversations and expired native retry receipts
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/docker run --rm --network host --read-only --cap-drop ALL --security-opt no-new-privileges --user 0:0 --memory 128m --pids-limit 32 --mount type=bind,src=/srv/engineering-office/.local/hermes-gateway-key,dst=/run/hermes/key,readonly engineering-office-briefing:local node src/adapters/hermes-cli.js cleanup
+# Native owner RPC also reclaims expired receipts when no conversations match.
+# A pre-epoch window excludes all application sessions, preserving unrelated work.
+# The CLI preview returns early on an empty selection, so call its native client.
+ExecStartPost=/usr/bin/docker exec --user 10000:10000 --workdir /opt/hermes {{ hermes_project_name }}-hermes-1 python -c "from hermes_cli.sessions_owner import live_owner, owner_prune; endpoint = live_owner(); assert endpoint is not None, 'Gateway owner unavailable'; owner_prune(endpoint, filters={'older_than_days': None, 'started_before': 0})"
+TimeoutStartSec=120
+TimeoutStopSec=30

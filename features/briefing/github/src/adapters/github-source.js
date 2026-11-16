@@ -1,3 +1,4 @@
+import timers from "node:timers/promises";
 import { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import { CopilotTasks } from "./copilot-tasks.js";
@@ -56,8 +57,8 @@ const limits = {
 export class GitHubSource {
 	#request;
 	#requestCount;
-	constructor(policy, token) {
-		const { request, requestCount } = this.#requester(policy, token);
+	constructor(policy, token, signal) {
+		const { request, requestCount } = this.#requester(policy, token, signal);
 		this.#request = request;
 		this.#requestCount = requestCount;
 	}
@@ -158,7 +159,7 @@ export class GitHubSource {
 		return repositories;
 	}
 
-	#requester(policy, token) {
+	#requester(policy, token, signal) {
 		let requests = 0;
 		let stopped;
 		const resetTimes = new Map();
@@ -186,6 +187,7 @@ export class GitHubSource {
 			log: { debug() {}, info() {}, warn() {}, error() {} },
 			request: {
 				fetch: async (url, options) => {
+					signal?.throwIfAborted();
 					const target = new URL(url);
 					const bucket = target.pathname.startsWith("/agents/")
 						? "tasks"
@@ -224,9 +226,9 @@ export class GitHubSource {
 					) {
 						if (nextRequestAt >= deadline) stopped = "rate-limit";
 						else
-							await new Promise((resolve) =>
-								setTimeout(resolve, nextRequestAt - Date.now()),
-							);
+							await timers.setTimeout(nextRequestAt - Date.now(), undefined, {
+								signal,
+							});
 					}
 					if (
 						stopped ||
@@ -241,9 +243,12 @@ export class GitHubSource {
 						...options,
 						redirect: "error",
 						credentials: "omit",
-						signal: AbortSignal.timeout(
-							Math.max(1, Math.min(10_000, deadline - Date.now())),
-						),
+						signal: AbortSignal.any([
+							AbortSignal.timeout(
+								Math.max(1, Math.min(10_000, deadline - Date.now())),
+							),
+							...(signal ? [signal] : []),
+						]),
 					});
 					if (
 						response.status === 429 ||

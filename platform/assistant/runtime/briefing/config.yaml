@@ -1,0 +1,29 @@
+platform_toolsets:
+  cli: [no_mcp]
+  api_server: [mcp-briefing]
+tools:
+  tool_search:
+    enabled: "off"
+logging:
+  level: WARNING
+  max_size_mb: 1
+  backup_count: 1
+gateway:
+  api_server:
+    max_concurrent_runs: 1
+mcp_servers:
+  briefing:
+    url: http://briefing-source:8080/mcp
+    headers:
+      Authorization: Bearer ${HERMES_BRIEFING_KEY}
+    timeout: 960
+    connect_timeout: 30
+    tools:
+      include: [read_github_briefing]
+      resources: false
+      prompts: false
+    sampling:
+      enabled: false
+    elicitation:
+      enabled: false
+    events: false

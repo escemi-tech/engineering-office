@@ -90,6 +90,15 @@ receive effectful collaborators; it must not import adapters. Adapters may use
 application/domain contracts. Cross-feature calls use the owning package's
 public entrypoint or its declared artifact, such as the compiled writing policy.
 
+The hosted briefing adds an MCP adapter and an operator-side Hermes API client.
+`BriefingAccess` owns one-at-a-time collection and admission revalidation through
+an injected protected-input reader; it stores no result. The official MCP SDK
+owns protocol parsing and transport. Platform deployment composes the connector,
+Hermes and a runtime proxy for loopback gateway access and fixed inference;
+feature business rules do not import platform
+code. Native Hermes runs own asynchronous execution, while its session API owns
+conversation deletion. The small client coordinates those existing interfaces.
+
 Pure libraries are allowed in business rules. Zod validates the source contract;
 Polytypo implements typography in the small, deterministic writing normalizer.
 The normalizer keeps one focused module: no network or persistence boundary

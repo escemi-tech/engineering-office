@@ -6,7 +6,7 @@ import {
 const sourcePolicy = new SourcePolicy();
 
 /**
- * Source port: openSource(policy, token) returns viewer(), discover(),
+ * Source port: openSource(policy, token, signal) returns viewer(), discover(),
  * collectRepositories(policy, viewer, discovered), requests and limits.
  * Discovery exposes admitted-policy fields, never SDK response objects.
  */
@@ -16,9 +16,9 @@ export class GitHubBriefing {
 		this.#openSource = openSource;
 	}
 
-	async collect({ policy, token }) {
+	async collect({ policy, token, signal }) {
 		return this.#validated(token, () =>
-			this.#collect(sourcePolicy.parse(policy), token),
+			this.#collect(sourcePolicy.parse(policy), token, signal),
 		);
 	}
 
@@ -65,8 +65,8 @@ export class GitHubBriefing {
 		}
 	}
 
-	async #collect(policy, token) {
-		const source = this.#openSource(policy, token);
+	async #collect(policy, token, signal) {
+		const source = this.#openSource(policy, token, signal);
 		const viewer = await source.viewer();
 		if (
 			viewer.id !== policy.account.id ||

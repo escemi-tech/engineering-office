@@ -1,0 +1,71 @@
+command:
+  operator gateway is reachable only through the published loopback interface:
+    # Act and Assert: the real host path must work, not only container-to-container I/O.
+    exec: |
+      set -eu
+      curl --silent --fail --max-time 5 http://127.0.0.1:8642/health >/dev/null
+      curl --silent --max-time 5 --output /dev/null --write-out '%{http_code}' \
+        --request POST --header 'Content-Type: application/json' --data '{"input":"Read private work"}' \
+        http://127.0.0.1:8642/v1/runs
+      sudo docker inspect --format '{''{(index (index .NetworkSettings.Ports "8642/tcp") 0).HostIp}}' engineering-office-hermes-test-runtime-proxy-1
+    exit-status: 0
+    stdout: [401127.0.0.1]
+  native asynchronous briefing lifecycle:
+    exec: |
+      status=0
+      sudo docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+        --network container:engineering-office-hermes-test-runtime-proxy-1 \
+        --mount type=bind,src=/opt/hermes-briefing-fixture,dst=/fixtures,readonly \
+        engineering-office-briefing:local node --test /fixtures/integration.test.mjs \
+        > /tmp/hermes-briefing-lifecycle.log 2>&1 || status=$?
+      cat /tmp/hermes-briefing-lifecycle.log
+      exit "$status"
+    exit-status: 0
+    timeout: 240000
+    stdout:
+      - "/pass 9/"
+      - "/fail 0/"
+  model runtime cannot reach GitHub or arbitrary external addresses:
+    # Act and Assert: use the operator's Docker access to test the runtime network.
+    exec: |
+      set -eu
+      for endpoint in https://api.github.com https://1.1.1.1; do
+        if sudo docker exec engineering-office-hermes-test-hermes-1 curl --silent --max-time 3 "$endpoint" >/dev/null; then exit 1; fi
+      done
+    exit-status: 0
+    timeout: 10000
+  inference upstream refuses arbitrary paths and methods:
+    exec: >-
+      sudo docker exec engineering-office-hermes-test-hermes-1
+      node --input-type=module -e '
+      for (const [path, method] of [["/github/user", "GET"], ["/v1/chat/completions", "GET"], ["/v1/responses", "POST"]]) {
+        const r = await fetch("http://runtime-proxy:8080" + path, {method});
+        if (r.status !== 403) process.exit(1);
+      }'
+    exit-status: 0
+  source credential is absent from the model runtime:
+    exec: >-
+      sudo docker exec engineering-office-hermes-test-hermes-1 node --input-type=module -e '
+      import { existsSync } from "node:fs";
+      if (existsSync("/run/briefing/github-token") ||
+          JSON.stringify(process.env).includes("synthetic-token-canary")) process.exit(1);'
+    exit-status: 0
+  abandoned conversation cleanup is enabled:
+    exec: systemctl is-enabled hermes-briefing-cleanup-engineering-office-hermes-test.timer
+    exit-status: 0
+    stdout: [enabled]
+  source diagnostics do not enter persistent state:
+    # Arrange and Act: put a canary in the runtime's actual diagnostic directory.
+    exec: |
+      set -eu
+      sudo docker exec engineering-office-hermes-test-hermes-1 sh -c 'printf synthetic-diagnostic > /opt/data/logs/briefing-retention-probe'
+      sudo docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+        --mount type=volume,src=engineering-office-hermes-test_state,dst=/state,readonly \
+        engineering-office-briefing:local node --input-type=module -e '
+        import {existsSync} from "node:fs";
+        if (existsSync("/state/logs/briefing-retention-probe")) process.exit(1);'
+      # Let the shell join Docker's delimiters after Goss has rendered this file.
+      sudo docker inspect --format '{''{.HostConfig.LogConfig.Type}}' engineering-office-hermes-test-hermes-1
+    # Assert: the state mount excludes the canary and Docker retains no stdout.
+    exit-status: 0
+    stdout: [none]

@@ -38,6 +38,10 @@ jobs:
     uses: $/.github/workflows/test-github-briefing.yml
     permissions:
       contents: read
+  test-hermes-briefing:
+    uses: $/.github/workflows/test-hermes-briefing.yml
+    permissions:
+      contents: read
   test-infrastructure-state:
     uses: $/.github/workflows/test-infrastructure-state.yml
     permissions:
@@ -60,6 +64,7 @@ jobs:
         test-hermes,
         test-writing-normalizer,
         test-github-briefing,
+        test-hermes-briefing,
         test-infrastructure-state,
         test-management,
         test-professional-host,

@@ -1,0 +1,23 @@
+command:
+  expired native receipts are removed without deleting unrelated conversations:
+    exec: |
+      set -eu
+      sudo systemctl start hermes-briefing-cleanup-engineering-office-hermes-test.service
+      sudo docker run --rm --network none --read-only --user 10000:10000 --cap-drop ALL --security-opt no-new-privileges \
+        --mount type=volume,src=engineering-office-hermes-test_state,dst=/state,readonly \
+        --mount type=bind,src=/opt/hermes-briefing-fixture,dst=/fixtures,readonly \
+        engineering-office-briefing:local node /fixtures/receipts.mjs verify > /tmp/hermes-briefing-receipts.log 2>&1
+    exit-status: 0
+    timeout: 120000
+  diagnostic canary is removed by restart:
+    exec: sudo docker exec engineering-office-hermes-test-hermes-1 test ! -e /opt/data/logs/briefing-retention-probe
+    exit-status: 0
+  fresh collection works after the runtime restarts:
+    exec: sudo make --silent -C /srv/engineering-office hermes-briefing
+    exit-status: 0
+    timeout: 120000
+    stdout:
+      - "Scope: professional-internal"
+      - "Coverage: complete"
+      - "Observed:"
+      - "!/synthetic-token-canary/"

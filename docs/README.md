@@ -3,6 +3,7 @@
 - [Validate the repository](usage/validation.md)
 - [Run Hermes](usage/hermes.md)
 - [Read GitHub work for a private briefing](usage/github-briefing.md)
+- [Request a fresh briefing through Hermes](usage/hermes-briefing.md)
 - [Qualify the OVHcloud host](usage/ovh-qualification.md)
 - [Prepare and recover infrastructure state](usage/infrastructure-state.md)
 - [Provision and remove an approved host](usage/host-provisioning.md)

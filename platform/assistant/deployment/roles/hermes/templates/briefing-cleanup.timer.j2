@@ -1,0 +1,10 @@
+[Unit]
+Description=Expire abandoned briefing conversations after one day
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

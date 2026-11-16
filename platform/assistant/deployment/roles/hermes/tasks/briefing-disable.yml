@@ -1,0 +1,65 @@
+---
+- name: Inspect existing source access
+  ansible.builtin.stat:
+    path: /srv/engineering-office/.local/briefing
+  register: hermes_briefing_previous
+
+- name: Revoke the existing capability before purging its conversations
+  when: hermes_briefing_previous.stat.exists
+  block:
+    - name: Stop the owned source service and disable its restart
+      community.docker.docker_container:
+        name: "{{ hermes_project_name }}-briefing-source-1"
+        state: stopped
+        restart_policy: "no"
+
+    - name: Remove feature conversations using the authenticated native API
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --network
+          - host
+          - --read-only
+          - --cap-drop
+          - ALL
+          - --security-opt
+          - no-new-privileges
+          - --user
+          - "0:0"
+          - --memory
+          - 128m
+          - --pids-limit
+          - "32"
+          - --mount
+          - type=bind,src=/srv/engineering-office/.local/hermes-gateway-key,dst=/run/hermes/key,readonly
+          - engineering-office-briefing:local
+          - node
+          - src/adapters/hermes-cli.js
+          - erase
+      changed_when: true
+      no_log: true
+
+    - name: Locate the owned state volume before restoring persistent diagnostics
+      community.docker.docker_volume_info:
+        name: "{{ hermes_project_name }}_state"
+      register: hermes_briefing_state_volume
+
+    - name: Restore runtime ownership of the directory hidden by the log tmpfs
+      # Docker creates the underlying mountpoint as root. Hermes only repairs
+      # children when the state root itself has the wrong owner.
+      ansible.builtin.file:
+        path: "{{ hermes_briefing_state_volume.volume.Mountpoint }}/logs"
+        state: directory
+        owner: "10000"
+        group: "10000"
+        mode: "0700"
+        follow: false
+  rescue:
+    - name: Preserve the stopped source while cleanup requires operator attention
+      ansible.builtin.fail:
+        msg: >-
+          Briefing disable could not finish. The source may already be stopped.
+          Let an active run settle, inspect the native gateway and retry the
+          disabling deployment. No conversation deletion is assumed complete.

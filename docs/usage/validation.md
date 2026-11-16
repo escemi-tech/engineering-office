@@ -1,5 +1,25 @@
 # Validate the repository
 
+## Hosted briefing
+
+`test-hermes-briefing.yml` uses one disposable Ubuntu VM to exercise the production
+Ansible deployment twice, then runs the real Hermes MCP/native-run lifecycle with
+synthetic GitHub and inference fixtures. Goss owns gateway authentication,
+credential isolation, network/proxy denials, source/model failures, partial
+coverage, forbidden tool arguments, diagnostic retention and collection after
+restart. During that restart, while Hermes is stopped, the fixture ages synthetic
+native receipts. The production cleanup must remove expired receipts and preserve
+a fresh receipt and an unrelated ended conversation. A final disabling deployment
+must remove source access and feature conversations while retaining receipt
+cleanup and unrelated conversations.
+The source fixture replaces HTTP only through a test-only Node preload; production
+code has no configurable GitHub origin. No model API or private work is used.
+
+The cheaper package suite covers the MCP transport contract and source revocation,
+plus native-run client cancellation, missing-evidence refusal and paginated cleanup.
+Run it with `npm test --prefix features/briefing/github` in protected disk-backed
+scratch storage. Run host-changing scenarios only in the disposable CI VM.
+
 ## Infrastructure state
 
 The dedicated `test-infrastructure-state.yml` workflow tests the production
