@@ -133,24 +133,29 @@ Items are ordered by explicit signals:
    changes; failed/error CI; or a review request for you or one of your teams from
    search results.
 2. **In progress:** queued or running tasks or their newest attempts.
-3. **Open or unresolved work:** open issues/PRs and unavailable PR context.
-4. **Completed or inactive:** completed, idle or cancelled tasks and closed/merged PRs.
+3. **Open or unresolved work:** open issues/PRs and work with incomplete context.
+
+Verified closed or merged PRs are omitted from text. Their historical Copilot
+failures are omitted too when all linked PRs are finished and session coverage is
+complete. Queued, running or waiting tasks/attempts remain visible independently,
+as do tasks with an open PR, unresolved PR references or incomplete session coverage.
+Unlinked failed or timed-out work remains eligible; inactive standalone history
+does not fill spare places. Complete history remains available in JSON.
 
 When in-progress work exists, one of the five places is reserved for it, even
 when attention items fill the briefing. The remaining places follow the priority
-order above. Category totals count all collected groups, including those omitted
-from the concise output; they do not imply complete source coverage.
+order above. Category totals count eligible current groups, including those beyond
+the five-item limit; they do not imply complete source coverage.
 
-Within each category, the oldest observed update in a group comes first, falling
-back to a task's creation time when its update time is absent. That source
-timestamp is shown separately from collection time; missing times are explicit.
+Within each category, recent activity comes first, using the latest issue, PR,
+task or attempt update in the group. Tasks and attempts fall back to their creation
+time when their update time is absent. That source timestamp is shown separately
+from collection time; groups without a timestamp appear last and are labelled.
 Ties have a deterministic repository/record order. This ordering does not infer
 business urgency, deadlines, approval or merge readiness. Review requests from
 the search index are labelled as requests to you or a team. The response does not
 identify which of those matched or name the team; it does not assign you sole
-responsibility for a team request. Historical CI/review failures on a merged
-or closed PR do not create an attention signal, while an active linked task
-remains visible independently.
+responsibility for a team request.
 
 Verified PR/task relationships form one group within a repository. A task can
 link several PRs, and several tasks can link one PR. Issues, unrelated tasks and

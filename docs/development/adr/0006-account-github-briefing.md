@@ -154,6 +154,9 @@ separate gates.
 
 ## Local presentation extension — 2026-11-11
 
+The ordering and completed-work selection below are superseded by the
+[current-work correction](#current-work-relevance-correction---2026-11-16).
+
 Add deterministic text presentation over the existing schema 4 snapshot. The
 operator's Make command shows five grouped work items; the CLI retains JSON as
 its default and offers explicit text output. No collection contract, dependency,
@@ -381,3 +384,22 @@ persistent state is required. All 178 synthetic tests passed locally, including
 delegated/unassigned PRs, identity mismatches, attention-heavy summaries and both
 named-pipe inputs. These corrections have not been requalified with private live
 data and do not replace the owner's pending acceptance.
+
+## Current-work relevance correction - 2026-11-16
+
+Owner review found a completed PR in the concise briefing because a linked
+Copilot task retained a failed state. Oldest-first ordering also obscured recent
+work. Select current evidence before grouping and order each priority category
+by its latest source activity. Do not use completed or inactive history to fill
+spare places. This supersedes the earlier presentation ordering and category totals.
+
+Keep explicit current activity, incomplete sessions and unresolved PR references
+eligible independently of a finished PR. Preserve complete JSON evidence and
+the existing place reserved for running work. Reuse the collector and native
+states; the small domain selection policy needs no new library or provider read.
+
+The existing presentation suite reproduces the defect. All 186 synthetic tests
+pass after correction, including current activity and uncertainty on finished
+PRs. The owner accepts the corrected selection rendered from the same protected
+snapshot. This validates presentation usefulness, not complete source coverage
+or hosted connector activation; those acceptance gates remain separate.

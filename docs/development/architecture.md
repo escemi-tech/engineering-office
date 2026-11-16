@@ -69,6 +69,9 @@ In `features/briefing/github/src/`:
 
 - `domain/source-policy.js` owns policy validation and exact repository admission
   matching. It has no network, filesystem, process or platform dependency.
+- `domain/briefing-relevance.js` selects current work and its priority signals
+  from collected evidence. It preserves active or uncertain work when linked PRs
+  are finished; the terminal adapter owns grouping, ordering and presentation.
 - `application/github-briefing.js` owns policy preparation, account verification,
   collection orchestration and the snapshot/coverage result. Its source port
   exposes `viewer`, `discover`, `collectRepositories`, request count and limits.

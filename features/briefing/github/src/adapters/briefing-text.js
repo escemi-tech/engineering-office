@@ -1,20 +1,17 @@
 import { stripVTControlCharacters } from "node:util";
+import { BriefingRelevance } from "../domain/briefing-relevance.js";
 
 const itemLimit = 5;
 const detailLimit = 3;
-const attentionStates = {
-	waiting_for_user: "waiting for you",
-	failed: "failed",
-	timed_out: "timed out",
-};
 const categories = [
 	"Needs attention",
 	"In progress",
 	"Open or unresolved work",
-	"Completed or inactive",
 ];
 
 export class GitHubBriefingText {
+	#relevance = new BriefingRelevance();
+
 	render(snapshot) {
 		const groups = snapshot.repositories.flatMap((repository) =>
 			this.#groups(repository),
@@ -22,7 +19,7 @@ export class GitHubBriefingText {
 		groups.sort(
 			(left, right) =>
 				left.priority - right.priority ||
-				left.updated - right.updated ||
+				right.updated - left.updated ||
 				left.key.localeCompare(right.key, "en"),
 		);
 		const lines = [
@@ -55,8 +52,8 @@ export class GitHubBriefingText {
 		if (!groups.length)
 			lines.push(
 				snapshot.coverage.status === "complete"
-					? "No matching work in the admitted source reads."
-					: "No work could be summarized from the incomplete source reads.",
+					? "No current work in the admitted source reads."
+					: "No current work could be summarized from the incomplete source reads.",
 			);
 		else {
 			const selected = groups.slice(0, itemLimit);
@@ -72,7 +69,7 @@ export class GitHubBriefingText {
 					.filter(([, count]) => count > 0)
 					.map(([category, count]) => `${category}: ${count}`)
 					.join("; ")}.`,
-				`Showing ${selected.length} of ${groups.length} grouped items. Attention signals first, with one place reserved for in-progress work; older updates first within each category.`,
+				`Showing ${selected.length} of ${groups.length} grouped items. Attention signals first, with one place reserved for in-progress work; recent activity first within each category.`,
 				"",
 			);
 			for (const [index, group] of selected.entries())
@@ -85,17 +82,18 @@ export class GitHubBriefingText {
 	}
 
 	#groups(repository) {
+		const current = this.#relevance.select(repository);
 		const records = new Map();
 		const edges = new Map();
 		const add = (key, fields) => {
 			records.set(key, { ...records.get(key), key, ...fields });
 			if (!edges.has(key)) edges.set(key, new Set());
 		};
-		for (const work of repository.items)
+		for (const work of current.items)
 			add(`${work.kind}:${work.number}`, { kind: work.kind, work });
-		for (const task of repository.copilot?.tasks ?? [])
+		for (const task of current.tasks)
 			add(`task:${task.id}`, { kind: "task", task });
-		for (const context of repository.pullRequests?.items ?? []) {
+		for (const context of current.contexts) {
 			const key = `pull-request:${context.number}`;
 			add(key, { kind: "pull-request", context });
 			for (const id of context.taskIds) {
@@ -119,23 +117,24 @@ export class GitHubBriefingText {
 				pending.push(...edges.get(current));
 			}
 			nodes.sort((a, b) => a.key.localeCompare(b.key, "en"));
-			const signals = nodes.map((node) => this.#signals(node));
+			const signals = nodes.map((node) => this.#relevance.signals(node));
 			const priority = Math.min(...signals.map((value) => value.priority));
 			const dates = nodes
-				.map(
-					({ task, work, context }) =>
-						task?.updatedAt ??
-						task?.createdAt ??
-						context?.updatedAt ??
-						work?.updatedAt,
-				)
+				.flatMap(({ task, work, context }) => [
+					task?.updatedAt ?? task?.createdAt,
+					context?.updatedAt,
+					work?.updatedAt,
+					...(task?.sessions ?? []).map(
+						(session) => session.updatedAt ?? session.createdAt,
+					),
+				])
 				.filter(Boolean);
 			groups.push({
 				key: `${repository.id}:${key}`,
 				repository: repository.fullName,
 				nodes,
 				priority,
-				updated: Math.min(...dates.map(Date.parse)),
+				updated: Math.max(...dates.map(Date.parse)),
 				reasons: [
 					...new Set(
 						signals
@@ -146,69 +145,6 @@ export class GitHubBriefingText {
 			});
 		}
 		return groups;
-	}
-
-	#signals({ kind, task, work, context }) {
-		const reasons = [];
-		if (kind === "task") {
-			if (attentionStates[task.state])
-				reasons.push(`Copilot task ${attentionStates[task.state]}`);
-			const latest = this.#sessions(task);
-			const current = latest.filter(
-				(session) =>
-					Date.parse(session.createdAt) === Date.parse(latest[0].createdAt),
-			);
-			for (const session of current)
-				if (attentionStates[session.state] && session.state !== task.state)
-					reasons.push(
-						`Latest Copilot attempt ${attentionStates[session.state]}`,
-					);
-			if (reasons.length) return { priority: 0, reasons };
-			const active = [task, ...current].some(({ state }) =>
-				["queued", "in_progress"].includes(state),
-			);
-			return {
-				priority: active ? 1 : 3,
-				reasons: [
-					active
-						? "Copilot work queued or running"
-						: `Copilot task ${task.state}`,
-				],
-			};
-		}
-		if (["CLOSED", "MERGED"].includes(context?.state))
-			return { priority: 3, reasons: [`PR ${context.state.toLowerCase()}`] };
-		if (context?.reviewDecision === "CHANGES_REQUESTED")
-			reasons.push("Changes requested");
-		if (["ERROR", "FAILURE"].includes(context?.checks?.state))
-			reasons.push(`CI reports ${context.checks.state.toLowerCase()}`);
-		if (work?.reasons.includes("review-requested"))
-			reasons.push("Review requested from you or a team (search result)");
-		const priority = reasons.length ? 0 : 2;
-		if (work?.reasons.includes("mentioned"))
-			reasons.push("Mentioned (search result)");
-		if (work?.reasons.includes("author-search"))
-			reasons.push("Authored or delegated (search result)");
-		return {
-			priority,
-			reasons: reasons.length
-				? reasons
-				: [
-						kind === "issue"
-							? "Open issue"
-							: context?.state === "OPEN"
-								? "Open PR"
-								: "PR context unavailable",
-					],
-		};
-	}
-
-	#sessions(task) {
-		return [...task.sessions].sort(
-			(left, right) =>
-				Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
-				left.id.localeCompare(right.id, "en"),
-		);
 	}
 
 	#item(group, index) {
@@ -222,7 +158,7 @@ export class GitHubBriefingText {
 		const lines = [
 			`${index}. [${categories[group.priority]}] ${group.repository} - ${this.#text(title)}`,
 			`   Signals: ${group.reasons.join("; ")}.`,
-			`   Oldest source timestamp: ${Number.isFinite(group.updated) ? new Date(group.updated).toISOString() : "not available"}.`,
+			`   Latest source activity: ${Number.isFinite(group.updated) ? new Date(group.updated).toISOString() : "not available"}.`,
 		];
 		for (const kind of ["issue", "pull-request", "task"]) {
 			const records = group.nodes.filter((node) => node.kind === kind);
@@ -241,7 +177,8 @@ export class GitHubBriefingText {
 					);
 				} else {
 					const { task } = node;
-					const sessions = this.#sessions(task)
+					const sessions = this.#relevance
+						.sessions(task)
 						.slice(0, detailLimit)
 						.map((session) => `${session.id}=${session.state}`)
 						.join(", ");
