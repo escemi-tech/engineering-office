@@ -1,6 +1,10 @@
 # Deploy Hermes to an approved host
 
-Ansible prepares an approved Ubuntu host with Docker and Compose, then deploys
+The default runtime has no source tools. For the optional constrained GitHub
+connector, source admission and conversation cleanup, see
+[the hosted briefing guide](hermes-briefing.md).
+
+Ansible prepares an approved Ubuntu host with Docker, Buildx and Compose, then deploys
 the reviewed Hermes assets, compiled writing policy and scoped credentials.
 Host preparation and runtime deployment are separate commands. Neither creates
 a cloud instance, opens a firewall or admits private sources.

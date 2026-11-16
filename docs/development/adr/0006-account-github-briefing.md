@@ -403,3 +403,80 @@ pass after correction, including current activity and uncertainty on finished
 PRs. The owner accepts the corrected selection rendered from the same protected
 snapshot. This validates presentation usefulness, not complete source coverage
 or hosted connector activation; those acceptance gates remain separate.
+
+## Native asynchronous Hermes integration - 2026-11-16
+
+The owner chooses fresh collection with asynchronous progress. A qualified full
+refresh required 1,185 GitHub requests, so a synchronous conversational HTTP
+timeout is unsuitable. Keep the existing collector and its 15-minute budget;
+reuse Hermes `/v1/runs` admission/status/stop and native session deletion instead
+of adding a queue, worker scheduler or briefing cache.
+
+Use the maintained [official MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk/releases/tag/v2.4.0)
+for stateless Streamable HTTP transport, validation and HTTP host/origin guards.
+Its stable server/node/express packages support the maintained Node runtime.
+Its OAuth middleware requires expiring OAuth tokens, so the internal single-owner
+service uses a separate constant-time checked API key rather than pretending a
+static key is an OAuth grant. Native
+[Hermes MCP configuration](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference/)
+allows exactly one zero-argument read tool, with sampling, resources, prompts and
+elicitation disabled. A general GitHub MCP server exposes a broader API and would
+duplicate the qualified admission/selection rules; it is not the selected boundary.
+
+The source container alone receives GitHub access. An internal Docker network
+and the official Nginx image constrain Hermes egress to that tool and a fixed
+inference endpoint. No executable skill or custom authorization framework is
+needed. Source files are re-read after collection so changed admission cannot
+silently return an obsolete result. Dependency automation covers SDK packages,
+the connector Dockerfile and proxy/runtime Compose images.
+
+A minimal Docker 29.9.3 probe reproduces that a container connected only to an
+internal bridge has no published port, even when one is requested. Therefore the
+same Nginx runtime proxy owns the loopback gateway binding and forwards it to
+Hermes. Dynamic Docker DNS resolution avoids a startup dependency cycle. This
+keeps Hermes without direct external egress and preserves the existing operator
+interface. The hosted lifecycle checks the host path, authentication and binding
+as well as container-to-container access.
+
+Inspection of the pinned Hermes implementation shows that provider `store: false`
+does not disable its local conversation database. The client creates identifiable
+briefing sessions and deletes them through the native API after completion or
+settled cancellation. An hourly systemd job removes abandoned feature sessions
+older than one day. It preserves unrelated conversations. Native admission still
+stores a final-response receipt when no idempotency key is sent. Native deletion
+removes transcript copies but retains that receipt for seven days until a prune
+pass runs. The cleanup unit calls the gateway owner's native `session.prune` RPC
+through Hermes' own client, using an empty pre-epoch session window. This triggers
+its expired-receipt reaper without selecting any application conversation. It
+never opens or edits the database itself. The CLI cannot cover this case because
+its preview returns before pruning when no session matches. This small adapter
+is qualified against the pinned runtime in the hosted lifecycle.
+
+The timer remains active after source disable, since disabling it would retain
+receipts indefinitely. Seven days plus one hourly interval bounds normal receipt
+retention after deletion; cleanup failures and downtime extend it. Native
+in-memory run status and event buffers expire separately (about one hour and five
+minutes). Runtime recreation clears only those buffers. Existing encrypted backups
+can retain conversations and receipts for their 28-day recovery window. An
+abandoned session plus receipt plus recovery window can approach 36 days from
+collection, which must be reviewed before private activation. Processor retention
+remains separate.
+Runtime diagnostics use bounded ephemeral memory and no Docker stdout retention,
+so source-derived logs do not become another persistent archive. The trade-off is
+loss of those diagnostics on stop/restart. A stateless MCP client cancellation is
+cooperative; the source's bounded call can finish before the native run stops.
+
+Docker leaves the hidden log mountpoint root-owned when the temporary memory
+mount disappears. The pinned Hermes bootstrap only repairs children when the
+state root itself needs an ownership change, so source disable must restore the
+log directory's runtime ownership before returning to persistent diagnostics.
+A disposable-volume probe reproduces the native logging permission error and
+passes after that correction. Native Ansible volume inspection and the file
+module repair only this directory, without recursive ownership changes or
+following a symlink. The existing disable lifecycle verifies the resulting runtime.
+
+Synthetic coverage belongs in the existing Node suite and one dedicated hosted
+deployment lifecycle, since protocol mocks cannot prove real tool registration,
+network isolation or session deletion. These implementation checks do not authorize
+live source processing. Source coverage, operational acceptance and owner approval
+remain activation gates.

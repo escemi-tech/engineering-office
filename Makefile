@@ -32,6 +32,13 @@ ci: ## Execute local CI tasks
 github-briefing: ## Show a scoped GitHub work briefing using the protected local source policy
 	@npm run --silent --prefix features/briefing/github briefing -- --source "$(CURDIR)/.local/github-briefing/source.json" --token-file "$(CURDIR)/.local/github-briefing/token" --format text
 
+.PHONY: hermes-briefing
+hermes-briefing: ## On the approved host, request a fresh briefing with native asynchronous progress
+	docker run --rm --network host --read-only --cap-drop ALL --security-opt no-new-privileges \
+		--user 0:0 --memory 128m --pids-limit 32 \
+		--mount type=bind,src=/srv/engineering-office/.local/hermes-gateway-key,dst=/run/hermes/key,readonly \
+		engineering-office-briefing:local node src/adapters/hermes-cli.js collect
+
 .PHONY: management management-enforce
 management: ## Configure the approved host's WireGuard interface without closing bootstrap SSH
 	ansible-playbook -i .local/management-inventory.yml platform/hosting/host/management.yml --extra-vars @.local/management.yml

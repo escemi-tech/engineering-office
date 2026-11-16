@@ -12,7 +12,7 @@ const categories = [
 export class GitHubBriefingText {
 	#relevance = new BriefingRelevance();
 
-	render(snapshot) {
+	render(snapshot, { cliHint = true } = {}) {
 		const groups = snapshot.repositories.flatMap((repository) =>
 			this.#groups(repository),
 		);
@@ -75,9 +75,10 @@ export class GitHubBriefingText {
 			for (const [index, group] of selected.entries())
 				lines.push(...this.#item(group, index + 1), "");
 		}
-		lines.push(
-			"Use --format json for all collected evidence, attempts and coverage details.",
-		);
+		if (cliHint)
+			lines.push(
+				"Use --format json for all collected evidence, attempts and coverage details.",
+			);
 		return `${lines.join("\n")}\n`;
 	}
 

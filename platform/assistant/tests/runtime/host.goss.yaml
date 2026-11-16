@@ -20,6 +20,10 @@ file:
     group: docker
     mode: "0660"
 command:
+  docker-buildx-is-available:
+    exec: docker buildx version
+    exit-status: 0
+    stdout: [github.com/docker/buildx]
   docker-compose-is-available:
     exec: docker compose version --short
     exit-status: 0

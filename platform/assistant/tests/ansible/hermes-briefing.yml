@@ -1,0 +1,121 @@
+---
+# Arrange
+- name: Select the disposable host
+  ansible.builtin.import_playbook: helpers/inventory.yml
+
+- name: Prepare synthetic briefing deployment settings
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Supply separate synthetic credentials and explicit source admission
+      ansible.builtin.add_host:
+        name: "{{ lookup('ansible.builtin.env', 'VM_NAME') }}"
+        hermes_project_name: engineering-office-hermes-test
+        hermes_runtime:
+          model: synthetic
+          inference_url: http://127.0.0.1:8081/v1
+          inference_api_key: synthetic-inference-key-for-tests-only # checkov:skip=CKV_SECRET_6:Public synthetic fixture credential
+          gateway_api_key: synthetic-gateway-key-for-briefing-tests-only # checkov:skip=CKV_SECRET_6:Public synthetic fixture credential
+        hermes_briefing:
+          connector_key: synthetic-connector-key-distinct-from-github
+          github_token: synthetic-token-canary # checkov:skip=CKV_SECRET_6:Public synthetic fixture credential
+          source_policy:
+            account: { id: 101, login: example-user }
+            scope: professional-internal
+            repositories:
+              - { id: 201, fullName: work/project, visibility: public }
+              - { id: 202, fullName: client/project, visibility: private }
+
+# Act
+- name: Deploy through the production entrypoint
+  ansible.builtin.import_playbook: ../../deployment/hermes.yml
+
+- name: Verify convergence and install isolated upstream fixtures
+  hosts: hermes
+  become: true
+  gather_facts: false
+  tasks:
+    # Act
+    - name: Repeat briefing deployment
+      ansible.builtin.include_role:
+        name: hermes
+    # Assert
+    - name: Require unchanged services on repeat
+      ansible.builtin.assert:
+        that:
+          - not hermes_deployment.changed
+          - hermes_deployment.containers | length == 3
+        fail_msg: "Unexpected redeployment actions: {{ hermes_deployment.actions | default([]) | to_json }}"
+        quiet: true
+    # Arrange: only this disposable scenario replaces network I/O with fixtures.
+    - name: Copy the inference fixture and native lifecycle tests
+      ansible.builtin.copy:
+        src: ../briefing/fixtures/
+        dest: /opt/hermes-briefing-fixture/
+        owner: root
+        group: root
+        mode: "0444"
+        directory_mode: "0755"
+    - name: Reuse the existing GitHub provider fixture
+      ansible.builtin.copy:
+        src: ../../../../features/briefing/github/tests/helpers/github-api.js
+        dest: /opt/hermes-briefing-fixture/github-api.js
+        mode: "0444"
+    - name: Expose the exact deployed instructions to the inference fixture
+      ansible.builtin.copy:
+        src: /srv/engineering-office/.build/hermes/AGENTS.md
+        remote_src: true
+        dest: /opt/hermes-briefing-fixture/AGENTS.md
+        mode: "0444"
+    - name: Create the synthetic upstream control file
+      ansible.builtin.copy:
+        content: normal
+        dest: /opt/hermes-briefing-fixture/mode
+        owner: "1000"
+        group: "1000"
+        mode: "0644"
+    - name: Declare the fixture module format
+      ansible.builtin.copy:
+        content: '{"type":"module"}'
+        dest: /opt/hermes-briefing-fixture/package.json
+        mode: "0444"
+    - name: Start isolated synthetic inference beside the proxy
+      community.docker.docker_container:
+        name: engineering-office-hermes-test-inference
+        image: engineering-office-briefing:local
+        entrypoint: [node, /fixtures/inference.mjs]
+        command: []
+        network_mode: container:engineering-office-hermes-test-runtime-proxy-1
+        user: "1000:1000"
+        read_only: true
+        volumes:
+          - /opt/hermes-briefing-fixture:/fixtures:ro
+          - /opt/hermes-briefing-fixture/mode:/fixtures/mode:rw
+        security_opts: [no-new-privileges:true]
+        cap_drop: [ALL]
+    - name: Install a test-only provider preload without changing production source
+      ansible.builtin.copy:
+        dest: /srv/engineering-office/services/hermes/briefing-fixture.yml
+        mode: "0444"
+        content: |
+          services:
+            briefing-source:
+              command: [node, --import, /fixtures/github.mjs, src/adapters/serve.js]
+              volumes:
+                - /opt/hermes-briefing-fixture:/fixtures:ro
+    - name: Converge the disposable source fixture
+      # The fixture repeats production Compose inputs, adding only its provider preload.
+      # jscpd:ignore-start
+      environment:
+        HERMES_POLICY_FILE: /srv/engineering-office/.build/hermes/AGENTS.md
+        HERMES_BRIEFING_DIRECTORY: /srv/engineering-office/.local/briefing
+      # jscpd:ignore-end
+      community.docker.docker_compose_v2:
+        project_src: /srv/engineering-office/services/hermes
+        project_name: engineering-office-hermes-test
+        files: [compose.yml, briefing/compose.yml, briefing-fixture.yml]
+        env_files: [/srv/engineering-office/.local/hermes.env]
+        state: present
+        wait: true
+        wait_timeout: 180
+      no_log: true

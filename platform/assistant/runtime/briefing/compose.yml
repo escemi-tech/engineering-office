@@ -1,0 +1,76 @@
+services:
+  hermes:
+    # Docker does not publish ports from a container on internal networks only.
+    ports: !override []
+    # Source-derived diagnostics stay out of the state volume and Docker log store.
+    tmpfs:
+      - /opt/data/logs:uid=10000,gid=10000,mode=0700,noexec,nosuid,nodev,size=32m
+    logging: !override
+      driver: none
+    environment:
+      HERMES_INFERENCE_URL: http://runtime-proxy:8080/v1
+      HERMES_BRIEFING_KEY: ${HERMES_BRIEFING_KEY:?Set the separate connector key}
+    networks: [assistant]
+    depends_on:
+      briefing-source:
+        condition: service_healthy
+      runtime-proxy:
+        condition: service_healthy
+  briefing-source:
+    image: engineering-office-briefing:local
+    # The deployment role builds the locked source before Compose converges services.
+    pull_policy: never
+    restart: unless-stopped
+    networks: [assistant, source-egress]
+    volumes:
+      - type: bind
+        source: ${HERMES_BRIEFING_DIRECTORY:?Set the protected source directory}
+        target: /run/briefing
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 1
+    mem_limit: 512m
+    pids_limit: 64
+    logging:
+      driver: local
+      options:
+        max-size: 1m
+        max-file: "2"
+  runtime-proxy:
+    image: nginx:1.30.6-alpine@sha256:901e593c95dc85f5a729f5765516321366ef4ac401821431d408897e95287d0a
+    entrypoint: [nginx, -g, "daemon off;"]
+    user: nginx
+    restart: unless-stopped
+    networks: [assistant, inference-egress]
+    ports:
+      - "127.0.0.1:8642:8642"
+    volumes:
+      - ./briefing/nginx.conf:/etc/nginx/nginx.conf:ro
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev,size=16m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 0.25
+    mem_limit: 64m
+    pids_limit: 32
+    healthcheck:
+      test: [CMD, wget, --quiet, --spider, http://127.0.0.1:8080/health]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    logging:
+      driver: local
+      options:
+        max-size: 1m
+        max-file: "2"
+networks:
+  assistant:
+    internal: true
+  source-egress:
+  inference-egress:

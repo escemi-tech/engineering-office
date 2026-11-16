@@ -1,0 +1,68 @@
+---
+- name: Create reviewed briefing asset directories
+  ansible.builtin.file:
+    path: "/srv/engineering-office/services/hermes/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: [briefing, briefing-source]
+
+- name: Deliver the connector build context without tests or credentials
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../../../../features/briefing/github/{{ item }}"
+    dest: /srv/engineering-office/services/hermes/briefing-source/
+    owner: root
+    group: root
+    mode: preserve
+  loop: [Dockerfile, .dockerignore, package.json, package-lock.json, src]
+  register: hermes_briefing_source
+
+- name: Deliver native service and network composition
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../../../../platform/assistant/runtime/briefing/compose.yml"
+    dest: /srv/engineering-office/services/hermes/briefing/compose.yml
+    owner: root
+    group: root
+    mode: "0444"
+
+- name: Render the fixed inference upstream without credentials
+  ansible.builtin.template:
+    src: briefing-nginx.conf.j2
+    dest: /srv/engineering-office/services/hermes/briefing/nginx.conf
+    owner: root
+    group: root
+    mode: "0444"
+  register: hermes_briefing_proxy
+
+- name: Restrict source files to the unprivileged connector identity
+  ansible.builtin.file:
+    path: /srv/engineering-office/.local/briefing
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0700"
+
+- name: Deliver source admission and credentials outside Hermes
+  ansible.builtin.copy:
+    content: "{{ item.value }}"
+    dest: "/srv/engineering-office/.local/briefing/{{ item.name }}"
+    owner: "1000"
+    group: "1000"
+    mode: "0600"
+  loop:
+    - name: source.json
+      value: "{{ hermes_briefing.source_policy | to_json }}"
+    - name: github-token
+      value: "{{ hermes_briefing.github_token }}"
+    - name: connector-key
+      value: "{{ hermes_briefing.connector_key }}"
+  no_log: true
+  diff: false
+
+- name: Build the reviewed connector when its source changes
+  community.docker.docker_image_build:
+    name: engineering-office-briefing
+    tag: local
+    path: /srv/engineering-office/services/hermes/briefing-source
+    rebuild: "{{ 'always' if hermes_briefing_source.changed else 'never' }}"

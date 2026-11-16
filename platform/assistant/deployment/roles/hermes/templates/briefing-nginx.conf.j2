@@ -1,0 +1,44 @@
+pid /tmp/nginx.pid;
+error_log /dev/stderr warn;
+events { worker_connections 32; }
+http {
+  access_log off;
+  client_body_temp_path /tmp/client;
+  proxy_temp_path /tmp/proxy;
+  fastcgi_temp_path /tmp/fastcgi;
+  uwsgi_temp_path /tmp/uwsgi;
+  scgi_temp_path /tmp/scgi;
+  client_max_body_size 2m;
+  server {
+    listen 8642;
+    server_tokens off;
+    # Resolve after startup: Hermes waits for this proxy's health before starting.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    location / {
+      set $gateway_upstream hermes:8642;
+      proxy_pass http://$gateway_upstream;
+      proxy_read_timeout 120s;
+      proxy_connect_timeout 10s;
+      proxy_buffering off;
+      proxy_max_temp_file_size 0;
+    }
+  }
+  server {
+    listen 8080;
+    server_tokens off;
+    location = /health { return 200; }
+    location = /v1/chat/completions {
+      limit_except POST { deny all; }
+      proxy_pass {{ hermes_runtime.inference_url }}/chat/completions;
+      proxy_set_header Host {{ hermes_runtime.inference_url | urlsplit('hostname') }};
+      proxy_ssl_server_name on;
+      proxy_ssl_verify on;
+      proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+      proxy_read_timeout 120s;
+      proxy_connect_timeout 10s;
+      proxy_buffering off;
+      proxy_max_temp_file_size 0;
+    }
+    location / { return 403; }
+  }
+}

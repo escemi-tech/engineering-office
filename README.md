@@ -5,10 +5,12 @@ Professional AI assistance and automation for software engineering, knowledge an
 Run a pinned Hermes gateway with persistent conversations and a local authenticated
 API. Start with the [synthetic demo and runtime guide](docs/usage/hermes.md).
 Use the [host provisioning guide](docs/usage/host-provisioning.md) to prepare a
-reviewed OVH plan. Live cloud qualification and private integrations remain pending.
+reviewed OVH plan. Deployment and private source activation require operator approval.
 
 Read a concise local briefing of your GitHub work, Copilot tasks and separate PR review/CI context with the
 [GitHub briefing source guide](docs/usage/github-briefing.md).
+For an approved hosted scope, [request a fresh briefing through Hermes](docs/usage/hermes-briefing.md)
+with asynchronous progress and source coverage.
 
 Use the [Ansible deployment guide](docs/usage/hermes-deployment.md) to prepare
 an approved Ubuntu host, install Hermes with scoped credentials and check gateway health.

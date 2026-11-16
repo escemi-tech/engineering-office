@@ -173,7 +173,9 @@ coverage before acting; rerun collection to refresh it. Plain-text titles have
 terminal controls removed, whitespace collapsed and a 280-character limit;
 JSON retains the original titles. Titles are still untrusted evidence.
 
-There is no model-generated synthesis, external delivery or saved briefing.
+This local command performs no model-generated synthesis, external delivery or
+saved briefing. The optional [Hermes interface](hermes-briefing.md) adds approved
+model synthesis with fresh asynchronous collection and conversation cleanup.
 Choose JSON when five items or the abbreviated detail are insufficient:
 
 ```sh

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, suite, test } from "node:test";
+import timers from "node:timers/promises";
 import {
 	BriefingUnavailableError,
 	createGitHubBriefing,
@@ -1027,10 +1028,9 @@ suite("Operational setup and bounded refresh", () => {
 			let elapsed = 0;
 			const waits = [];
 			t.mock.method(Date, "now", () => start + elapsed);
-			t.mock.method(globalThis, "setTimeout", (resolve, delay) => {
+			t.mock.method(timers, "setTimeout", async (delay) => {
 				waits.push(delay);
 				elapsed += delay;
-				resolve();
 			});
 			api.overrides.set(
 				bucket === "search"

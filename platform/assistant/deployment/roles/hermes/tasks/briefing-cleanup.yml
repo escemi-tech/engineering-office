@@ -1,0 +1,41 @@
+---
+- name: Inspect optional briefing cleanup installation
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/hermes-briefing-cleanup-{{ hermes_project_name }}.timer"
+  register: hermes_briefing_timer
+
+- name: Keep the maintenance credential current after source revocation
+  ansible.builtin.copy:
+    content: "{{ hermes_runtime.gateway_api_key }}"
+    dest: /srv/engineering-office/.local/hermes-gateway-key
+    owner: root
+    group: root
+    mode: "0600"
+  when: hermes_briefing | length > 0 or hermes_briefing_timer.stat.exists
+  no_log: true
+  diff: false
+
+- name: Deliver the briefing conversation and native receipt cleanup units
+  ansible.builtin.template:
+    src: "briefing-cleanup.{{ item }}.j2"
+    dest: "/etc/systemd/system/hermes-briefing-cleanup-{{ hermes_project_name }}.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [service, timer]
+  when: hermes_briefing | length > 0 or hermes_briefing_timer.stat.exists
+  register: hermes_briefing_units
+
+- name: Keep retention active after source access is disabled
+  ansible.builtin.systemd_service:
+    name: "hermes-briefing-cleanup-{{ hermes_project_name }}.timer"
+    daemon_reload: "{{ hermes_briefing_units.changed }}"
+    enabled: true
+    state: started
+  when: hermes_briefing | length > 0 or hermes_briefing_timer.stat.exists
+
+- name: Remove source access files when the capability is disabled
+  ansible.builtin.file:
+    path: /srv/engineering-office/.local/briefing
+    state: absent
+  when: hermes_briefing | length == 0

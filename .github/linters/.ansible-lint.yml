@@ -2,6 +2,10 @@
 # Super-linter scans platform/; controller dependencies have one canonical owner.
 project_dir: ../../tooling/ansible
 quiet: true
+# Compose owns !override; its native config validation and VM lifecycle cover this file.
+# Other YAML/security linters still inspect it.
+exclude_paths:
+  - "**/assistant/runtime/briefing/compose.yml"
 kinds:
   - inventory: "**/molecule/*/inventory.yml"
 # Preserve the shared linter's baseline rules while selecting our project root.

@@ -41,7 +41,9 @@ updates:
   - package-ecosystem: docker
     commit-message:
       prefix: build
-    directory: /
+    directories:
+      - /
+      - /features/briefing/github
     groups:
       docker-dependencies:
         patterns:

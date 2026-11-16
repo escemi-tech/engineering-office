@@ -123,7 +123,10 @@ to that Docker daemon. Missing `.local/hermes.env`, Compose files or compiled
 policy, and an unresponsive gateway API, cannot block this path. A Docker error
 returns failure; no matching container is a successful no-op. Repeating it is safe.
 
-The stopped container, logs and state volume remain available. Other projects
+The stopped container and state volume remain available. The default runtime
+retains logs; the optional briefing runtime clears its memory-only diagnostics
+on stop, as described in the [briefing retention guide](hermes-briefing.md#retention-and-revocation).
+Other projects
 and services are untouched. For the synthetic demo, use
 `make HERMES_PROJECT=engineering-office-hermes-test hermes-stop`.
 The project override selects the same project for all Hermes Make targets.
@@ -139,7 +142,9 @@ For suspected credential exposure:
 2. Keep the stopped container and volume while collecting restricted incident
    evidence. To find the container without Compose configuration, use
    `docker container ls --all --filter label=com.docker.compose.project=engineering-office-hermes --filter label=com.docker.compose.service=hermes`.
-   Read its logs with `docker container logs <container-id>`. Keep them private;
+   For the default runtime, read logs with `docker container logs <container-id>`.
+   Briefing diagnostics are available only inside the running container before
+   stopping it. Keep them private;
    they can contain conversation data. Avoid full container inspection output,
    which includes environment credentials.
 3. Revoke an exposed inference key at its provider. Replace the affected keys in

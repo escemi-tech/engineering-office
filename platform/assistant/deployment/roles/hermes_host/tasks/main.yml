@@ -13,6 +13,7 @@
   ansible.builtin.apt:
     name:
       - docker.io
+      - docker-buildx
       - docker-compose-v2
       - make
       - python3-requests

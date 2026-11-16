@@ -6,6 +6,10 @@ ownership, dependency direction and placement of code and tests.
 The Ansible linter scans `platform/` and resolves dependencies from
 `tooling/ansible/`. Its native `ANSIBLE_HOME` stays inside the disposable linter
 container, outside the scanned checkout.
+The briefing Compose overlay uses Docker's native `!override` mapping tag, which
+Ansible's YAML loader cannot parse. Only Ansible lint excludes that Compose file;
+native `docker compose config`, its hosted lifecycle and the other YAML/security
+checks retain responsibility for it.
 
 Follow the [workstation-manager Makefile](https://github.com/neilime/workstation-manager/blob/main/Makefile)
 and [workflow layout](https://github.com/neilime/workstation-manager/tree/main/.github/workflows).

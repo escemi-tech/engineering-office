@@ -1,0 +1,11 @@
+command:
+  source access is removed while native retention remains operational:
+    exec: |
+      set -eu
+      sudo test ! -e /srv/engineering-office/.local/briefing
+      test -z "$(sudo docker ps --all --quiet --filter name=engineering-office-hermes-test-briefing-source-1)"
+      test "$(systemctl is-enabled hermes-briefing-cleanup-engineering-office-hermes-test.timer)" = enabled
+      sudo systemctl start hermes-briefing-cleanup-engineering-office-hermes-test.service
+      test "$(systemctl show --property=Result --value hermes-briefing-cleanup-engineering-office-hermes-test.service)" = success
+    exit-status: 0
+    timeout: 120000

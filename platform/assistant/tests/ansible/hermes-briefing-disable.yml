@@ -1,0 +1,51 @@
+---
+# Arrange: exercise revocation on the same disposable host after its live tests.
+- name: Select the disposable host
+  ansible.builtin.import_playbook: helpers/inventory.yml
+
+- name: Prepare the disabling deployment
+  hosts: hermes
+  become: true
+  gather_facts: false
+  vars:
+    # Reuse the deployment fixture's native settings without adding a shared test layer.
+    # jscpd:ignore-start
+    hermes_project_name: engineering-office-hermes-test
+    hermes_runtime:
+      model: synthetic
+      inference_url: http://127.0.0.1:8081/v1
+      inference_api_key: synthetic-inference-key-for-tests-only # checkov:skip=CKV_SECRET_6:Public synthetic fixture credential
+      gateway_api_key: synthetic-gateway-key-for-briefing-tests-only # checkov:skip=CKV_SECRET_6:Public synthetic fixture credential
+    hermes_briefing: {}
+    # jscpd:ignore-end
+  tasks:
+    - name: Seed a feature conversation and an unrelated conversation
+      # checkov:skip=CKV2_ANSIBLE_1:HTTP targets only the loopback gateway in this disposable synthetic VM.
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8642/api/sessions
+        method: POST
+        headers:
+          Authorization: "Bearer {{ hermes_runtime.gateway_api_key }}"
+        body_format: json
+        body: { id: "{{ item }}", source: api_server }
+        status_code: [200, 201]
+      loop: [office-briefing-revoke, unrelated-preserved]
+    # Act
+    - name: Disable the capability through the production role
+      ansible.builtin.include_role:
+        name: hermes
+    # Assert
+    - name: Read remaining native conversations
+      # checkov:skip=CKV2_ANSIBLE_1:HTTP targets only the loopback gateway in this disposable synthetic VM.
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8642/api/sessions?limit=200
+        headers:
+          Authorization: "Bearer {{ hermes_runtime.gateway_api_key }}"
+      register: remaining_sessions
+    - name: Require scoped conversation removal and a single runtime
+      ansible.builtin.assert:
+        that:
+          - hermes_deployment.containers | length == 1
+          - remaining_sessions.json.data | selectattr('id', 'equalto', 'unrelated-preserved') | list | length == 1
+          - remaining_sessions.json.data | selectattr('id', 'match', '^office-briefing-') | list | length == 0
+        quiet: true

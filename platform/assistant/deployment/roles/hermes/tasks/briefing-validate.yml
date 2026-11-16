@@ -1,0 +1,31 @@
+---
+- name: Require explicit source admission and separate credentials
+  block:
+    - name: Validate the briefing operator contract
+      ansible.builtin.assert:
+        that:
+          - hermes_briefing is mapping
+          - >-
+            hermes_briefing | length == 0 or
+            (hermes_briefing.keys() | sort == ['connector_key', 'github_token', 'source_policy'] and
+             hermes_briefing.source_policy is mapping and
+             hermes_briefing.source_policy.scope == 'professional-internal' and
+             hermes_briefing.source_policy.repositories | length > 0 and
+             hermes_briefing.connector_key is match('^[!-~]{32,16384}$') and
+             hermes_briefing.github_token is match('^[!-~]{1,16384}$') and
+             [hermes_briefing.connector_key, hermes_briefing.github_token,
+              hermes_runtime.gateway_api_key, hermes_runtime.inference_api_key] | unique | length == 4)
+          - >-
+            hermes_briefing | length == 0 or
+            hermes_runtime.inference_url is match('^https://[a-zA-Z0-9.-]+(:[0-9]+)?/v1$') or
+            hermes_runtime.inference_url is match('^http://127\.0\.0\.1:[0-9]+/v1$')
+        quiet: true
+      no_log: true
+  rescue:
+    - name: Reject invalid briefing configuration
+      ansible.builtin.fail:
+        msg: >-
+          Configure hermes_briefing with exactly source_policy, github_token and
+          connector_key for professional-internal access, or an empty mapping to
+          disable it. All four credentials must be distinct. Use an HTTPS inference
+          origin ending in /v1, or loopback HTTP for isolated tests.
