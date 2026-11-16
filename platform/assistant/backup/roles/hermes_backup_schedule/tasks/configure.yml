@@ -101,9 +101,6 @@
       destination: helpers/hermes-backup-idle.yml
     - source: tooling/ansible/requirements.txt
       destination: requirements.txt
-    - source: tooling/ansible/collections/requirements.yml
-      destination: collections/requirements.yml
-  register: hermes_backup_schedule_manifests
 
 - name: Install the same pinned Ansible Core in an isolated host environment
   ansible.builtin.pip:
@@ -111,23 +108,8 @@
     virtualenv: "{{ hermes_backup_schedule_directory }}/venv"
     virtualenv_command: /usr/bin/python3 -m venv
 
-- name: Inspect the installed collection set
-  ansible.builtin.stat:
-    path: "{{ hermes_backup_schedule_directory }}/collections/ansible_collections/community/docker/MANIFEST.json"
-  register: hermes_backup_schedule_collection
-
-- name: Install the existing pinned collection requirements
-  ansible.builtin.command:
-    argv:
-      - "{{ hermes_backup_schedule_directory }}/venv/bin/ansible-galaxy"
-      - collection
-      - install
-      - --requirements-file
-      - "{{ hermes_backup_schedule_directory }}/collections/requirements.yml"
-      - --collections-path
-      - "{{ hermes_backup_schedule_directory }}/collections"
-  when: hermes_backup_schedule_manifests.changed or not hermes_backup_schedule_collection.stat.exists
-  changed_when: true
+- name: Install pinned collections without requiring host access to Galaxy
+  ansible.builtin.include_tasks: collections.yml
 
 - name: Write the local-only controller inventory
   ansible.builtin.copy:

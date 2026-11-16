@@ -255,7 +255,11 @@ stopped container, disabled restart policy and every existing snapshot. Failure
 reports must exclude the synthetic password and plaintext state canary.
 The [automatic backup scenario](../../platform/assistant/tests/ansible/hermes-backup-schedule.yml)
 uses a real SeaweedFS S3 service outside the guest and a synthetic heartbeat
-recorder. It exercises a native systemd calendar tick, stopped/running state
+recorder. The guest's Galaxy resolution is blocked during production schedule
+setup: collections must arrive through the controller's native offline bundle.
+Reapplying unchanged collection requirements must succeed with the registry
+unavailable on both machines. These cases reuse the existing guest and cycle.
+It exercises a native systemd calendar tick, stopped/running state
 preservation, verification and retention, rejected credentials, unavailable
 monitoring, overlapping starts and the kill switch during storage interruption.
 Removing automation must preserve the independently stored recovery point and
