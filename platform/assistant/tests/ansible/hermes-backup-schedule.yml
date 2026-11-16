@@ -53,13 +53,45 @@
       environment: "{{ hermes_backup_environment }}"
       changed_when: true
       no_log: true
-    # Act: a real calendar tick starts the first cycle.
-    - name: Enable the production schedule
-      ansible.builtin.include_role:
-        name: hermes_backup_schedule
-      vars:
-        hermes_backup_schedule_enabled: true
-        hermes_backup_schedule_calendar: "*-*-* *:*:00 UTC"
+    - name: Qualify setup without direct host access to Galaxy
+      block:
+        # Arrange: only this disposable guest loses access to Galaxy.
+        - name: Block the Galaxy endpoint on the disposable host
+          ansible.builtin.blockinfile:
+            path: /etc/hosts
+            marker: "# {mark} ENGINEERING-OFFICE GALAXY FIXTURE"
+            block: |
+              127.0.0.1 galaxy.ansible.com
+              ::1 galaxy.ansible.com
+        - name: Verify that the fixture cannot reach Galaxy directly
+          ansible.builtin.uri:
+            url: https://galaxy.ansible.com/api/
+            use_proxy: false
+            timeout: 3
+          failed_when: false
+          register: blocked_galaxy
+        - name: Require an unavailable registry before exercising installation
+          ansible.builtin.assert:
+            that:
+              - blocked_galaxy.status == -1
+            quiet: true
+        # Act: a real calendar tick starts the first cycle.
+        - name: Enable the production schedule
+          ansible.builtin.include_role:
+            name: hermes_backup_schedule
+          vars:
+            hermes_backup_schedule_enabled: true
+            hermes_backup_schedule_calendar: "*-*-* *:*:00 UTC"
+      rescue:
+        - name: Fail setup that requires direct host access to Galaxy
+          ansible.builtin.fail:
+            msg: Production schedule setup must succeed while Galaxy is unavailable on the guest.
+      always:
+        - name: Restore the disposable host's Galaxy resolution
+          ansible.builtin.blockinfile:
+            path: /etc/hosts
+            marker: "# {mark} ENGINEERING-OFFICE GALAXY FIXTURE"
+            state: absent
     - name: Wait for the scheduled worker to announce itself
       # checkov:skip=CKV2_ANSIBLE_1:Isolated synthetic loopback monitor
       ansible.builtin.uri:
@@ -87,6 +119,15 @@
           - cycle_container.container.HostConfig.RestartPolicy.Name == 'no'
           - worker_state.stdout == 'success'
         quiet: true
+    # Act and Assert: unchanged dependencies need no registry on either machine.
+    - name: Reapply the installed collection requirements without registry access
+      ansible.builtin.include_role:
+        name: hermes_backup_schedule
+        tasks_from: collections
+        apply:
+          environment:
+            ANSIBLE_GALAXY_SERVER_LIST: unavailable
+            ANSIBLE_GALAXY_SERVER_UNAVAILABLE_URL: http://127.0.0.1:9/
     # Arrange
     - name: Resume the synthetic service for availability tests
       ansible.builtin.command:

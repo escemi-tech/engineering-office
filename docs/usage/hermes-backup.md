@@ -119,8 +119,14 @@ make hermes-backup-schedule
 ```
 
 The host needs the supported Python supplied by the deployment's Ubuntu release
-and network access to install the repository's pinned Ansible/collection
-requirements. Setup installs a private controller under
+and network access to install its OS and pinned Python packages. The operator
+controller downloads the pinned collections from Galaxy and transfers the native
+offline bundle over Ansible's existing connection. The host installs those
+artifacts without contacting Galaxy. Requirements are recorded only after a
+successful installation, so an interrupted setup retries on the next invocation.
+Unchanged requirements with all collections present need no new download;
+manifest changes or missing collections trigger a fresh bundle. Temporary bundles
+are removed after the attempt. Setup installs a private controller under
 `/opt/engineering-office-backup/<project>` and a persistent systemd timer. The
 example runs at 03:00 and 15:00 UTC. Systemd catches a missed tick after reboot
 and allows only one active worker per project. Reapplying configuration suspends

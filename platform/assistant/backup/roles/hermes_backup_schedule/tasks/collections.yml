@@ -1,0 +1,110 @@
+---
+- name: Inspect the last successfully installed requirements
+  ansible.builtin.stat:
+    path: "{{ hermes_backup_schedule_directory }}/collections/installed-requirements.yml"
+    checksum_algorithm: sha256
+  register: hermes_backup_schedule_installed_requirements
+
+- name: Inspect every required collection
+  ansible.builtin.stat:
+    path: "{{ hermes_backup_schedule_directory }}/collections/ansible_collections/{{ item.name | replace('.', '/') }}/MANIFEST.json"
+  loop: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../../../../tooling/ansible/collections/requirements.yml') | from_yaml).collections }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: hermes_backup_schedule_collections
+
+- name: Deliver the native offline collection bundle
+  when: >-
+    hermes_backup_schedule_installed_requirements.stat.checksum | default('') !=
+    (lookup('ansible.builtin.file', role_path ~ '/../../../../../tooling/ansible/collections/requirements.yml', rstrip=false) | hash('sha256')) or
+    hermes_backup_schedule_collections.results | rejectattr('stat.exists') | list | length > 0
+  block:
+    - name: Invalidate the previous receipt before attempting installation
+      ansible.builtin.file:
+        path: "{{ hermes_backup_schedule_directory }}/collections/installed-requirements.yml"
+        state: absent
+
+    - name: Prepare private disk-backed download storage in the checkout
+      ansible.builtin.file:
+        path: "{{ role_path }}/../../../../../.cache/backup-collections"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Allocate a separate collection download for this host
+      ansible.builtin.tempfile:
+        path: "{{ role_path }}/../../../../../.cache/backup-collections"
+        state: directory
+      delegate_to: localhost
+      become: false
+      register: hermes_backup_schedule_download
+
+    - name: Download the pinned requirements with the controller's native Galaxy CLI
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python | dirname }}/ansible-galaxy"
+          - collection
+          - download
+          - --requirements-file
+          - "{{ role_path }}/../../../../../tooling/ansible/collections/requirements.yml"
+          - --download-path
+          - "{{ hermes_backup_schedule_download.path }}"
+      delegate_to: localhost
+      become: false
+      throttle: 1
+      changed_when: true
+
+    - name: Allocate a private transfer directory on the target
+      ansible.builtin.tempfile:
+        path: "{{ hermes_backup_schedule_directory }}"
+        state: directory
+      register: hermes_backup_schedule_transfer
+
+    - name: Transfer collection archives and the generated offline manifest
+      ansible.builtin.copy:
+        src: "{{ hermes_backup_schedule_download.path }}/"
+        dest: "{{ hermes_backup_schedule_transfer.path }}/"
+        owner: root
+        group: root
+        mode: "u=rwX,go="
+
+    - name: Install only the transferred artifacts without contacting Galaxy
+      ansible.builtin.command:
+        argv:
+          - "{{ hermes_backup_schedule_directory }}/venv/bin/ansible-galaxy"
+          - collection
+          - install
+          - --offline
+          - --requirements-file
+          - requirements.yml
+          - --collections-path
+          - "{{ hermes_backup_schedule_directory }}/collections"
+        chdir: "{{ hermes_backup_schedule_transfer.path }}"
+      changed_when: true
+
+    - name: Record requirements only after the entire installation succeeds
+      ansible.builtin.copy:
+        src: "{{ role_path }}/../../../../../tooling/ansible/collections/requirements.yml"
+        dest: "{{ hermes_backup_schedule_directory }}/collections/installed-requirements.yml"
+        owner: root
+        group: root
+        mode: "0600"
+  rescue:
+    - name: Keep incomplete collection delivery visible and retryable
+      ansible.builtin.fail:
+        msg: Collection delivery failed. The backup timer remains disabled; resolve the reported error and rerun schedule configuration.
+  always:
+    - name: Remove the target's temporary collection transfer
+      ansible.builtin.file:
+        path: "{{ hermes_backup_schedule_transfer.path }}"
+        state: absent
+      when: hermes_backup_schedule_transfer.path is defined
+
+    - name: Remove the controller's temporary collection download
+      ansible.builtin.file:
+        path: "{{ hermes_backup_schedule_download.path }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      when: hermes_backup_schedule_download.path is defined
