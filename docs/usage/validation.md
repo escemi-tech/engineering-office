@@ -15,10 +15,16 @@ a fresh receipt and an unrelated ended conversation. A final disabling deploymen
 must remove source access and feature conversations while retaining receipt
 cleanup and unrelated conversations.
 The source fixture replaces HTTP only through a test-only Node preload; production
-code has no configurable GitHub origin. No model API or private work is used.
+code has no configurable GitHub origin. Mount the shared fixture under `/app/fixtures`
+so Node resolves its SDK dependencies from the connector image; fixture files use
+module-relative paths. No model API or private work is used.
 
 The cheaper package suite covers the MCP transport contract and source revocation,
 plus native-run client cancellation, missing-evidence refusal and paginated cleanup.
+Collector tests exercise the real Octokit throttling plugin against synthetic HTTP
+responses, including temporary primary/secondary limits, retry exhaustion and the
+collection deadline. The fixture replaces provider throughput queues with immediate execution; the
+SDK retry limiter and provider-directed retry delays remain active.
 Run it with `npm test --prefix features/briefing/github` in protected disk-backed
 scratch storage. Run host-changing scenarios only in the disposable CI VM.
 

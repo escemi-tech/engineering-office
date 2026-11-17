@@ -90,14 +90,14 @@
       community.docker.docker_container:
         name: engineering-office-hermes-test-inference
         image: engineering-office-briefing:local
-        entrypoint: [node, /fixtures/inference.mjs]
+        entrypoint: [node, /app/fixtures/inference.mjs]
         command: []
         network_mode: container:engineering-office-hermes-test-runtime-proxy-1
         user: "1000:1000"
         read_only: true
         volumes:
-          - /opt/hermes-briefing-fixture:/fixtures:ro
-          - /opt/hermes-briefing-fixture/mode:/fixtures/mode:rw
+          - /opt/hermes-briefing-fixture:/app/fixtures:ro
+          - /opt/hermes-briefing-fixture/mode:/app/fixtures/mode:rw
         security_opts: [no-new-privileges:true]
         cap_drop: [ALL]
     - name: Install a test-only provider preload without changing production source
@@ -107,9 +107,9 @@
         content: |
           services:
             briefing-source:
-              command: [node, --import, /fixtures/github.mjs, src/adapters/serve.js]
+              command: [node, --import, /app/fixtures/github.mjs, src/adapters/serve.js]
               volumes:
-                - /opt/hermes-briefing-fixture:/fixtures:ro
+                - /opt/hermes-briefing-fixture:/app/fixtures:ro
     - name: Converge the disposable source fixture
       # The fixture repeats production Compose inputs, adding only its provider preload.
       # jscpd:ignore-start

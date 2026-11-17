@@ -1085,6 +1085,90 @@ suite("Operational setup and bounded refresh", () => {
 	});
 });
 
+suite("Temporary GitHub rate limits", () => {
+	for (const kind of ["primary", "secondary"]) {
+		test(`recovers one ${kind} search refusal without losing later Copilot and access reads`, async (t) => {
+			// Arrange: one provider refusal followed by the real fixture response.
+			const api = new GitHubApiFixture();
+			let refused = false;
+			t.mock.method(globalThis, "fetch", async (url, options) => {
+				if (!refused && new URL(url).pathname === "/search/issues") {
+					refused = true;
+					api.requests.push({ url: new URL(url), ...options });
+					return Response.json(
+						{
+							message:
+								kind === "secondary"
+									? "You have exceeded a secondary rate limit."
+									: "API rate limit exceeded.",
+						},
+						{
+							status: 403,
+							headers:
+								kind === "secondary"
+									? { "retry-after": "1" }
+									: {
+											"x-ratelimit-remaining": "0",
+											"x-ratelimit-reset": String(
+												Math.floor(Date.now() / 1000) - 2,
+											),
+										},
+						},
+					);
+				}
+				return api.fetch(url, options);
+			});
+			// Act
+			const result = await api.collect(createGitHubBriefing());
+			// Assert
+			assert.equal(result.coverage.status, "complete");
+			assert.equal(result.coverage.requests, api.requests.length);
+			assert.ok(
+				result.repositories.every(
+					(repository) =>
+						repository.copilot.status === "complete" &&
+						repository.access.status === "complete",
+				),
+			);
+			const searches = api.requests.filter(
+				({ url }) => url.pathname === "/search/issues",
+			);
+			assert.equal(searches[0].url.href, searches[1].url.href);
+			assert.equal(searches.length, 6);
+		});
+	}
+
+	for (const beyondDeadline of [false, true]) {
+		test(`stops after ${beyondDeadline ? "a reset beyond the deadline" : "one failed retry"} without leaking provider errors`, async (t) => {
+			// Arrange
+			const api = new GitHubApiFixture();
+			const start = Date.now();
+			api.overrides.set("work/project/issue/1", {
+				status: 403,
+				data: { message: "API rate limit exceeded. private-error-canary" },
+				headers: {
+					"x-ratelimit-remaining": "0",
+					"x-ratelimit-reset": String(
+						Math.ceil(start / 1000) + (beyondDeadline ? 901 : -2),
+					),
+				},
+			});
+			t.mock.method(globalThis, "fetch", api.fetch);
+			// Act
+			const result = await api.collect(createGitHubBriefing());
+			// Assert
+			assert.equal(result.coverage.status, "partial");
+			assert.equal(result.repositories[0].searches[0].reason, "rate-limit");
+			assert.equal(
+				api.requests.filter(({ url }) => url.pathname === "/search/issues")
+					.length,
+				beyondDeadline ? 1 : 2,
+			);
+			assert.doesNotMatch(JSON.stringify(result), /private-error-canary/u);
+		});
+	}
+});
+
 suite("Individual permissions around batched search", () => {
 	for (const afterSearch of [false, true]) {
 		test(`discards a source with denied issue access ${afterSearch ? "after" : "before"} search`, async (t) => {

@@ -12,6 +12,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import Bottleneck from "bottleneck/light.js";
+
+// Skip provider throughput queues for synthetic HTTP. Keep the real SDK's
+// independent retry limiter and provider backoff, including retry exhaustion.
+Bottleneck.Group.prototype.key = () => ({
+	schedule: async (_options, task, ...args) => task(...args),
+});
+
 export class GitHubApiFixture {
 	requests = [];
 	viewer = { id: 101, login: "example-user" };
