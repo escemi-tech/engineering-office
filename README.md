@@ -11,6 +11,8 @@ Read a concise local briefing of your GitHub work, Copilot tasks and separate PR
 [GitHub briefing source guide](docs/usage/github-briefing.md).
 For an approved hosted scope, [request a fresh briefing through Hermes](docs/usage/hermes-briefing.md)
 with asynchronous progress and source coverage.
+Use [the client guide](docs/usage/briefing-clients.md) to connect approved ChatGPT,
+Codex or Copilot access without opening a public endpoint.
 
 Use the [Ansible deployment guide](docs/usage/hermes-deployment.md) to prepare
 an approved Ubuntu host, install Hermes with scoped credentials and check gateway health.

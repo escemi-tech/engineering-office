@@ -1,0 +1,3 @@
+---
+hermes_project_name: engineering-office-hermes # noqa var-naming[no-role-prefix] -- Shared deployment identity.
+hermes_briefing_access_config: {}

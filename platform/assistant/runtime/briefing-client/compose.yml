@@ -1,0 +1,32 @@
+services:
+  briefing-client:
+    image: engineering-office-briefing-client:local
+    build:
+      context: ../briefing-source
+      target: client
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      HERMES_GATEWAY_URL: http://hermes:8642
+    networks: [assistant, tunnel-egress]
+    volumes:
+      - type: bind
+        source: /srv/engineering-office/.local/briefing-client
+        target: /run/hermes
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 0.5
+    mem_limit: 256m
+    pids_limit: 64
+    stop_grace_period: 30s
+    logging:
+      driver: none
+networks:
+  assistant:
+    external: true
+    name: ${HERMES_PROJECT:?Set the approved Hermes project}_assistant
+  tunnel-egress:

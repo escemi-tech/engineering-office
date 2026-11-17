@@ -4,6 +4,7 @@
 - [Run Hermes](usage/hermes.md)
 - [Read GitHub work for a private briefing](usage/github-briefing.md)
 - [Request a fresh briefing through Hermes](usage/hermes-briefing.md)
+- [Use the briefing from ChatGPT, Codex or Copilot](usage/briefing-clients.md)
 - [Qualify the OVHcloud host](usage/ovh-qualification.md)
 - [Prepare and recover infrastructure state](usage/infrastructure-state.md)
 - [Provision and remove an approved host](usage/host-provisioning.md)

@@ -1,0 +1,28 @@
+---
+- name: Validate the explicit client access settings before changing the host
+  block:
+    - name: Require one approved tunnel and its separate runtime credential
+      ansible.builtin.assert:
+        that:
+          - hermes_project_name is match('^[a-z0-9][a-z0-9_-]+$')
+          - hermes_briefing_access_config is mapping
+          - >-
+            hermes_briefing_access_config | length == 0 or
+            (hermes_briefing_access_config.keys() | sort == ['runtime_key', 'tunnel_id'] and
+             hermes_briefing_access_config.tunnel_id is match('^tunnel_([a-z0-9]{4}_)?[a-z0-9]{32}$') and
+             hermes_briefing_access_config.runtime_key is string and
+             hermes_briefing_access_config.runtime_key is match('^[\x21-\x7e]{32,16384}$'))
+        quiet: true
+      no_log: true
+  rescue:
+    - name: Refuse invalid client access configuration
+      ansible.builtin.fail:
+        msg: Supply an empty hermes_briefing_access_config to disable access, or exactly tunnel_id and a separate protected runtime_key.
+
+- name: Configure the explicitly approved tunnel
+  ansible.builtin.include_tasks: enable.yml
+  when: hermes_briefing_access_config | length > 0
+
+- name: Revoke client access explicitly
+  ansible.builtin.include_tasks: disable.yml
+  when: hermes_briefing_access_config | length == 0

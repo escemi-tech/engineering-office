@@ -14,6 +14,14 @@ native receipts. The production cleanup must remove expired receipts and preserv
 a fresh receipt and an unrelated ended conversation. A final disabling deployment
 must remove source access and feature conversations while retaining receipt
 cleanup and unrelated conversations.
+The same lifecycle checks reconnecting to a client run without local task state
+and refusing retrieval after deletion. It also checks the optional tunnel image's
+certificate bundle and production profile with native `doctor` under `--network none`.
+The disabling fixture seeds a dormant client container, network and credential
+and requires their removal through the public disabling command, including when
+leftover client activation settings are supplied as extra-vars. This does not exercise
+OpenAI tunnel authorization, relay readiness or ChatGPT/mobile integration; those
+require the approved account qualification in the [client guide](briefing-clients.md).
 The source fixture replaces HTTP only through a test-only Node preload; production
 code has no configurable GitHub origin. Mount the shared fixture under `/app/fixtures`
 so Node resolves its SDK dependencies from the connector image; fixture files use
@@ -21,6 +29,9 @@ module-relative paths. No model API or private work is used.
 
 The cheaper package suite covers the MCP transport contract and source revocation,
 plus native-run client cancellation, missing-evidence refusal and paginated cleanup.
+Native in-memory MCP transport covers fixed client tools, strict inputs, unrelated
+conversation refusal, safe errors, expiry and revocation. One short stdio discovery
+test catches process framing/import failures without credentials or API calls.
 Collector tests exercise the real Octokit throttling plugin against synthetic HTTP
 responses, including temporary primary/secondary limits, retry exhaustion and the
 collection deadline. The fixture replaces provider throughput queues with immediate execution; the

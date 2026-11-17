@@ -6,3 +6,4 @@ links, session attempts, separate PR review/CI context and collection coverage
 in a concise local briefing or complete JSON evidence.
 
 See the [usage and source-boundary guide](../../../docs/usage/github-briefing.md).
+For hosted access, see the [assistant client guide](../../../docs/usage/briefing-clients.md).

@@ -5,6 +5,8 @@ professional repositories, then asks Hermes to summarize it. It uses native
 asynchronous Hermes runs with progress, not a saved briefing. Collection can take
 15 minutes; the client requests cancellation after 20 minutes. Coverage may be
 partial because of source permissions, pagination or provider limits.
+For ChatGPT, Codex and Copilot, use the separate
+[client connection and asynchronous retrieval guide](briefing-clients.md).
 
 ## Enable an approved scope
 

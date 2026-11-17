@@ -63,6 +63,25 @@ suite("Hosted native briefing lifecycle", { timeout: 180000 }, () => {
 		// Assert
 		assert.match(result, /Coverage: partial/u);
 	});
+	test("resumes a client briefing through native runs and revokes retrieval after deletion", async () => {
+		// Arrange
+		await mode("normal");
+		// Act: reconnect without copying any local task state.
+		const { runId } = await client.start();
+		const reconnected = new HermesBriefingClient(url, key);
+		let result;
+		for (let attempt = 0; attempt < 30; attempt++) {
+			result = await reconnected.status(runId);
+			if (result.status !== "running") break;
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+		}
+		// Assert
+		assert.equal(result.status, "completed");
+		assert.match(result.output, /Coverage: complete/u);
+		assert.match(result.output, /https:\/\/github.com\/work\/project/u);
+		assert.deepEqual(await reconnected.forget(runId), { runId, deleted: true });
+		await assert.rejects(reconnected.status(runId));
+	});
 	for (const failure of [
 		"source-outage",
 		"source-revoked",

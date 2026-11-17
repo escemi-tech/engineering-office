@@ -3,7 +3,11 @@ command:
     exec: |
       set -eu
       sudo test ! -e /srv/engineering-office/.local/briefing
+      sudo test ! -e /srv/engineering-office/.local/briefing-client
+      test -z "$(sudo docker ps --all --quiet --filter name=engineering-office-hermes-test-client-briefing-client-1)"
+      test -z "$(sudo docker network ls --quiet --filter name=engineering-office-hermes-test-client_tunnel-egress)"
       test -z "$(sudo docker ps --all --quiet --filter name=engineering-office-hermes-test-briefing-source-1)"
+      test -z "$(sudo docker ps --all --quiet --filter name=engineering-office-hermes-test-runtime-proxy-1)"
       test "$(systemctl is-enabled hermes-briefing-cleanup-engineering-office-hermes-test.timer)" = enabled
       sudo systemctl start hermes-briefing-cleanup-engineering-office-hermes-test.service
       test "$(systemctl show --property=Result --value hermes-briefing-cleanup-engineering-office-hermes-test.service)" = success

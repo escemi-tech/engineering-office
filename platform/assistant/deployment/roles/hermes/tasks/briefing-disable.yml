@@ -1,4 +1,9 @@
 ---
+- name: Revoke client access before disabling its source
+  ansible.builtin.include_role:
+    name: hermes_briefing_access
+    tasks_from: disable
+
 - name: Inspect existing source access
   ansible.builtin.stat:
     path: /srv/engineering-office/.local/briefing

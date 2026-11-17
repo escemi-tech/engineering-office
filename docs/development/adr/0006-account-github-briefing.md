@@ -517,3 +517,55 @@ queues with immediate execution. This avoids shared-clock contamination and
 per-request timer overhead in large synthetic request-budget cases. No additional VM
 scenario is needed for this HTTP boundary. Live qualification remains separate
 from synthetic validation and does not approve a production credential change.
+
+## Existing assistant access - 2026-11-17
+
+The owner keeps ChatGPT, Codex and Copilot as existing entrypoints and confirms
+that ChatGPT offers a Tunnel connection. The internal source call can last
+15 minutes, while [Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
+has a 120-second absolute request limit. Progress notifications do not extend it.
+A direct remote wrapper around the synchronous collector would therefore fail
+the supported account-wide use case.
+
+Reuse native Hermes runs through four fixed MCP tools for start, status, cancel
+and settled-conversation deletion. The existing official SDK provides stdio and
+schema validation. No caller prompt, arbitrary source, private job database,
+queue or OAuth implementation is introduced. Keeping the already qualified
+Hermes model hop keeps execution running across client disconnects and the accepted
+summary/evidence checks. It also consumes the existing API budget in addition to
+the destination assistant's own processing. This is a deliberate trade-off for
+the measured long-running collection, not a general requirement to route other
+assistant tools through another model.
+
+The official [OpenAI tunnel-client](https://github.com/openai/tunnel-client)
+v0.0.21 image provides the outbound transport. Copy its executable and certificate
+bundle into the maintained Node image; the slim Node base lacks system CA roots.
+Pin the upstream image tag and digest under existing Dependabot Docker updates.
+Keep the tunnel in a separate unprivileged container without published ports or
+persistent diagnostics. It receives gateway/tunnel credentials only. The source
+container retains the GitHub token. A separate explicit Ansible role enables or
+removes the client; source disable also removes it before purging conversations.
+
+Tunnel associations, native RBAC and owner-only plugin visibility form the remote
+access boundary. The stdio server has no additional OAuth endpoint and is not a
+multi-user authorization service. Stop account qualification if that boundary
+cannot restrict access to the approved owner. Local Codex/Copilot reuse the
+operator's private SSH and stdio instead. The destination client's processing
+settings require their own acceptance; the prior OpenAI API approval does not
+automatically cover ChatGPT or Copilot evidence copies.
+
+Unlike terminal collection, client polling retains its conversation until explicit
+forget or the existing hourly expiry. Retrieval checks native ownership/deletion
+and refuses results older than one hour. Status is read-only; overdue status asks
+the caller to cancel and is not an unattended timeout. Admission is not retried
+after uncertainty. Existing bounded source requests, native runtime limits and
+cleanup remain in force. Receipt/backup retention and restart limitations are
+unchanged. A disconnected caller does not automatically cancel inference.
+
+Extend cheap protocol coverage for the new tools and one real stdio handshake.
+Add native reconnect/deletion to the existing hosted lifecycle, plus offline
+profile/certificate validation and removal of a seeded client on source disable.
+This reuses the same VM rather than multiplying provider scenarios. Actual tunnel
+authorization, relay readiness, laptop/mobile use and data-processing acceptance
+remain live activation gates; offline doctor does not prove them. No schedule,
+notification delivery, new cloud resource or production activation is implied.
