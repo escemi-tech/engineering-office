@@ -1,11 +1,17 @@
 import timers from "node:timers/promises";
 import { Octokit } from "@octokit/rest";
+import { throttling } from "@octokit/plugin-throttling";
+import Bottleneck from "bottleneck/light.js";
 import { z } from "zod";
 import { CopilotTasks } from "./copilot-tasks.js";
 import { PullRequests } from "./pull-requests.js";
 import { RepositoryAccess } from "./repository-access.js";
 
 const sourcePolicy = new SourcePolicy();
+const ThrottledOctokit = Octokit.plugin(throttling);
+// Every permitted GraphQL operation is a fixed read. Keep the plugin's search
+// pacing, without imposing its mutation delay on these already serialized reads.
+const readOnlyGraphql = new Bottleneck.Group({ maxConcurrent: 1 });
 
 import {
 	BriefingUnavailableError,
@@ -162,6 +168,7 @@ export class GitHubSource {
 	#requester(policy, token, signal) {
 		let requests = 0;
 		let stopped;
+		let primaryResetAt;
 		const resetTimes = new Map();
 		const deadline = Date.now() + limits.durationMs;
 		const allowedPaths = new Set([
@@ -181,7 +188,36 @@ export class GitHubSource {
 				/^[a-zA-Z0-9_-]{1,128}$/u.test(pathname.slice(separator + 1))
 			);
 		};
-		const client = new Octokit({
+		const retryRateLimit = (retryAfter, _options, _octokit, retryCount) => {
+			if (
+				!signal?.aborted &&
+				!stopped &&
+				retryCount < 1 &&
+				requests < limits.requests &&
+				Number.isFinite(retryAfter) &&
+				retryAfter >= 0 &&
+				Date.now() + retryAfter * 1000 < deadline
+			)
+				return true;
+			stopped = "rate-limit";
+			return false;
+		};
+		const client = new ThrottledOctokit({
+			throttle: {
+				write: readOnlyGraphql,
+				onRateLimit: (...args) => {
+					if (
+						!Number.isSafeInteger(primaryResetAt) ||
+						primaryResetAt <= 0 ||
+						primaryResetAt >= deadline
+					) {
+						stopped = "rate-limit";
+						return false;
+					}
+					return retryRateLimit(...args);
+				},
+				onSecondaryRateLimit: retryRateLimit,
+			},
 			auth: token,
 			userAgent: "engineering-office-github-briefing",
 			log: { debug() {}, info() {}, warn() {}, error() {} },
@@ -250,21 +286,17 @@ export class GitHubSource {
 							...(signal ? [signal] : []),
 						]),
 					});
-					if (
-						response.status === 429 ||
-						(response.status === 403 &&
-							(response.headers.has("retry-after") ||
-								response.headers.get("x-ratelimit-remaining") === "0"))
-					) {
-						stopped = "rate-limit";
-					}
+					primaryResetAt =
+						Number(response.headers.get("x-ratelimit-reset")) * 1000;
 					if (
 						response.ok &&
 						response.headers.get("x-ratelimit-remaining") === "0"
 					) {
-						const reset = Number(response.headers.get("x-ratelimit-reset"));
-						if (Number.isSafeInteger(reset) && reset > 0)
-							resetTimes.set(bucket, Math.max(Date.now(), reset * 1000) + 1000);
+						if (Number.isSafeInteger(primaryResetAt) && primaryResetAt > 0)
+							resetTimes.set(
+								bucket,
+								Math.max(Date.now(), primaryResetAt) + 1000,
+							);
 						else stopped = "rate-limit";
 					}
 					let bytes = 0;
@@ -287,6 +319,8 @@ export class GitHubSource {
 			},
 		});
 		const request = async (route, parameters = {}) => {
+			if (stopped || requests >= limits.requests || Date.now() >= deadline)
+				return { failure: stopped ?? "request-budget" };
 			try {
 				const response = await client.request(route, {
 					...parameters,
@@ -310,6 +344,13 @@ export class GitHubSource {
 				}
 				return response;
 			} catch (error) {
+				if (
+					error?.status === 429 ||
+					(error?.status === 403 &&
+						(error.response?.headers?.["retry-after"] !== undefined ||
+							error.response?.headers?.["x-ratelimit-remaining"] === "0"))
+				)
+					stopped = "rate-limit";
 				if (error?.status === 401)
 					throw new BriefingUnavailableError(
 						"GitHub authentication failed. No snapshot produced.",

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 
-const compiled = readFileSync("/fixtures/AGENTS.md", "utf8").trim();
+const compiled = readFileSync(
+	new URL("./AGENTS.md", import.meta.url),
+	"utf8",
+).trim();
 const sourceKey = "synthetic-token-canary";
 const tool = "mcp__briefing__read_github_briefing";
 createServer(async (request, response) => {
@@ -22,7 +25,7 @@ createServer(async (request, response) => {
 					"no-tool",
 				].includes(value),
 			);
-			writeFileSync("/fixtures/mode", value);
+			writeFileSync(new URL("./mode", import.meta.url), value);
 			response.end("{}");
 			return;
 		}
@@ -61,7 +64,10 @@ createServer(async (request, response) => {
 					message.role === "system" && message.content.includes(compiled),
 			),
 		);
-		const mode = readFileSync("/fixtures/mode", "utf8").trim();
+		const mode = readFileSync(
+			new URL("./mode", import.meta.url),
+			"utf8",
+		).trim();
 		if (mode === "model-outage") {
 			response.writeHead(503).end('{"error":{"message":"Synthetic outage"}}');
 			return;

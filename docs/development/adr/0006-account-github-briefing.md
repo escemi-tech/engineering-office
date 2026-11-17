@@ -480,3 +480,40 @@ deployment lifecycle, since protocol mocks cannot prove real tool registration,
 network isolation or session deletion. These implementation checks do not authorize
 live source processing. Source coverage, operational acceptance and owner approval
 remain activation gates.
+
+## Bounded recovery from provider throttling - 2026-11-17
+
+Local credential replacement qualification exposes an operational failure: a
+GitHub Search 403 reports a secondary limit with its search allowance exhausted.
+The collector marks itself stopped before later Copilot and access reads. A fresh
+invocation can hit the same limit, so replacing the credential does not solve the
+transport defect. This extends the earlier stop-on-first-rate-limit decision.
+
+Compose the [official Octokit throttling plugin](https://github.com/octokit/plugin-throttling.js)
+with the existing REST client. Its maintained release supports the project's
+Octokit Core and Node runtime. Use its search pacing, primary reset handling and
+secondary retry delay instead of implementing another retry scheduler. Allow one
+retry per refused request only when duration and request budgets permit. Keep the
+fetch boundary authoritative for every actual attempt, credential revocation,
+fixed read-only routes, response size and cancellation. An exhausted retry or an
+unusable primary reset leaves partial coverage. A successful response consuming
+the last task/search allowance still uses the existing per-family reset wait.
+
+The plugin normally delays every GraphQL POST as a write. Both permitted queries
+are fixed reads, and collection is sequential. Supply a serial Bottleneck write
+group without that extra delay; retain the plugin's default search pacing. This
+avoids adding hundreds of unnecessary seconds to account-wide reads within the
+15-minute deadline. Bottleneck is already the plugin's scheduler and is declared
+explicitly because the adapter configures its public Group API. Both exact npm
+pins and their lockfile are covered by the existing grouped Dependabot updates.
+No generic retry wrapper, new service or caller configuration is introduced.
+
+Extend the existing HTTP-fixture suite for recovered primary and secondary
+refusals, one-retry exhaustion and an excessive reset delay. The successful
+recovery cases fail against the original adapter, demonstrating the coverage gap.
+Reuse existing credential, request-budget and deadline tests. Synthetic tests use
+the real SDK retry limiter and retry delays while replacing only throughput
+queues with immediate execution. This avoids shared-clock contamination and
+per-request timer overhead in large synthetic request-budget cases. No additional VM
+scenario is needed for this HTTP boundary. Live qualification remains separate
+from synthetic validation and does not approve a production credential change.

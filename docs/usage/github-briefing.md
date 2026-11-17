@@ -265,17 +265,21 @@ A busy source reports `repository-budget` instead of consuming every remaining
 request. This bound can leave some task details or PR context incomplete.
 
 One invocation allows at most 2,000 HTTP requests and 15 minutes, with a ten-second
-maximum request timeout and a 4 MiB response-body limit. After a successful read
-exhausts its quota, the next read in that API family waits for GitHub's published
-reset, provided it
-fits within the invocation deadline. Missing/invalid reset information, an actual
-rate-limit error or a reset beyond the deadline stops further requests. No failed
-request is retried and no redirect is followed. The
+maximum request timeout and a 4 MiB response-body limit. Octokit's throttling plugin
+paces searches and retries a recognized primary or secondary rate-limit refusal
+at most once per request, after GitHub's reset or retry delay. A retry must fit
+within the remaining duration and request budget; every HTTP attempt counts.
+A second refusal, missing primary reset information or an excessive wait stops
+further requests and leaves coverage explicitly partial. Other failures are not
+retried, and redirects are never followed.
+
+After a successful read exhausts its quota, the next read in that API family waits
+for the published reset if it fits within the deadline. The
 [search-specific quota](https://docs.github.com/en/rest/search/search#rate-limit)
-and the separate Copilot task quota are shared with other clients using the credential; concurrent usage can still
-cause a partial run. A later invocation starts fresh; there is no stored cursor,
-cache or stale-success fallback. Check the full admitted set's measured coverage
-before scheduling or relying on a briefing.
+and the separate Copilot task quota are shared with other clients using the
+credential; concurrent usage can still cause a partial run. A later invocation
+starts fresh; there is no stored cursor, cache or stale-success fallback. Check
+the full admitted set's measured coverage before scheduling or relying on a briefing.
 
 The dedicated `mentions:<login>` query identifies mention matches independently
 of review requests. It retrieves no comment threads or text-match fragments;
