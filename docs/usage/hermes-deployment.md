@@ -154,8 +154,10 @@ make hermes-health
 ```
 
 This checks the selected host's Docker daemon, requires exactly one running,
-unpaused Hermes service with a passing native health check, verifies its
-loopback-only port binding and requests `http://127.0.0.1:8642/health` on that host.
+unpaused Hermes service with a passing native health check. It verifies the
+loopback-only port binding on Hermes or, when Hermes has no published gateway
+port, on the same project's single running, healthy runtime proxy. It then
+requests `http://127.0.0.1:8642/health` on that host.
 It does not follow redirects or use HTTP proxies or `.netrc` credentials. Docker
 requests have a 10-second timeout; the HTTP request has a 5-second timeout.
 Run it after deployment has finished, since a starting container is not yet healthy.

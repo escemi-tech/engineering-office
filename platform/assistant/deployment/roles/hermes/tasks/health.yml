@@ -56,13 +56,68 @@
     fail_msg: Hermes has no passing Docker health check. Inspect its startup or failure privately.
     quiet: true
 
-- name: Require the selected container to own the expected loopback listener
+- name: Select the direct gateway listener
+  ansible.builtin.set_fact:
+    hermes_health_listener: "{{ hermes_health_container.container }}"
+  no_log: true
+
+- name: Inspect the managed proxy when Hermes has no published gateway port
+  when: not (hermes_health_container.container.NetworkSettings.Ports['8642/tcp'] | default([], true))
+  block:
+    - name: Find all proxy containers in the selected Compose project
+      community.docker.docker_host_info:
+        docker_host: unix:///var/run/docker.sock
+        timeout: 10
+        containers: true
+        containers_all: true
+        containers_filters:
+          label:
+            - "com.docker.compose.project={{ hermes_project_name }}"
+            - com.docker.compose.service=runtime-proxy
+      register: hermes_health_proxy_service
+      no_log: true
+
+    - name: Require one unambiguous proxy container
+      ansible.builtin.assert:
+        that:
+          - hermes_health_proxy_service.containers | length == 1
+        fail_msg: Expected exactly one runtime proxy when Hermes has no published gateway port.
+        quiet: true
+
+    - name: Inspect the proxy without exposing its environment or logs
+      community.docker.docker_container_info:
+        docker_host: unix:///var/run/docker.sock
+        timeout: 10
+        name: "{{ hermes_health_proxy_service.containers[0].Id }}"
+      register: hermes_health_proxy
+      no_log: true
+
+    - name: Require a running and healthy proxy
+      ansible.builtin.assert:
+        that:
+          - hermes_health_proxy.exists
+          - hermes_health_proxy.container.State.Status == 'running'
+          - not hermes_health_proxy.container.State.Paused
+          - hermes_health_proxy.container.State.Health.Status | default('missing') == 'healthy'
+        fail_msg: The runtime proxy is not running normally with a passing Docker health check.
+        quiet: true
+
+    - name: Select the managed proxy listener
+      ansible.builtin.set_fact:
+        hermes_health_listener: "{{ hermes_health_proxy.container }}"
+      no_log: true
+  rescue:
+    - name: Report an unavailable managed proxy
+      ansible.builtin.fail:
+        msg: Cannot verify the runtime proxy. Inspect the selected Compose project and its Docker health privately.
+
+- name: Require the selected listener to publish only the expected loopback gateway port
   ansible.builtin.assert:
     that:
       - >-
-        hermes_health_container.container.NetworkSettings.Ports['8642/tcp'] | default([]) ==
+        hermes_health_listener.NetworkSettings.Ports['8642/tcp'] | default([], true) ==
         [{'HostIp': '127.0.0.1', 'HostPort': '8642'}]
-    fail_msg: Hermes does not publish the expected loopback-only gateway port. Review its deployment.
+    fail_msg: The gateway listener does not publish the expected loopback-only port. Review its deployment.
     quiet: true
 
 - name: Check current gateway reachability without credentials or inference

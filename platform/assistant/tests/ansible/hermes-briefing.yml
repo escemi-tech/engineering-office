@@ -47,6 +47,13 @@
           - hermes_deployment.containers | length == 3
         fail_msg: "Unexpected redeployment actions: {{ hermes_deployment.actions | default([]) | to_json }}"
         quiet: true
+    # Act and Assert: backups use these same health tasks without briefing settings.
+    - name: Check the deployed gateway through the production health role
+      ansible.builtin.include_role:
+        name: hermes
+        tasks_from: health
+      vars:
+        hermes_briefing: {}
     # Arrange: only this disposable scenario replaces network I/O with fixtures.
     - name: Copy the inference fixture and native lifecycle tests
       ansible.builtin.copy:
