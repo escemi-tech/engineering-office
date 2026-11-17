@@ -80,7 +80,9 @@ it does not implement per-user authorization within a shared workspace.
    readiness alone does not qualify the ChatGPT journey.
 
 The separate container runs the pinned official OpenAI `tunnel-client` with the
-existing MCP SDK over stdio. It initiates outbound HTTPS and publishes no port.
+existing MCP SDK over stdio. Its native configuration completes the initialized
+notification after a successful handshake, including when ChatGPT discovery omits
+that notification. It initiates outbound HTTPS and publishes no port.
 Only its gateway and tunnel credentials are mounted; GitHub access remains in
 the source connector. Its health/admin listener is container-loopback only.
 Docker retains no stdout logs. Run only one tunnel client per tunnel ID, including

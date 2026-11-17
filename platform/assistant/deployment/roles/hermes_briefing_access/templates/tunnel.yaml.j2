@@ -2,6 +2,8 @@ control_plane:
   tunnel_id: {{ hermes_briefing_access_config.tunnel_id | to_json }}
   api_key: file:/run/hermes/tunnel-key
 mcp:
+  # ChatGPT discovery can omit this notification after its initialize response.
+  stdio_send_initialized_notification: true
   commands:
     - channel: main
       command: node /app/src/adapters/client-stdio.js
