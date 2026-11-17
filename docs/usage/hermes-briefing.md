@@ -39,7 +39,10 @@ implementation change. Loopback HTTP is supported only for isolated fixtures.
 
 Run `make hermes-host` during approved host preparation to install Buildx and the
 qualified Compose plugin. The briefing overlay requires Compose 2.24.4 or newer.
-After production approval, run `make hermes-deploy`. Deployment builds the
+If automatic backups are installed, first wait for the current worker to finish,
+then run `sudo make -C /srv/engineering-office hermes-backup-disable` on the host.
+Keep the timer disabled during maintenance. After production approval, run
+`make hermes-deploy` from the controller. Deployment builds the
 connector from the locked package, starts it with a private read-only source
 mount, restricts Hermes to an internal Docker network and enables hourly
 conversation cleanup. The existing Nginx runtime proxy publishes the authenticated
@@ -47,6 +50,13 @@ gateway on host loopback and forwards inference to the fixed provider. Hermes
 itself has no published port or external network. Only the one named MCP briefing tool is exposed. The
 canonical writing policy and briefing instructions are mounted read-only.
 No shell, browser, arbitrary HTTP, source selection or mutation tool is enabled.
+
+Run `make hermes-health` to verify the deployed gateway. Before resuming automatic
+backups, run `make hermes-backup-schedule` from the same controller checkout with
+the approved schedule configuration. This installs the matching health tasks in
+the independent backup worker and re-enables its timer. The worker checks the
+actual gateway listener without needing the source policy or GitHub credential.
+See the [automatic backup procedure](hermes-backup.md#enable-automatic-backups).
 
 ## Read a briefing
 

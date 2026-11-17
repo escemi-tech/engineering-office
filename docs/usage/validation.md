@@ -4,7 +4,9 @@
 
 `test-hermes-briefing.yml` uses one disposable Ubuntu VM to exercise the production
 Ansible deployment twice, then runs the real Hermes MCP/native-run lifecycle with
-synthetic GitHub and inference fixtures. Goss owns gateway authentication,
+synthetic GitHub and inference fixtures. The same VM exercises the production
+health tasks with the proxy active and no briefing settings, as used by the
+independent backup worker. Goss owns gateway authentication,
 credential isolation, network/proxy denials, source/model failures, partial
 coverage, forbidden tool arguments, diagnostic retention and collection after
 restart. During that restart, while Hermes is stopped, the fixture ages synthetic
