@@ -19,6 +19,31 @@
     hermes_briefing: {}
     # jscpd:ignore-end
   tasks:
+    # Arrange: own a dormant client container, network and synthetic credential.
+    - name: Create the owned client network
+      community.docker.docker_network:
+        name: "{{ hermes_project_name }}-client_tunnel-egress"
+    - name: Create the protected client directory
+      ansible.builtin.file:
+        path: /srv/engineering-office/.local/briefing-client
+        state: directory
+        mode: "0700"
+    - name: Seed a credential to remove on disable
+      ansible.builtin.copy:
+        content: synthetic-tunnel-key-without-provider-access
+        dest: /srv/engineering-office/.local/briefing-client/tunnel-key
+        mode: "0600"
+    - name: Start a dormant container under the production client identity
+      community.docker.docker_container:
+        name: "{{ hermes_project_name }}-client-briefing-client-1"
+        image: engineering-office-briefing-client:local
+        command: [sleep, infinity]
+        networks:
+          - name: "{{ hermes_project_name }}-client_tunnel-egress"
+        read_only: true
+        security_opts: [no-new-privileges:true]
+        cap_drop: [ALL]
+
     - name: Seed a feature conversation and an unrelated conversation
       # checkov:skip=CKV2_ANSIBLE_1:HTTP targets only the loopback gateway in this disposable synthetic VM.
       ansible.builtin.uri:
@@ -30,10 +55,52 @@
         body: { id: "{{ item }}", source: api_server }
         status_code: [200, 201]
       loop: [office-briefing-revoke, unrelated-preserved]
-    # Act
-    - name: Disable the capability through the production role
-      ansible.builtin.include_role:
-        name: hermes
+    # Act: extra-vars outrank include_role vars. Source revocation must ignore
+    # leftover client activation settings rather than re-entering enable tasks.
+    - name: Disable through the public command with conflicting client settings
+      delegate_to: localhost
+      become: false
+      block:
+        - name: Allocate a disposable inventory for the existing test VM
+          ansible.builtin.tempfile:
+            state: file
+            suffix: .yml
+          register: briefing_disable_inventory
+        - name: Record only the disposable host connection
+          ansible.builtin.copy:
+            dest: "{{ briefing_disable_inventory.path }}"
+            mode: "0600"
+            content: >-
+              {{ {'hermes': {'hosts': {inventory_hostname: {
+                'ansible_ssh_common_args': hostvars[inventory_hostname].ansible_ssh_common_args,
+                'ansible_python_interpreter': '/usr/bin/python3'
+              }}}} | to_json }}
+        - name: Revoke the source regardless of unused client settings
+          ansible.builtin.command:
+            argv:
+              - env
+              - -u
+              - ANSIBLE_CALLBACKS_ENABLED
+              - "{{ ansible_playbook_python | dirname }}/ansible-playbook"
+              - "{{ playbook_dir }}/../../deployment/hermes.yml"
+              - -i
+              - "{{ briefing_disable_inventory.path }}"
+              - --extra-vars
+              - >-
+                {{ {'hermes_project_name': hermes_project_name,
+                    'hermes_runtime': hermes_runtime, 'hermes_briefing': {},
+                    'hermes_briefing_access_config': {'unused': 'must not activate'}} | to_json }}
+          changed_when: true
+      rescue:
+        - name: Fail when source revocation cannot remove client access
+          ansible.builtin.fail:
+            msg: The public disabling deployment must ignore leftover client activation settings and revoke access.
+      always:
+        - name: Remove the disposable inventory
+          ansible.builtin.file:
+            path: "{{ briefing_disable_inventory.path }}"
+            state: absent
+          when: briefing_disable_inventory.path is defined
     # Assert
     - name: Read remaining native conversations
       # checkov:skip=CKV2_ANSIBLE_1:HTTP targets only the loopback gateway in this disposable synthetic VM.
@@ -42,10 +109,9 @@
         headers:
           Authorization: "Bearer {{ hermes_runtime.gateway_api_key }}"
       register: remaining_sessions
-    - name: Require scoped conversation removal and a single runtime
+    - name: Require scoped conversation removal and preservation of unrelated work
       ansible.builtin.assert:
         that:
-          - hermes_deployment.containers | length == 1
           - remaining_sessions.json.data | selectattr('id', 'equalto', 'unrelated-preserved') | list | length == 1
           - remaining_sessions.json.data | selectattr('id', 'match', '^office-briefing-') | list | length == 0
         quiet: true

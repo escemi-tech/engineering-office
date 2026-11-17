@@ -1,0 +1,26 @@
+---
+- name: Remove the owned tunnel container before removing credentials
+  community.docker.docker_container:
+    name: "{{ hermes_project_name }}-client-briefing-client-1"
+    state: absent
+
+- name: Remove local client access material after shutdown
+  ansible.builtin.file:
+    path: /srv/engineering-office/.local/briefing-client
+    state: absent
+
+- name: Inspect the owned outbound network after shutdown
+  community.docker.docker_network_info:
+    name: "{{ hermes_project_name }}-client_tunnel-egress"
+  register: hermes_briefing_access_network
+
+- name: Refuse to disconnect an unexpected container
+  ansible.builtin.assert:
+    that:
+      - not hermes_briefing_access_network.exists or hermes_briefing_access_network.network.Containers | length == 0
+    quiet: true
+
+- name: Delete only the unused owned outbound network
+  community.docker.docker_network:
+    name: "{{ hermes_project_name }}-client_tunnel-egress"
+    state: absent

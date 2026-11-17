@@ -1,0 +1,10 @@
+---
+- name: Require explicit deployment targets
+  ansible.builtin.import_playbook: helpers/hermes-inventory.yml
+
+- name: Configure approved client access to the professional briefing
+  hosts: hermes
+  become: true
+  gather_facts: false
+  roles:
+    - hermes_briefing_access
