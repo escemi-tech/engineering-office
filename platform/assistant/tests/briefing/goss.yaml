@@ -1,19 +1,20 @@
 command:
-  native tunnel profile and certificate trust work without external access:
-    # Act and Assert: doctor validates configuration, not account authorization.
+  native tunnel discovery and certificate trust work without external access:
+    # Act and Assert: the real client completes discovery against a local control-plane fixture.
     exec: |
       status=0
       sudo docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
         --mount type=bind,src=/opt/hermes-briefing-fixture,dst=/run/hermes,readonly \
         engineering-office-briefing-client:local sh -c '
         test -s /etc/ssl/certs/ca-certificates.crt &&
-        tunnel-client doctor --config /run/hermes/tunnel.yaml --json' \
+        tunnel-client doctor --config /run/hermes/tunnel.yaml --json &&
+        node --test /run/hermes/tunnel.test.mjs' \
         > /tmp/hermes-briefing-tunnel.log 2>&1 || status=$?
       cat /tmp/hermes-briefing-tunnel.log
       exit "$status"
     exit-status: 0
-    timeout: 15000
-    stdout: ['"result": "ok"']
+    timeout: 20000
+    stdout: ['"result": "ok"', "/fail 0/"]
   operator gateway is reachable only through the published loopback interface:
     # Act and Assert: the real host path must work, not only container-to-container I/O.
     exec: |
