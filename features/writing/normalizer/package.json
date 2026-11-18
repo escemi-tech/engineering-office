@@ -12,6 +12,6 @@
 		"test:ci": "node --test --experimental-test-coverage --test-coverage-include='src/**/*.js' --test-reporter=junit --test-reporter-destination=.reports/junit.xml --test-reporter=lcov --test-reporter-destination=.reports/lcov.info"
 	},
 	"dependencies": {
-		"polytypo": "1.19.0"
+		"polytypo": "1.20.1"
 	}
 }
